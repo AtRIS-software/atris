@@ -5,18 +5,19 @@
 #include "G4Types.hh"
 #include "G4String.hh"
 
+namespace atris {
 
 class HistoManager
 {
   public:
-   HistoManager();
-  ~HistoManager();
+    HistoManager();
+    ~HistoManager();
 
   private:
     void Book();
     G4String fFileName;
 };
 
+}  // namespace atris
 
 #endif
-

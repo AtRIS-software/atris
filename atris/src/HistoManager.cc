@@ -5,7 +5,6 @@
 #include "G4SDManager.hh"
 #include "G4PhysicalConstants.hh"
 #include "G4SystemOfUnits.hh"
-#include "G4UserRunAction.hh"
 #include <vector>
 #include <string>
 #include <math.h>
@@ -19,6 +18,8 @@ extern G4String binedgesFile;
 extern std::vector<G4double> enbins;
 extern std::vector<G4double> detbins;
 extern G4int nrphantoms;
+
+namespace atris {
 
 HistoManager::HistoManager()
 	: fFileName("exgps")
@@ -80,3 +81,5 @@ void HistoManager::Book()
 	}
 
 }
+
+}  // namespace atris

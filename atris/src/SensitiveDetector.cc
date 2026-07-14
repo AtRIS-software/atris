@@ -15,7 +15,6 @@
 #include "DetectorConstruction.hh"
 #include "G4UIcmdWithAString.hh"
 #include "G4Run.hh"
-#include "G4UserRunAction.hh"
 #include "G4CsvAnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
 #include "PrimaryGeneratorAction.hh"
@@ -31,13 +30,15 @@ extern std::vector<std::vector<G4double>> rate;      //
 extern G4int nrphantoms;
 extern std::map<G4int, G4int> heavy;    //
 
+namespace atris {
+
 G4int intsize     = sizeof(G4int);
 G4int floatsize   = sizeof(G4float);
 G4int ushortsize  = sizeof(unsigned short);
 G4int ucharsize   = sizeof(unsigned char);
 G4double icrustep = 0.02;
 
-G4Allocator<SDHit>* SDHit::SDHitAllocator=0;
+G4Allocator<SDHit>* SDHit::SDHitAllocator = nullptr;
 
 
 SDHit::SDHit()
@@ -51,7 +52,7 @@ void SDHit::Print() {}
 
 SensitiveDetector::SensitiveDetector(const G4String& name, G4bool zero_E)
 	: G4VSensitiveDetector(name),
-	fHitsCollection(NULL),
+	fHitsCollection(nullptr),
 	zeroE(zero_E)
 {
 	collectionName.insert(name);
@@ -187,4 +188,4 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 
 }
 
-
+}  // namespace atris

@@ -1,5 +1,4 @@
 #include "DetectorConstruction.hh"
-#include "G4UserRunAction.hh"
 #include "SensitiveDetector.hh"
 #include "G4GDMLParser.hh"
 #include "G4Element.hh"
@@ -17,11 +16,13 @@
 extern G4int nrofdetectors;
 extern G4bool atrisverbose;
 
-DetectorConstruction::DetectorConstruction(const G4GDMLParser& parser):
-	G4VUserDetectorConstruction(),
-	fParser(parser)
+namespace atris {
+
+DetectorConstruction::DetectorConstruction(const ::G4GDMLParser& parser)
+  : G4VUserDetectorConstruction(),
+    fParser(parser)
 {
-	G4cout << "### AtRIS: Initialized the DetectorConstruction object." << G4endl;
+  G4cout << "### AtRIS: Initialized the DetectorConstruction object." << G4endl;
 }
 
 G4VPhysicalVolume* DetectorConstruction::Construct()
@@ -83,5 +84,4 @@ DetectorConstruction::~DetectorConstruction(){
 	;
 }
 
-
-
+}  // namespace atris

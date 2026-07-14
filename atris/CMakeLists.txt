@@ -1,45 +1,44 @@
-#----------------------------------------------------------------------------
-# Setup the project
-cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
-get_filename_component(ProjectId ${CMAKE_SOURCE_DIR} NAME)
-string(REPLACE " " "_" ProjectId ${ProjectId})
-project(${ProjectId})
+cmake_minimum_required(VERSION 3.22)
 
-#----------------------------------------------------------------------------
-# Find Geant4 package, activating all available UI and Vis drivers by default
-# You can set WITH_GEANT4_UIVIS to OFF via the command line or ccmake/cmake-gui
-# to build a batch mode only executable
-#
-option(WITH_GEANT4_UIVIS "Build example with Geant4 UI and Vis drivers" ON)
+project(AtRIS LANGUAGES CXX)
+
+option(WITH_GEANT4_UIVIS "Build AtRIS with all available Geant4 UI and visualization drivers" ON)
+
+set(ATRIS_GEANT4_COMPONENTS gdml multithreaded)
 if(WITH_GEANT4_UIVIS)
-  find_package(Geant4 REQUIRED ui_all vis_all)
-else()
-  find_package(Geant4 REQUIRED)
+  list(APPEND ATRIS_GEANT4_COMPONENTS ui_all vis_all)
 endif()
 
-#----------------------------------------------------------------------------
-# Setup Geant4 include directories and compile definitions
-# Setup include directory for this project
-#
-include(${Geant4_USE_FILE})
-include_directories(${PROJECT_SOURCE_DIR}/include)
+find_package(Geant4 11.4 REQUIRED COMPONENTS ${ATRIS_GEANT4_COMPONENTS})
 
-# additional compiler flags
-SET( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall" )
-SET( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall" )
+set(ATRIS_HEADERS
+  include/DetectorConstruction.hh
+  include/HistoManager.hh
+  include/PrimaryGeneratorAction.hh
+  include/RunAction.hh
+  include/SensitiveDetector.hh
+  include/UserActionInitialization.hh
+)
 
-#----------------------------------------------------------------------------
-# Locate sources and headers for this project
-# NB: headers are included so they will show up in IDEs
-#
-file(GLOB sources ${PROJECT_SOURCE_DIR}/src/*.c*)
-file(GLOB headers ${PROJECT_SOURCE_DIR}/include/*.h*)
+set(ATRIS_SOURCES
+  main.cc
+  src/DetectorConstruction.cc
+  src/HistoManager.cc
+  src/PrimaryGeneratorAction.cc
+  src/RunAction.cc
+  src/SensitiveDetector.cc
+  src/UserActionInitialization.cc
+)
 
-#----------------------------------------------------------------------------
-# Add the executable, and link it to the Geant4 libraries
-#
-add_executable(AtRIS main.cc ${sources} ${headers})
-target_link_libraries(AtRIS ${Geant4_LIBRARIES})
+add_executable(AtRIS)
+target_sources(AtRIS PRIVATE ${ATRIS_SOURCES} ${ATRIS_HEADERS})
+target_include_directories(AtRIS PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(AtRIS PRIVATE ${Geant4_LIBRARIES})
+target_compile_features(AtRIS PRIVATE cxx_std_17)
+set_property(TARGET AtRIS PROPERTY CXX_EXTENSIONS OFF)
+target_compile_options(AtRIS PRIVATE
+  $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall;-Wextra;-Wpedantic>
+)
 
 #----------------------------------------------------------------------------
 # For internal Geant4 use - but has no effect if you build this
@@ -66,5 +65,4 @@ configure_file(files/uniter.py ./ COPYONLY)
 #configure_file(phantoms/icru_counting.txt ./ COPYONLY)
 #configure_file(phantoms/ramona_fifteen_0.060MeV_detA_response.txt ./ COPYONLY)
 #configure_file(phantoms/ramona_fifteen_0.060MeV_detA_counting.txt ./ COPYONLY)
-
 

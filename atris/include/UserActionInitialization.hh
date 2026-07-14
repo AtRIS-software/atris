@@ -3,19 +3,23 @@
 
 #include "G4VUserActionInitialization.hh"
 
+namespace atris {
+
 class DetectorConstruction;
 
 class UserActionInitialization : public G4VUserActionInitialization
 {
-public:
-    UserActionInitialization(DetectorConstruction* detector);
-    virtual ~UserActionInitialization();
+  public:
+    explicit UserActionInitialization(DetectorConstruction* detector);
+    ~UserActionInitialization() override;
 
-    void Build() const;
-    void BuildForMaster() const;
+    void Build() const override;
+    void BuildForMaster() const override;
 
-private:
+  private:
     DetectorConstruction* fDetector;
 };
+
+}  // namespace atris
 
 #endif

@@ -7,8 +7,6 @@
 
 #include "DetectorConstruction.hh"
 #include "UserActionInitialization.hh"
-#include "G4UserRunAction.hh"
-#include "PrimaryGeneratorAction.hh"
 #include "Randomize.hh"
 #include "G4PhysListFactory.hh"
 #include "G4StepLimiterPhysics.hh"
@@ -47,8 +45,6 @@ void determine_nrofdetectors(G4String fname);
 
 
 int main(int argc,char** argv){
-	// This part is for forcing the loading of a GDML file
-	G4String prefix = G4String (argv[2]);
 	if (argc != 5){
 		G4cout << "### Incorrect use! Please modify and check version updates." << G4endl;
 		G4cout << "### AtRIS: ./AtRIS physicslist simname mode nrofphantoms"<< G4endl;
@@ -88,7 +84,6 @@ int main(int argc,char** argv){
 	G4cout << "### AtRIS: Generating detbins with the determined number of detectors" << G4endl;
 	for(int i=0;i<=nrofdetectors;i++){
 		detbins.push_back(i-0.5);
-		G4String detname = std::to_string(i);
 	}
 	// Create the enbinsa for the histograms
 	G4String binedgesFile = G4String (argv[2])+".bins";
@@ -108,7 +103,7 @@ int main(int argc,char** argv){
 	G4RunManager *runManager = new G4MTRunManager;     // Instantiate the run manager
 	G4GDMLParser parser;                             //instantiate a GDML parser
 	parser.Read(gdmlname);	 //parse the 
-	DetectorConstruction* detector = new DetectorConstruction(parser);
+	atris::DetectorConstruction* detector = new atris::DetectorConstruction(parser);
 	runManager->SetUserInitialization(detector);
 	G4String physics = argv[1]; 			 //Setting up the physics list
 	G4PhysListFactory factory;                       // initialize physics list
@@ -119,7 +114,7 @@ int main(int argc,char** argv){
 	} else {
 		G4cout << "### AtRIS: " << physics << " is not valid! use: "<<G4endl;
 		std::vector<G4String> available = factory.AvailablePhysLists();
-		for (uint i=0; i<available.size(); ++i){
+		for (std::size_t i = 0; i < available.size(); ++i){
 			G4cout << available[i] << G4endl;
 		}
 		return -1;
@@ -131,13 +126,13 @@ int main(int argc,char** argv){
 
 	}
 
-	// DEACT PrimaryGeneratorAction *pga = new PrimaryGeneratorAction;
+	// DEACT atris::PrimaryGeneratorAction *pga = new atris::PrimaryGeneratorAction;
 	// DEACT runManager->SetUserAction(pga);
-	// DEACT G4UserRunAction *beg = new G4UserRunAction;
+	// DEACT atris::RunAction *beg = new atris::RunAction;
 	// DEACT runManager->SetUserAction(beg);
 
 	// ACT
-	UserActionInitialization* useract = new UserActionInitialization(detector);
+	atris::UserActionInitialization* useract = new atris::UserActionInitialization(detector);
 	runManager->SetUserInitialization(useract);
 
 
@@ -266,4 +261,3 @@ void Phantoms(G4int howmany){
 		rate.push_back(cicru);
 	}
 }
-

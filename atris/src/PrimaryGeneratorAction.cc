@@ -1,5 +1,4 @@
 #include "PrimaryGeneratorAction.hh"
-#include "G4UserRunAction.hh"
 #include "G4Event.hh"
 #include "G4GeneralParticleSource.hh"
 #include "G4CsvAnalysisManager.hh"
@@ -13,6 +12,8 @@
 #include <time.h>
 
 extern G4int t0;
+
+namespace atris {
 
 PrimaryGeneratorAction::PrimaryGeneratorAction(){
 	ParticleGenerator	= new G4GeneralParticleSource;
@@ -64,3 +65,5 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	analysis->FillH2(0,dirphi,dircost);
 	analysis->FillH2(1,posphi,poscost);
 }
+
+}  // namespace atris

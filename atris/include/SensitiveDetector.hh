@@ -12,10 +12,12 @@
 #include "G4Allocator.hh"
 #include "G4ThreeVector.hh"
 #include "tls.hh"
-#include "G4UserRunAction.hh"
-#include "DetectorConstruction.hh"
 #include <functional>
 
+class G4Step;
+class G4HCofThisEvent;
+
+namespace atris {
 
 class SDHit;
 
@@ -44,7 +46,7 @@ public:
 	static G4Allocator<SDHit>* SDHitAllocator;
 };
 
-typedef G4THitsCollection<SDHit> SDHitsCollection;
+using SDHitsCollection = G4THitsCollection<SDHit>;
 
 inline void* SDHit::operator new(size_t)
 {
@@ -57,10 +59,6 @@ inline void SDHit::operator delete(void *hit)
 {
 	SDHitAllocator->FreeSingle((SDHit*) hit);
 }
-
-
-class G4Step;
-class G4HCofThisEvent;
 
 
 class SensitiveDetector : public G4VSensitiveDetector, public G4UImessenger
@@ -85,5 +83,7 @@ protected:
 
 	static std::ofstream outstream;
 };
+
+}  // namespace atris
 
 #endif
