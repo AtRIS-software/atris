@@ -92,16 +92,6 @@ def log(message: str) -> None:
     print(f"[{timestamp}] {message}", flush=True)
 
 
-def format_bytes(size: int) -> str:
-    units = ("B", "KB", "MB", "GB", "TB")
-    value = float(size)
-    for unit in units:
-        if value < 1024.0 or unit == units[-1]:
-            return f"{value:.1f} {unit}"
-        value /= 1024.0
-    return f"{size} B"
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare and run AtRIS without conda or notebook code.")
     parser.add_argument("--rootdir", default=".", help="Path to the atris2-main checkout.")
@@ -1088,11 +1078,8 @@ def run_atris(
                         log_size = log_path.stat().st_size
                     except OSError:
                         log_size = 0
-                    delta_size = log_size - last_status_log_size
                     elapsed = int(now - simulation_start_time) if simulation_start_time is not None else 0
-                    message = f"AtRIS running: {elapsed}s elapsed; {log_path.name} is {format_bytes(log_size)}"
-                    if last_status_time:
-                        message += f" ({delta_size:+,} bytes since last update)"
+                    message = f"AtRIS running: {elapsed}s elapsed; {log_path.name} is {log_size} bytes"
                     emit_summary_log(message, now)
                     last_status_time = now
                     last_status_log_size = log_size
