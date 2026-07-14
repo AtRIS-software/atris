@@ -38,7 +38,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 			G4cout << "Starting primary particle generation" << G4endl;
 		}
 	}
-	if (current != 0 && current % 1000 == 0){
+	if (current != 0 && current % 100 == 0){
 		std::fprintf(stdout, "AtRIS progress: event %d\n", current);
 		std::fflush(stdout);
 	}
@@ -64,4 +64,3 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	analysis->FillH2(0,dirphi,dircost);
 	analysis->FillH2(1,posphi,poscost);
 }
-
