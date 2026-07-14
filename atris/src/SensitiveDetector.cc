@@ -19,6 +19,8 @@
 #include "G4PhysicalConstants.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
+#include <cmath>
+#include <cstdio>
 #include <map>
 #include <vector>
 extern G4int mode;                      // from main.cc
@@ -79,7 +81,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	G4double einp     = theGun->GetParticleEnergy();
 	G4CsvAnalysisManager* analysis = G4CsvAnalysisManager::Instance();
 
-	G4int    detid = stoi(this->GetName());
+	G4int    detid = std::stoi(this->GetName());
 	if (detid == 0){
 		trk->SetTrackStatus(fStopAndKill);
 		return false;
@@ -108,8 +110,8 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		bool upward                = inclination < halfpi;
 		G4int diid                 = detid - (1*upward);
 		G4int    partPDG           = trk->GetParticleDefinition()->GetPDGEncoding();
-		G4int    apartPDG          = abs(partPDG);
-		G4int    k = (G4int) (log10(ekin/eV)/icrustep);
+		G4int    apartPDG          = std::abs(partPDG);
+		G4int    k = static_cast<G4int>(std::log10(ekin/eV)/icrustep);
 		if (k < 0) k=0;
 		//G4cout << "PDG=" << partPDG << ", apartPDG=" << apartPDG << ", k=" << k;
 		if (apartPDG<2214) {
@@ -129,11 +131,11 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 				if ((apartPDG == 2212) or (apartPDG == 111)) wfactor=2;
 				if (apartPDG == 2112){
 					if (ekin <= 1/MeV) {
-						wfactor = 3.5 + 18.2*exp(-log(pow(ekin/MeV,2.0))/6.0) ;
+						wfactor = 3.5 + 18.2*std::exp(-std::log(std::pow(ekin/MeV,2.0))/6.0) ;
 					} else if (ekin <= 50/MeV) {
-						wfactor = 5.0 + 17.0*exp(-log(pow(2*ekin/MeV,2.0))/6.0) ;
+						wfactor = 5.0 + 17.0*std::exp(-std::log(std::pow(2*ekin/MeV,2.0))/6.0) ;
 					} else if (ekin > 50/MeV) {
-						wfactor = 2.5 + 3.25*exp(-log(pow(0.04*ekin/MeV,2.0))/6.0) ;
+						wfactor = 2.5 + 3.25*std::exp(-std::log(std::pow(0.04*ekin/MeV,2.0))/6.0) ;
 					}
 				}
 				for (G4int pidx=0;pidx<nrphantoms;pidx++){
@@ -166,7 +168,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			G4float       esource      = (G4float) einp;
 			G4float       ekinf         = (G4float) pre->GetKineticEnergy();
 			unsigned short entering    = (unsigned short) diid;
-			unsigned short sangle        = (unsigned short)round(inclination/deg);
+			unsigned short sangle        = (unsigned short)std::round(inclination/deg);
 			//G4int is a 4 byte signed integer and this size is necessary to be able to hold ions
 			// Here casting is essential, since otherwise fwrite makes wierd stuff.
 			//G4cout << "angle before casting " << inclination/deg << G4endl;
@@ -175,12 +177,12 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			// For rescaling we will also include input energy. Because of the variability of input
 			// energy, and the sequential nature of the simulation, this is enough info to discriminate 
 			// between daughters of different parent particles. 
-			fwrite(&partPDG,intsize,1,tuples1);
-			fwrite(&entering,ushortsize,1,tuples1);
-			fwrite(&sangle,ushortsize,1,tuples1);
+			std::fwrite(&partPDG,intsize,1,tuples1);
+			std::fwrite(&entering,ushortsize,1,tuples1);
+			std::fwrite(&sangle,ushortsize,1,tuples1);
 			//fwrite(&inclination,floatsize,1,tuples1);
-			fwrite(&ekinf,floatsize,1,tuples1);
-			fwrite(&esource,floatsize,1,tuples1);
+			std::fwrite(&ekinf,floatsize,1,tuples1);
+			std::fwrite(&esource,floatsize,1,tuples1);
 		}
 	}
 

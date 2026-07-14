@@ -12,10 +12,12 @@
 #include "G4StepLimiterPhysics.hh"
 #include <vector>
 #include <string>
+#include <cstddef>
+#include <cmath>
+#include <ctime>
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <time.h>
 
 
 G4String outputFileName;
@@ -32,7 +34,7 @@ std::vector<std::vector<G4double>> rate;
 
 std::vector<G4double> enbins;
 std::vector<G4double> detbins;
-G4int t0 = time(NULL);
+G4int t0 = static_cast<G4int>(std::time(nullptr));
 
 G4bool atrisverbose = false;
 
@@ -152,19 +154,13 @@ void determine_nrofdetectors(G4String fname){
 	// Better: open the gdml file, count "<auxiliary", this is the number of sensitive detectors
 	G4String line_of_text;
 	G4String auxvalue = "<auxiliary";
-	G4String temp;
 	G4String temp2;
 	std::ifstream is(fname);
-	while (is.is_open()) {
-		std::getline(is,line_of_text); // read first line
-		std::stringstream ss;    // create a string stream
-		ss << line_of_text;            // put the header in to the string stream
-		while (!ss.eof()) {
-			ss >> temp;
-			if (std::stringstream(temp) >> temp2 ){
-				if (temp2 == auxvalue) nrofdetectors +=1;
-				if (temp2 == "</gdml>") is.close();
-			}
+	while (std::getline(is, line_of_text)) {
+		std::stringstream ss(line_of_text);
+		while (ss >> temp2) {
+			if (temp2 == auxvalue) nrofdetectors +=1;
+			if (temp2 == "</gdml>") return;
 		}
 	}
 	G4cout << "### AtRIS: nrofdetectors has been determined to be: " << nrofdetectors << G4endl;
@@ -182,19 +178,15 @@ void Phantoms(G4int howmany){
 		if (phantom_index == 0){
 			// need to check which PDGs I've got and which are light&heavy.
 			G4int pdgfound;
-			std::vector<G4int> pdgs;
 			G4String bLine;         // instantiate the header string
 			G4String temp;
 			if (is.is_open()){
 				std::getline(is,bLine); // read first line
-				std::stringstream ss;    // create a string stream
-				ss << bLine;            // put the header in to the string stream
+				std::stringstream ss(bLine);
 				G4int    j = 0;             // initialize the column index
-				while (!ss.eof()) {
-					ss >> temp;
+				while (ss >> temp) {
 					if (std::stringstream(temp) >> pdgfound){
-						pdgs.push_back(pdgfound);
-						if (abs(pdgfound)<2214){
+						if (std::abs(pdgfound)<2214){
 							G4cout << j << " adding sensitivity for light particle with PDG= " << pdgfound << " "<<  "  at index " << pdgfound + 2213 << G4endl;
 							useornot[pdgfound+2213] = j; // modify the corresponding useornot location to j
 							// this offset is for antiparticles up to neutron and proton!
@@ -218,18 +210,13 @@ void Phantoms(G4int howmany){
 		}
 
 		G4String bLine;         // instantiate the header string
-		G4String temp;
 		G4double f;
 		G4int count = 0;
 		while ( std::getline(is,bLine)){
-			std::stringstream dd;    // create a string stream
-			dd << bLine;
-			while (!dd.eof()){
-				dd >> temp;
-				if (std::stringstream(temp) >> f){
-					icru.push_back(f);
-					count++;
-				}
+			std::stringstream dd(bLine);
+			while (dd >> f){
+				icru.push_back(f);
+				count++;
 			}
 		}
 		G4cout << "### AtRIS: found " << count << " out of expected "<< expected  << G4endl;
@@ -245,14 +232,10 @@ void Phantoms(G4int howmany){
 		std::ifstream cs(phantom_name);
 		std::getline(cs, dummyLine);
 		while ( std::getline(cs,bLine)){
-			std::stringstream dd;    // create a string stream
-			dd << bLine;
-			while (!dd.eof()){
-				dd >> temp;
-				if (std::stringstream(temp) >> f){
-					cicru.push_back(f);
-					count++;
-				}
+			std::stringstream dd(bLine);
+			while (dd >> f){
+				cicru.push_back(f);
+				count++;
 			}
 		}
 		G4cout << "### AtRIS: found " << count << " out of expected "<< expected  << G4endl;

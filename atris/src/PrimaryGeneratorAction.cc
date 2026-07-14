@@ -8,8 +8,8 @@
 #include "G4SystemOfUnits.hh"
 #include "G4UnitsTable.hh"
 #include <chrono>
+#include <ctime>
 #include <cstdio>
-#include <time.h>
 
 extern G4int t0;
 
@@ -32,7 +32,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	G4int current  = anEvent->GetEventID();
 	if (current % 100 == 0){
 		if (current != 0){
-		G4int elapsed = time(NULL) - t0;
+		G4int elapsed = static_cast<G4int>(std::time(nullptr)) - t0;
 		speed = (G4double) current / (G4double) elapsed;
 		G4cout << "Processing event: " << current << ", " <<  elapsed << " secoonds have passed. We are processing " << speed << " primaries per second."  << G4endl;
 		} else {
