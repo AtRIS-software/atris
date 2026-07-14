@@ -1079,7 +1079,7 @@ def run_atris(
                     except OSError:
                         log_size = 0
                     elapsed = int(now - simulation_start_time) if simulation_start_time is not None else 0
-                    message = f"AtRIS running: {elapsed}s elapsed; {log_path.name} is {log_size} bytes"
+                    message = f"AtRIS running: {elapsed:>4}s elapsed; {log_path.name} is {log_size} bytes"
                     emit_summary_log(message, now)
                     last_status_time = now
                     last_status_log_size = log_size
