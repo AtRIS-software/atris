@@ -1,2 +1,4 @@
 atris/build-*/
 atris/build/
+__pycache__/
+smoke-run/

@@ -63,6 +63,20 @@ REQUIRED_GEANT4_ENV_VARS = (
 REQUIRED_GEANT4_DATA_FILES = {
     "G4ENSDFSTATEDATA": "ENSDFSTATE.dat",
 }
+GEANT4_DATASET_DIR_PREFIXES = {
+    "G4NEUTRONHPDATA": ("G4NDL",),
+    "G4LEDATA": ("G4EMLOW",),
+    "G4LEVELGAMMADATA": ("PhotonEvaporation",),
+    "G4RADIOACTIVEDATA": ("RadioactiveDecay",),
+    "G4PARTICLEXSDATA": ("G4PARTICLEXS",),
+    "G4PIIDATA": ("G4PII",),
+    "G4REALSURFACEDATA": ("RealSurface",),
+    "G4SAIDXSDATA": ("G4SAIDDATA",),
+    "G4ABLADATA": ("G4ABLA",),
+    "G4INCLDATA": ("G4INCL",),
+    "G4ENSDFSTATEDATA": ("G4ENSDFSTATE",),
+    "G4CHANNELINGDATA": ("G4CHANNELING",),
+}
 ATRIS_PHANTOM_LOAD_RE = re.compile(r"^### AtRIS: loading (radiation|counting) response matrix for phantom (\d+) ")
 ATRIS_EVENT_PROGRESS_RE = re.compile(
     r"^Processing event: (?P<event>\d+), (?P<elapsed>\d+) secoonds have passed\. "
@@ -207,6 +221,30 @@ def load_environment_from_geant4_sh(script_path: Path) -> dict[str, str]:
     return env
 
 
+def populate_geant4_dataset_env(runtime_env: dict[str, str]) -> None:
+    data_root_raw = runtime_env.get("GEANT4_DATA_DIR")
+    if not data_root_raw:
+        return
+    data_root = Path(data_root_raw).expanduser()
+    if not data_root.is_dir():
+        return
+
+    available_dirs = [entry for entry in data_root.iterdir() if entry.is_dir()]
+    for env_name, prefixes in GEANT4_DATASET_DIR_PREFIXES.items():
+        if runtime_env.get(env_name):
+            continue
+        match = next(
+            (
+                entry
+                for entry in available_dirs
+                if any(entry.name.startswith(prefix) for prefix in prefixes)
+            ),
+            None,
+        )
+        if match is not None:
+            runtime_env[env_name] = str(match)
+
+
 def build_runtime_environment(geant4_sh: str) -> dict[str, str]:
     runtime_env = dict(os.environ)
     if geant4_sh:
@@ -214,6 +252,7 @@ def build_runtime_environment(geant4_sh: str) -> dict[str, str]:
         require_file(script_path, "Geant4 setup script")
         log(f"Loading Geant4 environment from {script_path}")
         runtime_env.update(load_environment_from_geant4_sh(script_path))
+    populate_geant4_dataset_env(runtime_env)
     missing = [name for name in REQUIRED_GEANT4_ENV_VARS if not runtime_env.get(name)]
     if missing:
         raise SystemExit(
