@@ -196,6 +196,8 @@ def create_simconfig(long,lat,year,month,day,hour,alt_min,alt_max,alt_step,parts
     
 
 if __name__ == "__main__":
-    rootfolder = '/git/AtRIS2/'
+    rootfolder = os.environ.get("ATRIS_ROOTDIR", os.getcwd())
+    if not rootfolder.endswith(os.sep):
+        rootfolder += os.sep
     result = geantinstall(rootfolder)
     if result: atrisinstall(rootfolder)
