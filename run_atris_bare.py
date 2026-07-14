@@ -72,11 +72,22 @@ GEANT4_EVENT_START_RE = re.compile(r"Event\s+(?P<event>\d+)\s+starts\b")
 ATRIS_DIRECT_PROGRESS_RE = re.compile(r"^AtRIS progress: ")
 GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
+ATRIS_STATUS_SECONDS = 20.0
 
 
 def log(message: str) -> None:
     timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
+
+
+def format_bytes(size: int) -> str:
+    units = ("B", "KB", "MB", "GB", "TB")
+    value = float(size)
+    for unit in units:
+        if value < 1024.0 or unit == units[-1]:
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{size} B"
 
 
 def parse_args() -> argparse.Namespace:
@@ -976,7 +987,10 @@ def run_atris(
     phantom_load_started = False
     gdml_validation_count = 0
     simulation_started = False
+    simulation_start_time: float | None = None
     last_visible_output_time = time.monotonic()
+    last_status_time = 0.0
+    last_status_log_size = 0
 
     def emit_summary_log(message: str, timestamp: float | None = None) -> None:
         nonlocal last_visible_output_time
@@ -1006,13 +1020,20 @@ def run_atris(
                     atris_console == "summary"
                     and simulation_started
                     and process.poll() is None
-                    and now - last_visible_output_time >= ATRIS_HEARTBEAT_SECONDS
+                    and now - last_status_time >= ATRIS_STATUS_SECONDS
                 ):
-                    idle_for = int(now - last_visible_output_time)
-                    emit_summary_log(
-                        f"AtRIS is still running; no visible progress for {idle_for}s. Raw output is in {log_path.name}",
-                        now,
-                    )
+                    try:
+                        log_size = log_path.stat().st_size
+                    except OSError:
+                        log_size = 0
+                    delta_size = log_size - last_status_log_size
+                    elapsed = int(now - simulation_start_time) if simulation_start_time is not None else 0
+                    message = f"AtRIS running: {elapsed}s elapsed; {log_path.name} is {format_bytes(log_size)}"
+                    if last_status_time:
+                        message += f" ({delta_size:+,} bytes since last update)"
+                    emit_summary_log(message, now)
+                    last_status_time = now
+                    last_status_log_size = log_size
                 continue
             if queued_line is None:
                 break
@@ -1043,6 +1064,12 @@ def run_atris(
                 continue
             if atris_console == "summary" and stripped == "### AtRIS: Starting the simulation":
                 simulation_started = True
+                simulation_start_time = now
+                last_status_time = now
+                try:
+                    last_status_log_size = log_path.stat().st_size
+                except OSError:
+                    last_status_log_size = 0
                 if gdml_validation_count:
                     emit_summary_log(
                         f"Suppressed {gdml_validation_count} GDML validation warning lines from the terminal",
