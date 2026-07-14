@@ -72,7 +72,8 @@ GEANT4_EVENT_START_RE = re.compile(r"Event\s+(?P<event>\d+)\s+starts\b")
 ATRIS_DIRECT_PROGRESS_RE = re.compile(r"^AtRIS progress: ")
 GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
-ATRIS_STATUS_SECONDS = 5.0
+ATRIS_STATUS_SECONDS = 10.0
+ATRIS_PROGRESS_PERCENT_STEP = 2.0
 RUN_PROFILES: dict[str, dict[str, int | str]] = {
     "quick": {
         "particles": "protons",
@@ -981,6 +982,24 @@ def extract_atris_progress_event(line: str) -> int | None:
     return None
 
 
+def should_emit_progress(
+    progress_event: int,
+    total_events: int | None,
+    last_logged_event: int,
+) -> bool:
+    if progress_event <= 0:
+        return False
+    if last_logged_event < 0:
+        return True
+    if total_events and total_events > 0:
+        current_percent = (100.0 * progress_event) / total_events
+        previous_percent = (100.0 * last_logged_event) / total_events
+        if progress_event >= total_events:
+            return True
+        return current_percent - previous_percent >= ATRIS_PROGRESS_PERCENT_STEP
+    return progress_event > last_logged_event
+
+
 def format_atris_progress(line: str, total_events: int | None = None) -> str | None:
     stripped = line.strip()
     if ATRIS_DIRECT_PROGRESS_RE.match(stripped):
@@ -1042,6 +1061,7 @@ def run_atris(
     last_status_log_size = 0
     max_progress_event_seen = -1
     last_progress_time: float | None = None
+    last_progress_logged_event = -1
 
     def emit_summary_log(message: str, timestamp: float | None = None) -> None:
         nonlocal last_visible_output_time
@@ -1078,29 +1098,29 @@ def run_atris(
                     except OSError:
                         log_size = 0
                     elapsed = int(now - simulation_start_time) if simulation_start_time is not None else 0
-                    if max_progress_event_seen >= 0:
+                    if max_progress_event_seen > 0 and last_progress_time is not None and now - last_progress_time >= ATRIS_STATUS_SECONDS:
                         if total_events:
                             fraction = min(max(max_progress_event_seen / total_events, 0.0), 1.0)
                             progress_text = f"{max_progress_event_seen}/{total_events} ({fraction:.1%})"
                         else:
                             progress_text = str(max_progress_event_seen)
-                        if last_progress_time is not None:
-                            stalled_for = int(now - last_progress_time)
-                            message = (
-                                f"AtRIS status: {progress_text}; "
-                                f"no new progress for {stalled_for:>3}s; "
-                                f"{log_path.name} is {log_size} bytes"
-                            )
-                        else:
-                            message = f"AtRIS status: {progress_text}; {log_path.name} is {log_size} bytes"
-                    else:
+                        stalled_for = int(now - last_progress_time)
+                        message = (
+                            f"AtRIS status: {progress_text}; "
+                            f"no new progress for {stalled_for:>3}s; "
+                            f"{log_path.name} is {log_size} bytes"
+                        )
+                        emit_summary_log(message, now)
+                        last_status_time = now
+                        last_status_log_size = log_size
+                    elif max_progress_event_seen <= 0:
                         message = (
                             f"AtRIS status: no event progress yet; "
                             f"{elapsed:>4}s elapsed; {log_path.name} is {log_size} bytes"
                         )
-                    emit_summary_log(message, now)
-                    last_status_time = now
-                    last_status_log_size = log_size
+                        emit_summary_log(message, now)
+                        last_status_time = now
+                        last_status_log_size = log_size
                 continue
             if queued_line is None:
                 break
@@ -1152,6 +1172,9 @@ def run_atris(
                     if progress_event is not None:
                         max_progress_event_seen = progress_event
                         last_progress_time = now
+                        if not should_emit_progress(progress_event, total_events, last_progress_logged_event):
+                            continue
+                        last_progress_logged_event = progress_event
                     emit_summary_log(progress_message, now)
                     continue
             if atris_console == "summary" and should_echo_atris_line(line):
