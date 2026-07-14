@@ -1,13 +1,26 @@
 import os
-import requests
 import shutil
-from tqdm.notebook import trange, tqdm
 import subprocess
 import urllib.request
 from os.path import exists
 import pprint
 import shlex
-import subprocess
+
+
+def resolve_geant4_install(rootdir):
+    env_install = os.environ.get("GEANT4_INSTALL_DIR")
+    env_script = os.environ.get("GEANT4_SH")
+    candidates = []
+    if env_script:
+        candidates.append(env_script)
+    if env_install:
+        candidates.append(os.path.join(env_install, "bin", "geant4.sh"))
+    candidates.append(os.path.join(rootdir, "install", "bin", "geant4.sh"))
+
+    for candidate in candidates:
+        if candidate and exists(candidate):
+            return candidate
+    return None
 
 
 def check_requirements():
@@ -28,18 +41,28 @@ def check_requirements():
     return result
 
 def find_latest_geant4_release():
+    forced_version = os.environ.get("GEANT4_VERSION")
+    if forced_version:
+        version = forced_version if forced_version.startswith("v") else f"v{forced_version}"
+        dlink = "https://github.com/Geant4/geant4/archive/refs/tags/" + version + ".tar.gz"
+        return dlink, version
+
     url = 'https://github.com/Geant4/geant4/releases/latest'
     page = urllib.request.urlopen(url).read().decode("utf-8").split('\n')
+    thestring = None
     for k in page:
         if 'expanded_assets' in k:
             thestring = k
-    vers = thestring.split('/')[-1].split('"')[0]
-    # workaround for 4.11.1 bug that destroys backward compatibility of the G4VAnalysis manager.
-    vers  = 'v11.0.3'
-    dlink = "https://github.com/Geant4/geant4/archive/refs/tags/"+vers+'.tar.gz'
-    return dlink, vers
+            break
+    if thestring is None:
+        raise RuntimeError("Unable to determine latest Geant4 release tag from GitHub")
+    version = thestring.split('/')[-1].split('"')[0]
+    dlink = "https://github.com/Geant4/geant4/archive/refs/tags/" + version + '.tar.gz'
+    return dlink, version
 
 def download_geant4(thelink):
+    import requests
+    from tqdm.auto import tqdm
     
     r = None  # sometimes the get fails, so I've modified this to make it more reliable
     m = None  # sometimes even deeper fails happen in the fetching algo
@@ -55,11 +78,15 @@ def download_geant4(thelink):
             shutil.copyfileobj(raw, output)        
 
 def get_threads():
-    N = int(os.popen("cat /proc/cpuinfo | grep processor | wc -l").read())
-    return N
+    return os.cpu_count() or 1
 
 def geantinstall(rootdir):
     os.chdir(rootdir)
+    external_geant4 = resolve_geant4_install(rootdir)
+    if external_geant4:
+        print('Found an existing Geant4 setup script at', external_geant4)
+        print('Skipping bundled Geant4 installation and using the external install instead.')
+        return True
     if not (exists('geant4_install_ok')): 
         dlink, ver = find_latest_geant4_release()
         print('proceeding to download version', ver, ' using the link ',dlink)
@@ -94,7 +121,9 @@ def geantinstall(rootdir):
         return True
 
 def source_geant4_from_python(rootdir):
-    fname     = rootdir+'install/bin/geant4.sh'
+    fname = resolve_geant4_install(rootdir)
+    if fname is None:
+        raise FileNotFoundError("Could not find geant4.sh. Set GEANT4_INSTALL_DIR or GEANT4_SH, or install Geant4 first.")
     command   = shlex.split("env bash -c 'source %s && env'"%fname)
     proc      = subprocess.Popen(command, stdout = subprocess.PIPE)
     for line in proc.stdout:
