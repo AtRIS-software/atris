@@ -64,6 +64,11 @@ REQUIRED_GEANT4_DATA_FILES = {
     "G4ENSDFSTATEDATA": "ENSDFSTATE.dat",
 }
 ATRIS_PHANTOM_LOAD_RE = re.compile(r"^### AtRIS: loading (radiation|counting) response matrix for phantom (\d+) ")
+ATRIS_EVENT_PROGRESS_RE = re.compile(
+    r"^Processing event: (?P<event>\d+), (?P<elapsed>\d+) secoonds have passed\. "
+    r"We are processing (?P<speed>[-+0-9.eE]+) primaries per second\.$"
+)
+GEANT4_EVENT_START_RE = re.compile(r"Event\s+(?P<event>\d+)\s+starts\b")
 GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
 
@@ -791,15 +796,20 @@ def write_bins(path: Path, values: list[float]) -> None:
 def write_macro(path: Path, bins: list[float], radius_km: float, particle: str, threads: int, event_count: int) -> None:
     seed1 = random.randint(31, 999999)
     seed2 = random.randint(31, 999999)
+    progress_modulo = max(1, event_count // 100)
     lines = [
         f"/run/numberOfThreads {threads}",
+        "/control/cout/useBuffer false",
         "/run/initialize",
         "/run/verbose 2",
+        f"/run/printProgress {progress_modulo}",
         f"/gps/particle {particle}",
         "/gps/ene/type User",
         "/gps/hist/type energy",
         f"/gps/hist/point {bins[0]:.9f} 0.000000000",
     ]
+    if threads > 1:
+        lines.insert(1, "/control/cout/ignoreThreadsExcept 0")
     for value in bins[1:]:
         lines.append(f"/gps/hist/point {value:.9f} 1.000000000")
     lines.extend(
@@ -832,7 +842,7 @@ def copy_phantoms(rootdir: Path, simdir: Path) -> None:
     log("Copied phantom files")
 
 
-def generate_macros(simdir: Path, numberparts: int, threads: int, alpha_factor: float) -> None:
+def generate_macros(simdir: Path, numberparts: int, threads: int, alpha_factor: float) -> dict[str, int]:
     log(
         f"Generating macro and bin files with numberparts={numberparts}, "
         f"threads={threads}, alpha_factor={alpha_factor}"
@@ -849,6 +859,7 @@ def generate_macros(simdir: Path, numberparts: int, threads: int, alpha_factor: 
     write_macro(simdir / "protons.mac", base_bins, radius_km, "proton", threads, proton_events)
     write_macro(simdir / "alphas.mac", [value * 4.0 for value in base_bins], radius_km, "alpha", threads, alpha_events)
     log("Generated protons/alphas macro and bin files")
+    return {"protons": proton_events, "alphas": alpha_events}
 
 
 def prepare_geometry(args: argparse.Namespace, rootdir: Path, simdir: Path) -> None:
@@ -915,6 +926,27 @@ def should_echo_atris_line(line: str) -> bool:
     return stripped.startswith(important_prefixes)
 
 
+def format_atris_progress(line: str, total_events: int | None = None) -> str | None:
+    stripped = line.strip()
+    match = ATRIS_EVENT_PROGRESS_RE.match(stripped)
+    if not match:
+        geant_match = GEANT4_EVENT_START_RE.search(stripped)
+        if not geant_match:
+            return None
+        event = int(geant_match.group("event"))
+        if total_events:
+            fraction = min(max(event / total_events, 0.0), 1.0)
+            return f"AtRIS progress: event {event}/{total_events} ({fraction:.1%})"
+        return f"AtRIS progress: event {event}"
+    event = int(match.group("event"))
+    if total_events:
+        fraction = min(max(event / total_events, 0.0), 1.0)
+        prefix = f"AtRIS progress: event {event}/{total_events} ({fraction:.1%})"
+    else:
+        prefix = f"AtRIS progress: event {event}"
+    return f"{prefix}, elapsed {match.group('elapsed')}s, {match.group('speed')} primaries/s"
+
+
 def enqueue_stream_lines(stream: object, queue: Queue[str | None]) -> None:
     try:
         for line in stream:
@@ -930,6 +962,7 @@ def run_atris(
     simname: str,
     phantom_count: int,
     atris_console: str,
+    total_events: int | None = None,
 ) -> None:
     command = ["./AtRIS", phys_list, simname, "-1", str(phantom_count)]
     log_path = simdir / f"{simname}.log"
@@ -939,8 +972,14 @@ def run_atris(
     )
     phantom_load_started = False
     gdml_validation_count = 0
-    last_output_time = time.monotonic()
-    last_heartbeat_time = last_output_time
+    simulation_started = False
+    last_visible_output_time = time.monotonic()
+
+    def emit_summary_log(message: str, timestamp: float | None = None) -> None:
+        nonlocal last_visible_output_time
+        log(message)
+        last_visible_output_time = time.monotonic() if timestamp is None else timestamp
+
     with log_path.open("w", encoding="utf-8", buffering=1) as handle:
         process = subprocess.Popen(
             command,
@@ -960,17 +999,22 @@ def run_atris(
                 queued_line = queue.get(timeout=5.0)
             except Empty:
                 now = time.monotonic()
-                if atris_console == "summary" and process.poll() is None and now - last_heartbeat_time >= ATRIS_HEARTBEAT_SECONDS:
-                    idle_for = int(now - last_output_time)
-                    log(f"AtRIS is still running; no new output for {idle_for}s. Raw output is in {log_path.name}")
-                    last_heartbeat_time = now
+                if (
+                    atris_console == "summary"
+                    and simulation_started
+                    and process.poll() is None
+                    and now - last_visible_output_time >= ATRIS_HEARTBEAT_SECONDS
+                ):
+                    idle_for = int(now - last_visible_output_time)
+                    emit_summary_log(
+                        f"AtRIS is still running; no visible progress for {idle_for}s. Raw output is in {log_path.name}",
+                        now,
+                    )
                 continue
             if queued_line is None:
                 break
             line = queued_line
             now = time.monotonic()
-            last_output_time = now
-            last_heartbeat_time = now
             handle.write(line)
             handle.flush()
             if atris_console == "full":
@@ -981,22 +1025,35 @@ def run_atris(
             if match:
                 phantom_index = int(match.group(2))
                 if not phantom_load_started:
-                    log("AtRIS is loading phantom response files")
+                    emit_summary_log("AtRIS is loading phantom response files", now)
                     phantom_load_started = True
                 if match.group(1) == "radiation" and should_report_phantom_progress(phantom_index, phantom_count):
-                    log(f"Phantom response load progress: {phantom_index + 1}/{phantom_count}")
+                    emit_summary_log(f"Phantom response load progress: {phantom_index + 1}/{phantom_count}", now)
                 continue
             if stripped.startswith(GDML_VALIDATION_PREFIX):
                 gdml_validation_count += 1
                 if atris_console == "summary" and gdml_validation_count == 1:
-                    log(f"Geant4 is reporting GDML schema validation warnings; raw details are in {log_path.name}")
+                    emit_summary_log(
+                        f"Geant4 is reporting GDML schema validation warnings; raw details are in {log_path.name}",
+                        now,
+                    )
                 continue
             if atris_console == "summary" and stripped == "### AtRIS: Starting the simulation":
+                simulation_started = True
                 if gdml_validation_count:
-                    log(f"Suppressed {gdml_validation_count} GDML validation warning lines from the terminal")
-                log(f"AtRIS entered the simulation phase; raw output is streaming to {log_path.name}")
+                    emit_summary_log(
+                        f"Suppressed {gdml_validation_count} GDML validation warning lines from the terminal",
+                        now,
+                    )
+                emit_summary_log(f"AtRIS entered the simulation phase; raw output is streaming to {log_path.name}", now)
+            if atris_console == "summary":
+                progress_message = format_atris_progress(line, total_events)
+                if progress_message:
+                    emit_summary_log(progress_message, now)
+                    continue
             if atris_console == "summary" and should_echo_atris_line(line):
                 print(line, end="", flush=True)
+                last_visible_output_time = now
         reader.join(timeout=1.0)
         return_code = process.wait()
     if return_code != 0:
@@ -1030,7 +1087,7 @@ def main() -> int:
 
     assert runtime_env is not None
     copy_phantoms(rootdir, simdir)
-    generate_macros(simdir, args.numberparts, args.threads, args.alpha_factor)
+    event_counts = generate_macros(simdir, args.numberparts, args.threads, args.alpha_factor)
 
     run_order = {
         "protons": ("protons",),
@@ -1039,7 +1096,15 @@ def main() -> int:
     }[args.particles]
     log(f"Run order: {', '.join(run_order)}")
     for simname in run_order:
-        run_atris(simdir, runtime_env, args.phys_list, simname, args.phantom_count, args.atris_console)
+        run_atris(
+            simdir,
+            runtime_env,
+            args.phys_list,
+            simname,
+            args.phantom_count,
+            args.atris_console,
+            event_counts.get(simname),
+        )
 
     log("Finished")
     return 0
