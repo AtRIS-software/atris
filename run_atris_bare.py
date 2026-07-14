@@ -72,7 +72,7 @@ GEANT4_EVENT_START_RE = re.compile(r"Event\s+(?P<event>\d+)\s+starts\b")
 ATRIS_DIRECT_PROGRESS_RE = re.compile(r"^AtRIS progress: ")
 GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
-ATRIS_STATUS_SECONDS = 20.0
+ATRIS_STATUS_SECONDS = 5.0
 RUN_PROFILES: dict[str, dict[str, int | str]] = {
     "quick": {
         "particles": "both",
@@ -1075,7 +1075,7 @@ def run_atris(
         reader.start()
         while True:
             try:
-                queued_line = queue.get(timeout=5.0)
+                queued_line = queue.get(timeout=1.0)
             except Empty:
                 now = time.monotonic()
                 if (
