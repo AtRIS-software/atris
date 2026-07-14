@@ -653,13 +653,33 @@ def gen_macros(rootdir,number,workerthreads,alpha_factor):
     os.chdir(rootdir)
     amg.macroGenManager(number,workerthreads,alpha_factor)
     print("Simulation macros and files for protons and alphas have been created. The simulation can be started.")
+
+
+def resolve_geant4_setup_script(rootdir):
+    candidates = []
+    geant4_sh = os.environ.get("GEANT4_SH")
+    geant4_install_dir = os.environ.get("GEANT4_INSTALL_DIR")
+    if geant4_sh:
+        candidates.append(geant4_sh)
+    if geant4_install_dir:
+        candidates.append(os.path.join(geant4_install_dir, "bin", "geant4.sh"))
+    candidates.append(os.path.join(rootdir, "install", "bin", "geant4.sh"))
+    for candidate in candidates:
+        if candidate and exists(candidate):
+            return candidate
+    return None
     
 def start_sim(rootdir,simname,physlist):
     os.chdir(rootdir+'atris/simulation/')
     os.system('rm -f ./%s.log'%simname)
     print('the %s simulation is starting using the following command:'%simname)
     command      = './AtRIS '+physlist+' '+simname+' -1 32 > ' + simname + ".log"
-    command      = "source ../../install/bin/geant4.sh; " + command
+    geant4_sh = resolve_geant4_setup_script(rootdir)
+    if geant4_sh is not None:
+        command = "source " + shlex.quote(geant4_sh) + "; " + command
+    else:
+        print("No geant4.sh found via GEANT4_SH, GEANT4_INSTALL_DIR, or rootdir/install/bin/geant4.sh.")
+        print("Proceeding without sourcing Geant4 from simtools.py.")
     print(command)
     #subprocess.run(command, shell=True)
     subprocess.Popen(command,shell=True)
