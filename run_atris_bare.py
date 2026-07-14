@@ -75,9 +75,9 @@ ATRIS_HEARTBEAT_SECONDS = 60.0
 ATRIS_STATUS_SECONDS = 5.0
 RUN_PROFILES: dict[str, dict[str, int | str]] = {
     "quick": {
-        "particles": "both",
-        "numberparts": 100,
-        "phantom_count": 32,
+        "particles": "protons",
+        "numberparts": 10,
+        "phantom_count": 1,
     },
     "full": {
         "particles": "both",
@@ -100,7 +100,7 @@ def parse_args() -> argparse.Namespace:
         "--run-profile",
         choices=tuple(RUN_PROFILES),
         default="quick",
-        help="Runtime preset. 'quick' is much faster; 'full' restores the old heavier defaults.",
+        help="Runtime preset. 'quick' is a very small run meant to finish fast; 'full' restores the old heavier defaults.",
     )
     parser.add_argument(
         "--atmosphere-source",
