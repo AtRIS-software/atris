@@ -6,6 +6,9 @@ import os
 import re
 import requests
 import datetime
+import hashlib
+import json
+import shlex
 import atrismacrogen as amg
 import subprocess
 import atristoolset as ia
@@ -238,38 +241,84 @@ headers = {
     'sec-ch-ua-platform': '"macOS"',
 }
 
+NRLMSIS_API_URL = 'https://kauai.ccmc.gsfc.nasa.gov/instantrun/api/nrlmsis'
+
+
+def _to_utc_datetime_string(year, month, day, hour):
+    hour_int = int(hour)
+    minute_float = (hour - hour_int) * 60.0
+    minute_int = int(minute_float)
+    second = int(round((minute_float - minute_int) * 60.0))
+    dt = datetime.datetime(year, month, day, hour_int, minute_int, 0, tzinfo=datetime.timezone.utc)
+    dt += datetime.timedelta(seconds=second)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _nrlmsis_payload(year, month, day, hour, longitude, latitude, hmin, hmax, deltah):
+    version = os.environ.get("NRLMSIS_VERSION", "NRLMSIS2")
+    return {
+        "version": version,
+        "timeType": "ut",
+        "coordinateType": "geo",
+        "datetime": _to_utc_datetime_string(year, month, day, hour),
+        "lat": float(latitude),
+        "lon": float(longitude),
+        "height": max(float(hmax), 100.0),
+        "profileType": 1,
+        "start": float(hmin),
+        "stop": float(hmax),
+        "step": float(deltah),
+        "fdaily": -1,
+        "f3month": -1,
+        "ap": -1,
+    }
+
+
+def _nrlmsis_cache_path(payload):
+    cache_key = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+    cache_dir = os.path.join(os.getcwd(), ".nrlmsis-cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, cache_key + ".txt")
+
+
+def _fetch_nrlmsis_output(payload):
+    api_headers = {
+        "User-Agent": headers["User-Agent"],
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Origin": "https://kauai.ccmc.gsfc.nasa.gov",
+        "Referer": "https://kauai.ccmc.gsfc.nasa.gov/instantrun/nrlmsis/",
+    }
+    response = requests.post(NRLMSIS_API_URL, headers=api_headers, data=json.dumps(payload), timeout=120)
+    try:
+        response_data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("CCMC NRLMSIS API returned a non-JSON response.") from exc
+    if not response.ok:
+        message = response_data.get("error") or response_data.get("message") or response.text
+        raise RuntimeError("CCMC NRLMSIS API request failed: %s" % message)
+    txt_url = response_data.get("txt")
+    if not txt_url:
+        raise RuntimeError("CCMC NRLMSIS API response did not include an output URL.")
+    txt_response = requests.get(txt_url, headers={"User-Agent": headers["User-Agent"]}, timeout=120)
+    txt_response.raise_for_status()
+    return txt_response.text
+
 def get_atmosphere(year, month, day, hour, longitutde, latitude, hmin=0,hmax=100,deltah=1):
-    # the production ready function
-    nrlm_parameters = {"whichMsis":1,            # fixed, I guess, 0 is the old model
-                   "outputOptions":"1",          # fixed, 1 is for downoading the profile
-                   "profileType":1,              # fixed, 1 is for altitude profile 
-                   "year":"%i"%year,             # variable
-                   "month":"%02i"%month,         # variable
-                   "day":"%02i"%day,             # variable
-                   "timeFlag":0,                 # fixed, 0 is for UTC,  we will leave it at that
-                   "hour":"%.1f"%hour,           # variable
-                   "geoFlag":0,                  # fixed, 0 is for geographic coordinates, 1 would be for geomagnetic, we leave it 0
-                   "latitude":"%.2f"%latitude,   # variable - please note that latitude goes from -90 to 90, and longitutde from 0 to 360 degrees
-                   "longitude":"%.2f"%longitutde,# variable
-                   "height":"500",               # fixed - probably, max height, 
-                   "start":"%i"%hmin,            # fixed - probably
-                   "stop":"%i"%hmax,             # fixed - probably
-                   "stepSize":"%0.1f"%deltah,    # fixed - probably, we might want to control this parameter later on
-                   "f107":-1,                    # fixed, we let the model decide the solar activity
-                   "f107month":-1,               # fixed
-                   "ap":-1}                      # fixed
+    payload = _nrlmsis_payload(year, month, day, hour, longitutde, latitude, hmin, hmax, deltah)
     print('we will request an atmosphere from nasa using the new nrlmsise model using the following parameters:')
-    print(nrlm_parameters)
-    response = requests.post('https://kauai.ccmc.gsfc.nasa.gov/ir_server/msis/submitForm', headers=headers, json=nrlm_parameters)
-    # We convert the content of the response to a pandas dataframe
-    content   = response.content.decode('utf-8')
-    for m in range(10,0,-1):
-        # There are some pesky whitespaces in the numbers, sometimes only one whitespace,
-        # but sometimes there are more. So we remove them. In order to avoid having multiple
-        # semicolons, we do this in a decreasing order. 
-        k = " "*m
-        content=content.replace(k,';')
-    dataFrame = pd.read_csv(io.StringIO(content),sep=';')
+    print(payload)
+    cache_path = _nrlmsis_cache_path(payload)
+    if os.path.exists(cache_path):
+        print('Using cached NRLMSIS response from', cache_path)
+        with open(cache_path, 'r', encoding='utf-8') as cache_file:
+            content = cache_file.read()
+    else:
+        content = _fetch_nrlmsis_output(payload)
+        with open(cache_path, 'w', encoding='utf-8') as cache_file:
+            cache_file.write(content)
+        print('Cached NRLMSIS response to', cache_path)
+    dataFrame = pd.read_csv(io.StringIO(content), sep=r'\s+', engine='python', skiprows=1, header=None)
     return dataFrame
 
 def nrlm_reformer(nrlm20data):
@@ -285,8 +334,10 @@ def nrlm_reformer(nrlm20data):
     # 7 : Ar density in per cm3
     # 8 : H  density in per cm3
     # 9 : N1 density in per cm3
-    modern_idx = [5,8,9,10,11,12,14,15,16,17] # the format made by the new model
-    stable_idx = [0,1,2, 3, 4, 5, 6, 7, 8, 9] # the format we need for psf2gdml
+    if nrlm20data.shape[1] >= 28:
+        modern_idx = [5,8,9,10,12,13,15,16,17,18] # NRLMSIS 2.1 includes nitric oxide ahead of density and temperature
+    else:
+        modern_idx = [5,8,9,10,11,12,14,15,16,17] # NRLMSIS 2.0 / NRLMSIS-00
     newdata    = nrlm20data.values[:,modern_idx]
     return newdata
     
@@ -636,10 +687,10 @@ def check_physics_list():
     
 
 
-def simprep_manager(year,month,day,hour_utc,long,lat,hmin,hmax,deltah):
+def simprep_manager(year,month,day,hour_utc,latitude,longitude,hmin,hmax,deltah):
     print("currently working in the following folder: ",os.getcwd())
     print("this should be the simulation subfolder within the atris directory. If not, please check.")
-    nrlm  = get_atmosphere(year,month,day,hour_utc,long,lat,hmin,hmax,deltah) # get the model output
+    nrlm  = get_atmosphere(year,month,day,hour_utc,longitude,latitude,hmin,hmax,deltah) # get the model output
     nrlm  = nrlm_reformer(nrlm) # rearange the modern format in to the legacy format
     nrml2psf(nrlm)      # take the data and create a psf file
     psf2gdml()       # read the psf file and create the gdml file
@@ -665,7 +716,7 @@ def resolve_geant4_setup_script(rootdir):
         candidates.append(os.path.join(geant4_install_dir, "bin", "geant4.sh"))
     candidates.append(os.path.join(rootdir, "install", "bin", "geant4.sh"))
     for candidate in candidates:
-        if candidate and exists(candidate):
+        if candidate and os.path.exists(candidate):
             return candidate
     return None
     

@@ -1,4 +1,7 @@
 atris/build-*/
 atris/build/
+atris/simulation/
+atris_install_ok
+geant4_install_ok
 __pycache__/
 smoke-run/
