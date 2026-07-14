@@ -1,5 +1,6 @@
 #include "RunAction.hh"
 #include "G4ParticleTable.hh"
+#include "G4Run.hh"
 #include "globals.hh"
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
@@ -20,9 +21,9 @@ extern G4String outputFileName;                       // from main.cc
 namespace atris {
 
 RunAction::RunAction(DetectorConstruction* detector, G4bool role)
-  : fDetector(detector),
-    fHisto(nullptr)
+  : fHisto(nullptr)
 {
+  (void)detector;
   SetMaster(role);
 
   if (!(G4ParticleTable::GetParticleTable()->GetReadiness()))

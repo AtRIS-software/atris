@@ -21,7 +21,6 @@ class RunAction : public ::G4UserRunAction
     void EndOfRunAction(const G4Run* aRun) override;
 
   private:
-    DetectorConstruction* fDetector;
     HistoManager* fHisto;
 };
 
