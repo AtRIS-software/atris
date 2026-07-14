@@ -849,8 +849,6 @@ def write_macro(path: Path, bins: list[float], radius_km: float, particle: str, 
         "/gps/hist/type energy",
         f"/gps/hist/point {bins[0]:.9f} 0.000000000",
     ]
-    if threads > 1:
-        lines.insert(1, "/control/cout/ignoreThreadsExcept 0")
     for value in bins[1:]:
         lines.append(f"/gps/hist/point {value:.9f} 1.000000000")
     lines.extend(
@@ -1043,6 +1041,7 @@ def run_atris(
     last_status_time = 0.0
     last_status_log_size = 0
     max_progress_event_seen = -1
+    last_progress_time: float | None = None
 
     def emit_summary_log(message: str, timestamp: float | None = None) -> None:
         nonlocal last_visible_output_time
@@ -1079,7 +1078,26 @@ def run_atris(
                     except OSError:
                         log_size = 0
                     elapsed = int(now - simulation_start_time) if simulation_start_time is not None else 0
-                    message = f"AtRIS running: {elapsed:>4}s elapsed; {log_path.name} is {log_size} bytes"
+                    if max_progress_event_seen >= 0:
+                        if total_events:
+                            fraction = min(max(max_progress_event_seen / total_events, 0.0), 1.0)
+                            progress_text = f"{max_progress_event_seen}/{total_events} ({fraction:.1%})"
+                        else:
+                            progress_text = str(max_progress_event_seen)
+                        if last_progress_time is not None:
+                            stalled_for = int(now - last_progress_time)
+                            message = (
+                                f"AtRIS status: {progress_text}; "
+                                f"no new progress for {stalled_for:>3}s; "
+                                f"{log_path.name} is {log_size} bytes"
+                            )
+                        else:
+                            message = f"AtRIS status: {progress_text}; {log_path.name} is {log_size} bytes"
+                    else:
+                        message = (
+                            f"AtRIS status: no event progress yet; "
+                            f"{elapsed:>4}s elapsed; {log_path.name} is {log_size} bytes"
+                        )
                     emit_summary_log(message, now)
                     last_status_time = now
                     last_status_log_size = log_size
@@ -1133,6 +1151,7 @@ def run_atris(
                 if progress_message:
                     if progress_event is not None:
                         max_progress_event_seen = progress_event
+                        last_progress_time = now
                     emit_summary_log(progress_message, now)
                     continue
             if atris_console == "summary" and should_echo_atris_line(line):
