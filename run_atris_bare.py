@@ -73,6 +73,18 @@ ATRIS_DIRECT_PROGRESS_RE = re.compile(r"^AtRIS progress: ")
 GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
 ATRIS_STATUS_SECONDS = 20.0
+RUN_PROFILES: dict[str, dict[str, int | str]] = {
+    "quick": {
+        "particles": "both",
+        "numberparts": 100,
+        "phantom_count": 32,
+    },
+    "full": {
+        "particles": "both",
+        "numberparts": 1000,
+        "phantom_count": 32,
+    },
+}
 
 
 def log(message: str) -> None:
@@ -94,6 +106,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare and run AtRIS without conda or notebook code.")
     parser.add_argument("--rootdir", default=".", help="Path to the atris2-main checkout.")
     parser.add_argument("--geant4-sh", default="", help="Optional path to geant4.sh.")
+    parser.add_argument(
+        "--run-profile",
+        choices=tuple(RUN_PROFILES),
+        default="quick",
+        help="Runtime preset. 'quick' is much faster; 'full' restores the old heavier defaults.",
+    )
     parser.add_argument(
         "--atmosphere-source",
         default="fixed",
@@ -123,10 +141,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--particles",
         choices=("protons", "alphas", "both"),
-        default="both",
-        help="Which simulations to run.",
+        default=None,
+        help="Which simulations to run. Overrides the selected run profile.",
     )
-    parser.add_argument("--numberparts", type=int, default=1000, help="Particles per energy bin.")
+    parser.add_argument(
+        "--numberparts",
+        type=int,
+        default=None,
+        help="Particles per energy bin. Overrides the selected run profile.",
+    )
     parser.add_argument(
         "--threads",
         type=int,
@@ -135,7 +158,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--alpha-factor", type=float, default=0.66)
     parser.add_argument("--phys-list", default="FTFP_BERT_HP")
-    parser.add_argument("--phantom-count", type=int, default=32)
+    parser.add_argument(
+        "--phantom-count",
+        type=int,
+        default=None,
+        help="Number of phantom response files to load. Overrides the selected run profile.",
+    )
     parser.add_argument(
         "--atris-console",
         choices=("summary", "full", "quiet"),
@@ -149,6 +177,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--skip-prepare", action="store_true", help="Reuse existing simulation.psf and simulation.gdml.")
     return parser.parse_args()
+
+
+def apply_run_profile(args: argparse.Namespace) -> argparse.Namespace:
+    profile = RUN_PROFILES[args.run_profile]
+    if args.particles is None:
+        args.particles = str(profile["particles"])
+    if args.numberparts is None:
+        args.numberparts = int(profile["numberparts"])
+    if args.phantom_count is None:
+        args.phantom_count = int(profile["phantom_count"])
+    return args
 
 
 def require_file(path: Path, label: str) -> None:
@@ -1120,13 +1159,18 @@ def run_atris(
 
 
 def main() -> int:
-    args = parse_args()
+    args = apply_run_profile(parse_args())
     rootdir = Path(args.rootdir).expanduser().resolve()
     simdir = rootdir / "atris" / "simulation"
     runtime_env: dict[str, str] | None = None
 
     log(f"Root directory: {rootdir}")
     log(f"Simulation directory: {simdir}")
+    log(
+        "Run settings: "
+        f"profile={args.run_profile}, particles={args.particles}, "
+        f"numberparts={args.numberparts}, phantom_count={args.phantom_count}, threads={args.threads}"
+    )
 
     if not args.prepare_only:
         require_executable(simdir / "AtRIS", "AtRIS executable")
