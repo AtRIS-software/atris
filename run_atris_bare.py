@@ -1190,7 +1190,7 @@ def run_atris(
 def main() -> int:
     args = apply_run_profile(parse_args())
     rootdir = Path(args.rootdir).expanduser().resolve()
-    simdir = rootdir / "atris" / "simulation"
+    simdir = Path.cwd().resolve()
     runtime_env: dict[str, str] | None = None
 
     log(f"Root directory: {rootdir}")
