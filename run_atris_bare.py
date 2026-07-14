@@ -837,7 +837,7 @@ def write_bins(path: Path, values: list[float]) -> None:
 def write_macro(path: Path, bins: list[float], radius_km: float, particle: str, threads: int, event_count: int) -> None:
     seed1 = random.randint(31, 999999)
     seed2 = random.randint(31, 999999)
-    progress_modulo = max(1, event_count // 100)
+    progress_modulo = max(1, event_count // 250)
     lines = [
         f"/run/numberOfThreads {threads}",
         "/control/cout/useBuffer false",
