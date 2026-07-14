@@ -1,0 +1,34 @@
+# This files provides information about the used phantoms. You should fill this file out before you start the simulation, since otherwise one might forget which phantoms were used.
+# format is: mass in g cross surface in cm2, name. Name should not have whitespaces and should be self descriptive.
+0.5082,6.928,ramona_zero
+0.5082,6.928,ramona_five
+0.5082,6.928,ramona_ten
+0.5082,6.928,ramona_fifteen
+0.5082,6.928,ramona_twenty
+0.5082,6.928,flatramona_zero
+0.5082,6.928,flatramona_five
+0.5082,6.928,flatramona_ten
+0.5082,6.928,flatramona_fifteen
+0.5082,6.928,flatramona_twenty
+0.5082,6.928,realramona_zero
+0.5082,6.928,realramona_five
+0.5082,6.928,realramona_ten
+0.5082,6.928,realramona_fifteen
+0.5082,6.928,realramona_twenty
+14094.7550,1413.72,icru_zero
+14094.7550,1413.72,icru_five
+14094.7550,1413.72,icru_ten
+14094.7550,1413.72,icru_fifteen
+14094.7550,1413.72,icru_twenty
+0.5082,62.358,randramona_zero
+0.5082,62.358,randramona_five
+0.5082,62.358,randramona_ten
+0.5082,62.358,randramona_fifteen
+0.5082,62.358,randramona_twenty
+0.5082,62.358,randramona_zero_no_threshold
+0.5082,62.358,randramona_five_no_threshold
+0.5082,62.358,randramona_ten_no_threshold
+0.5082,62.358,randramona_fifteen_no_threshold
+0.5082,62.358,randramona_twenty_no_threshold
+0.5082,62.358,randramona_twentyfive
+0.5082,62.358,randramona_twentyfive_no_threshold
