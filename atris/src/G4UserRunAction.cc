@@ -19,6 +19,7 @@ extern G4String outputFileName;                       // from main.cc
 
 G4UserRunAction::G4UserRunAction(DetectorConstruction* detector, G4bool role):
 	fDetector(detector),
+	fHisto(nullptr),
 	isMaster(role) 
 {
 
@@ -36,7 +37,7 @@ G4UserRunAction::~G4UserRunAction(){
 		G4cout << "=== MASTER: " << isMaster << G4endl;
 		// At this point we implement the scaling according to mass, volume, surface area
 	}
-	delete G4CsvAnalysisManager::Instance();
+	delete fHisto;
 }
 
 G4Run* G4UserRunAction::GenerateRun(){ 

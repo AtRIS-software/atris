@@ -29,7 +29,6 @@ HistoManager::HistoManager()
 HistoManager::~HistoManager()
 {
 	G4cout << "HistoManager deleted." << G4endl;
-	delete G4CsvAnalysisManager::Instance();
 }
 
 void HistoManager::Book()
@@ -81,4 +80,3 @@ void HistoManager::Book()
 	}
 
 }
-
