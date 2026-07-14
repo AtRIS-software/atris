@@ -242,6 +242,7 @@ headers = {
 }
 
 NRLMSIS_API_URL = 'https://kauai.ccmc.gsfc.nasa.gov/instantrun/api/nrlmsis'
+NRLMSIS_MAX_ROWS = 150
 
 
 def _to_utc_datetime_string(year, month, day, hour):
@@ -281,6 +282,31 @@ def _nrlmsis_cache_path(payload):
     return os.path.join(cache_dir, cache_key + ".txt")
 
 
+def _round_altitude(value):
+    return round(float(value), 10)
+
+
+def _expected_nrlmsis_rows(start, stop, step):
+    return int(round((float(stop) - float(start)) / float(step))) + 1
+
+
+def _nrlmsis_chunk_ranges(hmin, hmax, deltah):
+    if float(deltah) <= 0.0:
+        raise ValueError("deltah must be positive")
+    expected_rows = _expected_nrlmsis_rows(hmin, hmax, deltah)
+    if expected_rows <= NRLMSIS_MAX_ROWS:
+        return [(_round_altitude(hmin), _round_altitude(hmax))]
+
+    chunk_span = float(deltah) * float(NRLMSIS_MAX_ROWS - 1)
+    ranges = []
+    start = float(hmin)
+    while start <= float(hmax) + 1e-9:
+        stop = min(float(hmax), start + chunk_span)
+        ranges.append((_round_altitude(start), _round_altitude(stop)))
+        start = stop + float(deltah)
+    return ranges
+
+
 def _fetch_nrlmsis_output(payload):
     api_headers = {
         "User-Agent": headers["User-Agent"],
@@ -304,22 +330,71 @@ def _fetch_nrlmsis_output(payload):
     txt_response.raise_for_status()
     return txt_response.text
 
-def get_atmosphere(year, month, day, hour, longitutde, latitude, hmin=0,hmax=100,deltah=1):
-    payload = _nrlmsis_payload(year, month, day, hour, longitutde, latitude, hmin, hmax, deltah)
-    print('we will request an atmosphere from nasa using the new nrlmsise model using the following parameters:')
-    print(payload)
+
+def _load_nrlmsis_content(payload):
     cache_path = _nrlmsis_cache_path(payload)
     if os.path.exists(cache_path):
         print('Using cached NRLMSIS response from', cache_path)
         with open(cache_path, 'r', encoding='utf-8') as cache_file:
-            content = cache_file.read()
-    else:
-        content = _fetch_nrlmsis_output(payload)
-        with open(cache_path, 'w', encoding='utf-8') as cache_file:
-            cache_file.write(content)
-        print('Cached NRLMSIS response to', cache_path)
-    dataFrame = pd.read_csv(io.StringIO(content), sep=r'\s+', engine='python', skiprows=1, header=None)
-    return dataFrame
+            return cache_file.read()
+
+    content = _fetch_nrlmsis_output(payload)
+    with open(cache_path, 'w', encoding='utf-8') as cache_file:
+        cache_file.write(content)
+    print('Cached NRLMSIS response to', cache_path)
+    return content
+
+
+def _parse_nrlmsis_output(content):
+    return pd.read_csv(io.StringIO(content), sep=r'\s+', engine='python', skiprows=1, header=None)
+
+def get_atmosphere(year, month, day, hour, longitutde, latitude, hmin=0,hmax=100,deltah=1):
+    chunk_ranges = _nrlmsis_chunk_ranges(hmin, hmax, deltah)
+    print('we will request an atmosphere from nasa using the new nrlmsise model using the following parameters:')
+    print({
+        "version": os.environ.get("NRLMSIS_VERSION", "NRLMSIS2"),
+        "timeType": "ut",
+        "coordinateType": "geo",
+        "datetime": _to_utc_datetime_string(year, month, day, hour),
+        "lat": float(latitude),
+        "lon": float(longitutde),
+        "height": max(float(hmax), 100.0),
+        "profileType": 1,
+        "start": float(hmin),
+        "stop": float(hmax),
+        "step": float(deltah),
+        "fdaily": -1,
+        "f3month": -1,
+        "ap": -1,
+    })
+    if len(chunk_ranges) > 1:
+        print('Splitting NRLMSIS request into %i chunks to stay under the CCMC row limit.' % len(chunk_ranges))
+
+    frames = []
+    for chunk_start, chunk_stop in chunk_ranges:
+        payload = _nrlmsis_payload(year, month, day, hour, longitutde, latitude, chunk_start, chunk_stop, deltah)
+        print('Requesting chunk %.3f km -> %.3f km' % (chunk_start, chunk_stop))
+        content = _load_nrlmsis_content(payload)
+        data_frame = _parse_nrlmsis_output(content)
+        expected_rows = _expected_nrlmsis_rows(chunk_start, chunk_stop, deltah)
+        if data_frame.shape[0] != expected_rows:
+            raise RuntimeError(
+                'CCMC NRLMSIS response row count mismatch for chunk %.3f..%.3f km: expected %i rows, got %i'
+                % (chunk_start, chunk_stop, expected_rows, data_frame.shape[0])
+            )
+        frames.append(data_frame)
+
+    merged = pd.concat(frames, ignore_index=True)
+    merged.drop_duplicates(subset=5, keep='first', inplace=True)
+    merged.sort_values(by=5, inplace=True)
+    merged.reset_index(drop=True, inplace=True)
+    expected_total_rows = _expected_nrlmsis_rows(hmin, hmax, deltah)
+    if merged.shape[0] != expected_total_rows:
+        raise RuntimeError(
+            'Merged CCMC NRLMSIS response row count mismatch: expected %i rows, got %i'
+            % (expected_total_rows, merged.shape[0])
+        )
+    return merged
 
 def nrlm_reformer(nrlm20data):
     # to use the psf2gdml converter with the new nrlm model, we need to create a file format that fits the previous format
