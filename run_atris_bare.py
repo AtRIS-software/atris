@@ -69,6 +69,7 @@ ATRIS_EVENT_PROGRESS_RE = re.compile(
     r"We are processing (?P<speed>[-+0-9.eE]+) primaries per second\.$"
 )
 GEANT4_EVENT_START_RE = re.compile(r"Event\s+(?P<event>\d+)\s+starts\b")
+ATRIS_DIRECT_PROGRESS_RE = re.compile(r"^AtRIS progress: ")
 GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
 
@@ -928,6 +929,8 @@ def should_echo_atris_line(line: str) -> bool:
 
 def format_atris_progress(line: str, total_events: int | None = None) -> str | None:
     stripped = line.strip()
+    if ATRIS_DIRECT_PROGRESS_RE.match(stripped):
+        return stripped
     match = ATRIS_EVENT_PROGRESS_RE.match(stripped)
     if not match:
         geant_match = GEANT4_EVENT_START_RE.search(stripped)
