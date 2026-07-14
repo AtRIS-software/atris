@@ -938,10 +938,32 @@ def should_echo_atris_line(line: str) -> bool:
     return stripped.startswith(important_prefixes)
 
 
+def extract_atris_progress_event(line: str) -> int | None:
+    stripped = line.strip()
+    if ATRIS_DIRECT_PROGRESS_RE.match(stripped):
+        match = re.search(r"event\s+(?P<event>\d+)\b", stripped)
+        if match:
+            return int(match.group("event"))
+        return None
+    match = ATRIS_EVENT_PROGRESS_RE.match(stripped)
+    if match:
+        return int(match.group("event"))
+    geant_match = GEANT4_EVENT_START_RE.search(stripped)
+    if geant_match:
+        return int(geant_match.group("event"))
+    return None
+
+
 def format_atris_progress(line: str, total_events: int | None = None) -> str | None:
     stripped = line.strip()
     if ATRIS_DIRECT_PROGRESS_RE.match(stripped):
-        return stripped
+        event = extract_atris_progress_event(stripped)
+        if event is None:
+            return stripped
+        if total_events:
+            fraction = min(max(event / total_events, 0.0), 1.0)
+            return f"AtRIS progress: event {event}/{total_events} ({fraction:.1%})"
+        return f"AtRIS progress: event {event}"
     match = ATRIS_EVENT_PROGRESS_RE.match(stripped)
     if not match:
         geant_match = GEANT4_EVENT_START_RE.search(stripped)
@@ -991,6 +1013,7 @@ def run_atris(
     last_visible_output_time = time.monotonic()
     last_status_time = 0.0
     last_status_log_size = 0
+    max_progress_event_seen = -1
 
     def emit_summary_log(message: str, timestamp: float | None = None) -> None:
         nonlocal last_visible_output_time
@@ -1077,8 +1100,13 @@ def run_atris(
                     )
                 emit_summary_log(f"AtRIS entered the simulation phase; raw output is streaming to {log_path.name}", now)
             if atris_console == "summary":
+                progress_event = extract_atris_progress_event(line)
+                if progress_event is not None and progress_event <= max_progress_event_seen:
+                    continue
                 progress_message = format_atris_progress(line, total_events)
                 if progress_message:
+                    if progress_event is not None:
+                        max_progress_event_seen = progress_event
                     emit_summary_log(progress_message, now)
                     continue
             if atris_console == "summary" and should_echo_atris_line(line):
