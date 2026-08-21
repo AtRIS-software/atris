@@ -41,7 +41,7 @@ If you have a full UI/visualization-capable Geant4 build, you can set `-DWITH_GE
  - Linux remains the primary supported runtime environment for the full workflow.
  - The core `atris/` build also works on recent macOS toolchains when Geant4 and Xerces-C++ are available.
  - Please make sure your system has a modern C++ compiler, CMake, and Xerces-C++ installed. We recommend system or package-manager installs instead of conda for Geant4 dependencies.
- - Python 3 is necessary. For python, we recommend using anaconda. Most packages that are needed are part of anaconda. If not, install them with pip or conda. 
+ - Python 3 is necessary. For Python packages, we recommend using Conda. Packages that are not available through Conda can be installed with pip.
  - To run the Werkzeug, docker is needed. The user must have docker run permissions. If that is given, just:
 > docker run --restart=always -p 9123:8888 werkzeug:mt
 

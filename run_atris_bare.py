@@ -9,8 +9,6 @@ This script can:
 5. run AtRIS
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import json
@@ -63,20 +61,6 @@ REQUIRED_GEANT4_ENV_VARS = (
 REQUIRED_GEANT4_DATA_FILES = {
     "G4ENSDFSTATEDATA": "ENSDFSTATE.dat",
 }
-GEANT4_DATASET_DIR_PREFIXES = {
-    "G4NEUTRONHPDATA": ("G4NDL",),
-    "G4LEDATA": ("G4EMLOW",),
-    "G4LEVELGAMMADATA": ("PhotonEvaporation",),
-    "G4RADIOACTIVEDATA": ("RadioactiveDecay",),
-    "G4PARTICLEXSDATA": ("G4PARTICLEXS",),
-    "G4PIIDATA": ("G4PII",),
-    "G4REALSURFACEDATA": ("RealSurface",),
-    "G4SAIDXSDATA": ("G4SAIDDATA",),
-    "G4ABLADATA": ("G4ABLA",),
-    "G4INCLDATA": ("G4INCL",),
-    "G4ENSDFSTATEDATA": ("G4ENSDFSTATE",),
-    "G4CHANNELINGDATA": ("G4CHANNELING",),
-}
 ATRIS_PHANTOM_LOAD_RE = re.compile(r"^### AtRIS: loading (radiation|counting) response matrix for phantom (\d+) ")
 ATRIS_EVENT_PROGRESS_RE = re.compile(
     r"^Processing event: (?P<event>\d+), (?P<elapsed>\d+) secoonds have passed\. "
@@ -88,7 +72,7 @@ GDML_VALIDATION_PREFIX = "G4GDML: VALIDATION ERROR!"
 ATRIS_HEARTBEAT_SECONDS = 60.0
 ATRIS_STATUS_SECONDS = 10.0
 ATRIS_PROGRESS_PERCENT_STEP = 2.0
-RUN_PROFILES: dict[str, dict[str, int | str]] = {
+RUN_PROFILES = {
     "quick": {
         "particles": "protons",
         "numberparts": 10,
@@ -102,15 +86,22 @@ RUN_PROFILES: dict[str, dict[str, int | str]] = {
 }
 
 
-def log(message: str) -> None:
+def log(message):
     timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args():
     parser = argparse.ArgumentParser(description="Prepare and run AtRIS without conda or notebook code.")
-    parser.add_argument("--rootdir", default=".", help="Path to the atris2-main checkout.")
-    parser.add_argument("--geant4-sh", default="", help="Optional path to geant4.sh.")
+    parser.add_argument("--rootdir", help="AtRIS checkout. Overrides ATRIS_ROOT.")
+    parser.add_argument(
+        "--geant4-sh",
+        help="Geant4 setup script. Overrides GEANT4_SH and GEANT4_INSTALL/bin/geant4.sh.",
+    )
+    parser.add_argument(
+        "--atris-executable",
+        help="AtRIS executable. Overrides ATRIS_EXECUTABLE.",
+    )
     parser.add_argument(
         "--run-profile",
         choices=tuple(RUN_PROFILES),
@@ -184,7 +175,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def apply_run_profile(args: argparse.Namespace) -> argparse.Namespace:
+def apply_run_profile(args):
     profile = RUN_PROFILES[args.run_profile]
     if args.particles is None:
         args.particles = str(profile["particles"])
@@ -195,24 +186,48 @@ def apply_run_profile(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 
-def require_file(path: Path, label: str) -> None:
+def require_file(path, label):
     if not path.is_file():
         raise SystemExit(f"Missing {label}: {path}")
 
 
-def require_executable(path: Path, label: str) -> None:
+def require_executable(path, label):
     if not (path.is_file() and os.access(path, os.X_OK)):
         raise SystemExit(f"Missing {label}: {path}")
 
 
-def load_environment_from_geant4_sh(script_path: Path) -> dict[str, str]:
+def configured_value(cli_value, env_name, option_name):
+    if cli_value:
+        return cli_value
+    env_value = os.environ.get(env_name)
+    if env_value:
+        return env_value
+    raise SystemExit(f"Missing configuration: pass {option_name} or set {env_name}.")
+
+
+def configured_geant4_sh(cli_value):
+    if cli_value:
+        return cli_value
+    env_script = os.environ.get("GEANT4_SH")
+    if env_script:
+        return env_script
+    env_install = os.environ.get("GEANT4_INSTALL")
+    if env_install:
+        return str(Path(env_install).expanduser() / "bin" / "geant4.sh")
+    raise SystemExit(
+        "Missing configuration: pass --geant4-sh, set GEANT4_SH, "
+        "or set GEANT4_INSTALL."
+    )
+
+
+def load_environment_from_geant4_sh(script_path):
     command = f"source {shlex.quote(str(script_path))} >/dev/null 2>&1 && env -0"
     result = subprocess.run(
         ["bash", "-c", command],
         check=True,
         capture_output=True,
     )
-    env: dict[str, str] = {}
+    env = {}
     for entry in result.stdout.decode("utf-8", errors="replace").split("\0"):
         if not entry or "=" not in entry:
             continue
@@ -221,46 +236,28 @@ def load_environment_from_geant4_sh(script_path: Path) -> dict[str, str]:
     return env
 
 
-def populate_geant4_dataset_env(runtime_env: dict[str, str]) -> None:
-    data_root_raw = runtime_env.get("GEANT4_DATA_DIR")
-    if not data_root_raw:
-        return
-    data_root = Path(data_root_raw).expanduser()
-    if not data_root.is_dir():
-        return
-
-    available_dirs = [entry for entry in data_root.iterdir() if entry.is_dir()]
-    for env_name, prefixes in GEANT4_DATASET_DIR_PREFIXES.items():
-        if runtime_env.get(env_name):
-            continue
-        match = next(
-            (
-                entry
-                for entry in available_dirs
-                if any(entry.name.startswith(prefix) for prefix in prefixes)
-            ),
-            None,
-        )
-        if match is not None:
-            runtime_env[env_name] = str(match)
-
-
-def build_runtime_environment(geant4_sh: str) -> dict[str, str]:
+def build_runtime_environment(geant4_sh):
     runtime_env = dict(os.environ)
-    if geant4_sh:
-        script_path = Path(geant4_sh).expanduser().resolve()
-        require_file(script_path, "Geant4 setup script")
-        log(f"Loading Geant4 environment from {script_path}")
-        runtime_env.update(load_environment_from_geant4_sh(script_path))
-    populate_geant4_dataset_env(runtime_env)
+    script_path = Path(geant4_sh).expanduser().resolve()
+    require_file(script_path, "Geant4 setup script")
+    log(f"Loading Geant4 environment from {script_path}")
+    runtime_env.update(load_environment_from_geant4_sh(script_path))
+
+    data_root_raw = runtime_env.get("GEANT4_DATA_DIR")
+    if data_root_raw:
+        data_root = Path(data_root_raw).expanduser()
+        if not data_root.is_dir():
+            raise SystemExit(f"Invalid Geant4 runtime data path: GEANT4_DATA_DIR={data_root_raw}")
+        return runtime_env
+
     missing = [name for name in REQUIRED_GEANT4_ENV_VARS if not runtime_env.get(name)]
     if missing:
         raise SystemExit(
             "Missing Geant4 runtime data environment variables: "
             + ", ".join(missing)
-            + ". Pass --geant4-sh /path/to/geant4.sh or source geant4.sh before running."
+            + ". The selected geant4.sh must set GEANT4_DATA_DIR or the legacy G4*DATA variables."
         )
-    invalid_paths: list[str] = []
+    invalid_paths = []
     for name in REQUIRED_GEANT4_ENV_VARS:
         raw_path = runtime_env[name]
         data_path = Path(raw_path).expanduser()
@@ -279,8 +276,8 @@ def build_runtime_environment(geant4_sh: str) -> dict[str, str]:
     return runtime_env
 
 
-def range_inclusive(start: float, stop: float, step: float) -> list[float]:
-    values: list[float] = []
+def range_inclusive(start, stop, step):
+    values = []
     current = start
     epsilon = step / 1000.0
     while current <= stop + epsilon:
@@ -293,18 +290,18 @@ def range_inclusive(start: float, stop: float, step: float) -> list[float]:
     return values
 
 
-def normalize_fractions(fractions: dict[str, float]) -> dict[str, float]:
+def normalize_fractions(fractions):
     total = sum(fractions.values())
     if total <= 0.0:
         raise SystemExit("Atmosphere composition fractions are invalid.")
     return {key: value / total for key, value in fractions.items()}
 
 
-def geometric_to_geopotential_km(alt_km: float) -> float:
+def geometric_to_geopotential_km(alt_km):
     return (EARTH_RADIUS_GEOPOTENTIAL_KM * alt_km) / (EARTH_RADIUS_GEOPOTENTIAL_KM + alt_km)
 
 
-def standard_atmosphere_state(alt_km: float) -> tuple[float, float, float]:
+def standard_atmosphere_state(alt_km):
     geopotential_km = geometric_to_geopotential_km(alt_km)
     layer_index = len(STANDARD_ATMOSPHERE_LAYERS) - 1
     for index in range(len(STANDARD_ATMOSPHERE_LAYERS) - 1):
@@ -324,13 +321,13 @@ def standard_atmosphere_state(alt_km: float) -> tuple[float, float, float]:
     return temperature, pressure, density_kg_m3
 
 
-def datetime_to_api_string(year: int, month: int, day: int, hour_utc: float) -> str:
+def datetime_to_api_string(year, month, day, hour_utc):
     base = dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
     moment = base + dt.timedelta(hours=hour_utc)
     return moment.isoformat().replace("+00:00", "Z")
 
 
-def http_post_json(url: str, payload: dict[str, object], retries: int = 3) -> dict[str, object]:
+def http_post_json(url, payload, retries=3):
     body = json.dumps(payload).encode("utf-8")
     headers = {"accept": "application/json", "content-type": "application/json"}
     delays = [5, 15, 30]
@@ -360,7 +357,7 @@ def http_post_json(url: str, payload: dict[str, object], retries: int = 3) -> di
     raise SystemExit("NRLMSIS API request failed after retries.")
 
 
-def http_get_text(url: str, retries: int = 3) -> str:
+def http_get_text(url, retries=3):
     delays = [5, 15, 30]
     for attempt in range(retries):
         log(f"GET {url} attempt {attempt + 1}/{retries}")
@@ -386,8 +383,8 @@ def http_get_text(url: str, retries: int = 3) -> str:
     raise SystemExit("Failed to download NRLMSIS output after retries.")
 
 
-def parse_api_nrlmsis_text(version: str, text: str) -> list[dict[str, float]]:
-    rows: list[dict[str, float]] = []
+def parse_api_nrlmsis_text(version, text):
+    rows = []
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -436,8 +433,8 @@ def parse_api_nrlmsis_text(version: str, text: str) -> list[dict[str, float]]:
     return rows
 
 
-def parse_legacy_nrlm_text(text: str) -> list[dict[str, float]]:
-    rows: list[dict[str, float]] = []
+def parse_legacy_nrlm_text(text):
+    rows = []
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -470,8 +467,8 @@ def parse_legacy_nrlm_text(text: str) -> list[dict[str, float]]:
     return rows
 
 
-def parse_atmosphere_text(version: str, text: str) -> list[dict[str, float]]:
-    numeric_rows: list[list[float]] = []
+def parse_atmosphere_text(version, text):
+    numeric_rows = []
     for line in text.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -491,7 +488,7 @@ def parse_atmosphere_text(version: str, text: str) -> list[dict[str, float]]:
     raise SystemExit("Atmosphere text format was not recognized.")
 
 
-def interpolate_value(x0: float, y0: float, x1: float, y1: float, x: float, logspace: bool) -> float:
+def interpolate_value(x0, y0, x1, y1, x, logspace):
     if abs(x1 - x0) < 1e-12:
         return y0
     fraction = (x - x0) / (x1 - x0)
@@ -500,12 +497,12 @@ def interpolate_value(x0: float, y0: float, x1: float, y1: float, x: float, logs
     return y0 + fraction * (y1 - y0)
 
 
-def resample_profile(rows: list[dict[str, float]], target_step: float) -> list[dict[str, float]]:
+def resample_profile(rows, target_step):
     if target_step >= 1.0:
         return rows
 
     target_heights = range_inclusive(rows[0]["height"], rows[-1]["height"], target_step)
-    resampled: list[dict[str, float]] = []
+    resampled = []
     index = 0
     keys = ("O1", "N2", "O2", "rho", "temp", "He", "Ar", "H", "N1")
 
@@ -528,20 +525,20 @@ def resample_profile(rows: list[dict[str, float]], target_step: float) -> list[d
     return resampled
 
 
-def load_nrlmsis_rows_from_text(args: argparse.Namespace, raw_text: str, simdir: Path) -> list[dict[str, float]]:
+def load_nrlmsis_rows_from_text(args, raw_text, simdir):
     rows = parse_atmosphere_text(args.version, raw_text)
     resampled = resample_profile(rows, args.alt_step)
     log(f"Parsed {len(rows)} atmosphere rows; using {len(resampled)} rows after resampling")
     return resampled
 
 
-def build_fixed_atmosphere_profile(args: argparse.Namespace, simdir: Path) -> list[dict[str, float]]:
+def build_fixed_atmosphere_profile(args, simdir):
     log(
         "Building deterministic built-in atmosphere for "
         f"alt={args.alt_min}..{args.alt_max} km step={args.alt_step} km"
     )
     fractions = normalize_fractions(STANDARD_AIR_FRACTIONS)
-    rows: list[dict[str, float]] = []
+    rows = []
     summary_lines = ["# altitude_km temperature_K pressure_Pa density_kg_m3 N2_cm-3 O2_cm-3 Ar_cm-3 He_cm-3"]
     for alt_km in range_inclusive(args.alt_min, args.alt_max, args.alt_step):
         temperature, pressure, density_kg_m3 = standard_atmosphere_state(alt_km)
@@ -577,7 +574,7 @@ def build_fixed_atmosphere_profile(args: argparse.Namespace, simdir: Path) -> li
     return rows
 
 
-def fetch_atmosphere_profile(args: argparse.Namespace, simdir: Path) -> list[dict[str, float]]:
+def fetch_atmosphere_profile(args, simdir):
     api_step = max(args.alt_step, 1.0)
     log(
         "Preparing NRLMSIS request for "
@@ -585,7 +582,7 @@ def fetch_atmosphere_profile(args: argparse.Namespace, simdir: Path) -> list[dic
         f"date={args.year:04d}-{args.month:02d}-{args.day:02d} hour={args.hour_utc:.2f}, "
         f"alt={args.alt_min}..{args.alt_max} km step={args.alt_step} km"
     )
-    payload: dict[str, object] = {
+    payload = {
         "version": args.version,
         "timeType": "ut",
         "coordinateType": "geo",
@@ -621,7 +618,7 @@ def fetch_atmosphere_profile(args: argparse.Namespace, simdir: Path) -> list[dic
     return load_nrlmsis_rows_from_text(args, raw_text, simdir)
 
 
-def write_psf(rows: list[dict[str, float]], psf_path: Path) -> None:
+def write_psf(rows, psf_path):
     if len(rows) < 2:
         raise SystemExit("Need at least two atmosphere rows to write simulation.psf.")
 
@@ -632,7 +629,7 @@ def write_psf(rows: list[dict[str, float]], psf_path: Path) -> None:
     cr_km = 20.0 / 1000.0
     formatstring = "%e %e %e %e %e %e %i %e %e %e %e %e %e %e %e %e"
 
-    lines: list[str] = []
+    lines = []
     lines.append("#O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H")
 
     er_km = earth_radius_m / 1000.0
@@ -709,8 +706,8 @@ def write_psf(rows: list[dict[str, float]], psf_path: Path) -> None:
     log(f"Wrote {psf_path}")
 
 
-def parse_formula(formula: str) -> dict[str, dict[str, float | str]]:
-    result: dict[str, dict[str, float | str]] = {}
+def parse_formula(formula):
+    result = {}
     total = 0.0
     for element, number in re.findall(r"([A-Z][a-z]*)(\d*)", formula):
         mass_fraction = float(number or "0") / 1000.0
@@ -725,16 +722,16 @@ def parse_formula(formula: str) -> dict[str, dict[str, float | str]]:
     return result
 
 
-def parse_psf_header(psf_path: Path) -> tuple[dict[str, dict[str, float | str]], dict[str, dict[str, int | float | str]]]:
+def parse_psf_header(psf_path):
     header = psf_path.read_text(encoding="utf-8").splitlines()[0].split()
     core = parse_formula(header[0].lstrip("#"))
-    template: dict[str, dict[str, int | float | str]] = {}
+    template = {}
     for index, material in enumerate(header[1:]):
         template[material] = {"mass fraction": 0.0, "material": material, "colidx": index}
     return core, template
 
 
-def gdml_material(mat: dict[str, dict[str, float | str]], name: str, temperature: float, density: float, pressure: float, state: str) -> str:
+def gdml_material(mat, name, temperature, density, pressure, state):
     output = [f'\t<material name="{name}" state="{state}">']
     output.append(f'\t\t<D value="{density:e}" unit="g/cm3" />')
     output.append(f'\t\t<T value="{temperature:e}" unit="K" />')
@@ -748,8 +745,8 @@ def gdml_material(mat: dict[str, dict[str, float | str]], name: str, temperature
     return "\n".join(output) + "\n"
 
 
-def read_numeric_psf(psf_path: Path) -> list[list[float]]:
-    rows: list[list[float]] = []
+def read_numeric_psf(psf_path):
+    rows = []
     for line in psf_path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -758,13 +755,13 @@ def read_numeric_psf(psf_path: Path) -> list[list[float]]:
     return rows
 
 
-def psf_to_gdml(rootdir: Path, psf_path: Path, gdml_path: Path) -> None:
+def psf_to_gdml(rootdir, psf_path, gdml_path):
     log(f"Converting {psf_path.name} to {gdml_path.name}")
     core, template = parse_psf_header(psf_path)
     rows = read_numeric_psf(psf_path)
-    materials: list[str] = []
-    geometry: list[str] = []
-    structure: list[tuple[str, str, str, int]] = []
+    materials = []
+    geometry = []
+    structure = []
 
     for row in rows:
         sdid = int(row[6])
@@ -774,7 +771,7 @@ def psf_to_gdml(rootdir: Path, psf_path: Path, gdml_path: Path) -> None:
         if is_core:
             materials.append(gdml_material(core, material_name, row[7], row[8], row[9], "solid"))
         else:
-            atmosphere: dict[str, dict[str, float | str]] = {}
+            atmosphere = {}
             for material, entry in template.items():
                 atmosphere[material] = {
                     "material": material,
@@ -840,8 +837,8 @@ def psf_to_gdml(rootdir: Path, psf_path: Path, gdml_path: Path) -> None:
     log(f"Wrote {gdml_path}")
 
 
-def numeric_rows(path: Path) -> list[list[float]]:
-    rows: list[list[float]] = []
+def numeric_rows(path):
+    rows = []
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
             parts = line.split()
@@ -854,27 +851,27 @@ def numeric_rows(path: Path) -> list[list[float]]:
     return rows
 
 
-def radius_from_psf(psf_path: Path) -> float:
+def radius_from_psf(psf_path):
     rows = numeric_rows(psf_path)
     if len(rows) < 2:
         raise SystemExit(f"Could not parse enough numeric rows from {psf_path}")
     return rows[-2][1] + 0.001
 
 
-def logspace_powers(start: float, stop: float, count: int) -> list[float]:
+def logspace_powers(start, stop, count):
     if count < 2:
         return [10**start]
     step = (stop - start) / (count - 1)
     return [10 ** (start + step * index) for index in range(count)]
 
 
-def write_bins(path: Path, values: list[float]) -> None:
+def write_bins(path, values):
     with path.open("w", encoding="utf-8") as handle:
         for value in values:
             handle.write(f"{value:.9f}\n")
 
 
-def write_macro(path: Path, bins: list[float], radius_km: float, particle: str, threads: int, event_count: int) -> None:
+def write_macro(path, bins, radius_km, particle, threads, event_count):
     seed1 = random.randint(31, 999999)
     seed2 = random.randint(31, 999999)
     progress_modulo = max(1, event_count // 250)
@@ -910,7 +907,7 @@ def write_macro(path: Path, bins: list[float], radius_km: float, particle: str, 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def copy_phantoms(rootdir: Path, simdir: Path) -> None:
+def copy_phantoms(rootdir, simdir):
     phantom_dir = rootdir / "phantoms"
     if not phantom_dir.is_dir():
         raise SystemExit(f"Missing phantom directory: {phantom_dir}")
@@ -921,7 +918,7 @@ def copy_phantoms(rootdir: Path, simdir: Path) -> None:
     log("Copied phantom files")
 
 
-def generate_macros(simdir: Path, numberparts: int, threads: int, alpha_factor: float) -> dict[str, int]:
+def generate_macros(simdir, numberparts, threads, alpha_factor):
     log(
         f"Generating macro and bin files with numberparts={numberparts}, "
         f"threads={threads}, alpha_factor={alpha_factor}"
@@ -941,7 +938,7 @@ def generate_macros(simdir: Path, numberparts: int, threads: int, alpha_factor: 
     return {"protons": proton_events, "alphas": alpha_events}
 
 
-def prepare_geometry(args: argparse.Namespace, rootdir: Path, simdir: Path) -> None:
+def prepare_geometry(args, rootdir, simdir):
     log("Starting geometry preparation")
     if args.atmosphere_source == "fixed":
         rows = build_fixed_atmosphere_profile(args, simdir)
@@ -962,7 +959,7 @@ def prepare_geometry(args: argparse.Namespace, rootdir: Path, simdir: Path) -> N
     log("Geometry preparation complete")
 
 
-def should_report_phantom_progress(phantom_index: int, phantom_count: int) -> bool:
+def should_report_phantom_progress(phantom_index, phantom_count):
     if phantom_count <= 8:
         return True
     checkpoints = {0, phantom_count - 1}
@@ -971,7 +968,7 @@ def should_report_phantom_progress(phantom_index: int, phantom_count: int) -> bo
     return phantom_index in checkpoints
 
 
-def should_echo_atris_line(line: str) -> bool:
+def should_echo_atris_line(line):
     stripped = line.strip()
     if not stripped:
         return False
@@ -1005,7 +1002,7 @@ def should_echo_atris_line(line: str) -> bool:
     return stripped.startswith(important_prefixes)
 
 
-def extract_atris_progress_event(line: str) -> int | None:
+def extract_atris_progress_event(line):
     stripped = line.strip()
     if ATRIS_DIRECT_PROGRESS_RE.match(stripped):
         match = re.search(r"event\s+(?P<event>\d+)\b", stripped)
@@ -1022,10 +1019,10 @@ def extract_atris_progress_event(line: str) -> int | None:
 
 
 def should_emit_progress(
-    progress_event: int,
-    total_events: int | None,
-    last_logged_event: int,
-) -> bool:
+    progress_event,
+    total_events,
+    last_logged_event,
+):
     if progress_event <= 0:
         return False
     if last_logged_event < 0:
@@ -1039,7 +1036,7 @@ def should_emit_progress(
     return progress_event > last_logged_event
 
 
-def format_atris_progress(line: str, total_events: int | None = None) -> str | None:
+def format_atris_progress(line, total_events=None):
     stripped = line.strip()
     if ATRIS_DIRECT_PROGRESS_RE.match(stripped):
         event = extract_atris_progress_event(stripped)
@@ -1068,7 +1065,7 @@ def format_atris_progress(line: str, total_events: int | None = None) -> str | N
     return f"{prefix}, elapsed {match.group('elapsed')}s, {match.group('speed')} primaries/s"
 
 
-def enqueue_stream_lines(stream: object, queue: Queue[str | None]) -> None:
+def enqueue_stream_lines(stream, queue):
     try:
         for line in stream:
             queue.put(line)
@@ -1077,15 +1074,16 @@ def enqueue_stream_lines(stream: object, queue: Queue[str | None]) -> None:
 
 
 def run_atris(
-    simdir: Path,
-    runtime_env: dict[str, str],
-    phys_list: str,
-    simname: str,
-    phantom_count: int,
-    atris_console: str,
-    total_events: int | None = None,
-) -> None:
-    command = ["./AtRIS", phys_list, simname, "-1", str(phantom_count)]
+    simdir,
+    atris_executable,
+    runtime_env,
+    phys_list,
+    simname,
+    phantom_count,
+    atris_console,
+    total_events=None,
+):
+    command = [str(atris_executable), phys_list, simname, "-1", str(phantom_count)]
     log_path = simdir / f"{simname}.log"
     log(
         f"Starting AtRIS run for {simname}; full raw output will be written to {log_path.name} "
@@ -1094,15 +1092,15 @@ def run_atris(
     phantom_load_started = False
     gdml_validation_count = 0
     simulation_started = False
-    simulation_start_time: float | None = None
+    simulation_start_time = None
     last_visible_output_time = time.monotonic()
     last_status_time = 0.0
     last_status_log_size = 0
     max_progress_event_seen = -1
-    last_progress_time: float | None = None
+    last_progress_time = None
     last_progress_logged_event = -1
 
-    def emit_summary_log(message: str, timestamp: float | None = None) -> None:
+    def emit_summary_log(message, timestamp=None):
         nonlocal last_visible_output_time
         log(message)
         last_visible_output_time = time.monotonic() if timestamp is None else timestamp
@@ -1118,7 +1116,7 @@ def run_atris(
             bufsize=1,
         )
         assert process.stdout is not None
-        queue: Queue[str | None] = Queue()
+        queue = Queue()
         reader = threading.Thread(target=enqueue_stream_lines, args=(process.stdout, queue), daemon=True)
         reader.start()
         while True:
@@ -1226,11 +1224,12 @@ def run_atris(
     log(f"Finished AtRIS run for {simname}")
 
 
-def main() -> int:
+def main():
     args = apply_run_profile(parse_args())
-    rootdir = Path(args.rootdir).expanduser().resolve()
+    rootdir = Path(configured_value(args.rootdir, "ATRIS_ROOT", "--rootdir")).expanduser().resolve()
     simdir = Path.cwd().resolve()
-    runtime_env: dict[str, str] | None = None
+    atris_executable = None
+    runtime_env = None
 
     log(f"Root directory: {rootdir}")
     log(f"Simulation directory: {simdir}")
@@ -1241,8 +1240,13 @@ def main() -> int:
     )
 
     if not args.prepare_only:
-        require_executable(simdir / "AtRIS", "AtRIS executable")
-        runtime_env = build_runtime_environment(args.geant4_sh)
+        atris_executable = Path(
+            configured_value(args.atris_executable, "ATRIS_EXECUTABLE", "--atris-executable")
+        ).expanduser().resolve()
+        require_executable(atris_executable, "AtRIS executable")
+        geant4_sh = configured_geant4_sh(args.geant4_sh)
+        runtime_env = build_runtime_environment(geant4_sh)
+        log(f"AtRIS executable: {atris_executable}")
 
     if args.skip_prepare:
         log("Skipping geometry preparation and reusing existing simulation.psf/simulation.gdml")
@@ -1255,6 +1259,7 @@ def main() -> int:
         log("Prepare-only mode requested; not running AtRIS")
         return 0
 
+    assert atris_executable is not None
     assert runtime_env is not None
     copy_phantoms(rootdir, simdir)
     event_counts = generate_macros(simdir, args.numberparts, args.threads, args.alpha_factor)
@@ -1268,6 +1273,7 @@ def main() -> int:
     for simname in run_order:
         run_atris(
             simdir,
+            atris_executable,
             runtime_env,
             args.phys_list,
             simname,

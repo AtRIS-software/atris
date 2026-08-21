@@ -9,7 +9,7 @@ if(WITH_GEANT4_UIVIS)
   list(APPEND ATRIS_GEANT4_COMPONENTS ui_all vis_all)
 endif()
 
-find_package(Geant4 11.4 REQUIRED COMPONENTS ${ATRIS_GEANT4_COMPONENTS})
+find_package(Geant4 REQUIRED COMPONENTS ${ATRIS_GEANT4_COMPONENTS})
 
 set(ATRIS_HEADERS
   include/DetectorConstruction.hh
@@ -65,4 +65,3 @@ configure_file(files/uniter.py ./ COPYONLY)
 #configure_file(phantoms/icru_counting.txt ./ COPYONLY)
 #configure_file(phantoms/ramona_fifteen_0.060MeV_detA_response.txt ./ COPYONLY)
 #configure_file(phantoms/ramona_fifteen_0.060MeV_detA_counting.txt ./ COPYONLY)
-

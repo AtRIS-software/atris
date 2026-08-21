@@ -14,7 +14,7 @@ Build notes
 
  + AtRIS requires a Geant4 build with GDML enabled.
  + Configure Geant4 with `-DGEANT4_USE_GDML=ON` and make sure Xerces-C++ is available.
- + The modern AtRIS build expects Geant4 `11.4.x`, CMake `3.22+`, and C++17.
+ + The modern AtRIS build requires Geant4 with GDML and multithreading, CMake `3.22+`, and C++17.
  + Example configure/build commands:
 
 ```bash
