@@ -20,18 +20,20 @@ atris-work/
 |   |   `-- build/
 |   |       `-- AtRIS
 |   `-- run_atris_bare.py
-`-- geant4/
+`-- geant4-<VERSION>/
     `-- install/
         `-- bin/
             `-- geant4.sh
 ```
 
 The parent directory is called `atris-work` in these examples, but its name is
-not significant. Start the shell session in that directory:
+not significant. In the command below, `<VERSION>` is a placeholder for the
+installed Geant4 version, for example `v11.4.2`. Start the shell session in
+that directory:
 
 ```bash
 cd atris-work
-source geant4/install/bin/geant4.sh
+source geant4-<VERSION>/install/bin/geant4.sh
 ```
 
 ## Python environment

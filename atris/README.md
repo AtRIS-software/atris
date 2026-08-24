@@ -19,8 +19,7 @@ Build notes
 
 ```bash
 cmake -S . -B build-modern \
-  -DGeant4_DIR=/path/to/geant4/lib/cmake/Geant4 \
-  -DWITH_GEANT4_UIVIS=OFF
+  -DGeant4_DIR=/path/to/geant4/lib/cmake/Geant4
 
 cmake --build build-modern -j4
 ```

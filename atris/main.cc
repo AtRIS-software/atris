@@ -1,8 +1,6 @@
 #include "G4RunManager.hh"
 #include "G4MTRunManager.hh"
 #include "G4UImanager.hh"
-#include "G4VisExecutive.hh"
-#include "G4UIExecutive.hh"
 #include "G4GDMLParser.hh"
 
 #include "DetectorConstruction.hh"

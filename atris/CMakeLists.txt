@@ -2,14 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 project(AtRIS LANGUAGES CXX)
 
-option(WITH_GEANT4_UIVIS "Build AtRIS with all available Geant4 UI and visualization drivers" ON)
-
-set(ATRIS_GEANT4_COMPONENTS gdml multithreaded)
-if(WITH_GEANT4_UIVIS)
-  list(APPEND ATRIS_GEANT4_COMPONENTS ui_all vis_all)
-endif()
-
-find_package(Geant4 REQUIRED COMPONENTS ${ATRIS_GEANT4_COMPONENTS})
+find_package(Geant4 REQUIRED COMPONENTS gdml multithreaded)
 
 set(ATRIS_HEADERS
   include/DetectorConstruction.hh

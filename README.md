@@ -29,13 +29,10 @@ Point AtRIS at an existing Geant4 install instead of letting the repo manage Gea
 
 ```bash
 cmake -S atris -B atris/build-modern \
-  -DGeant4_DIR=/path/to/geant4/lib/cmake/Geant4 \
-  -DWITH_GEANT4_UIVIS=OFF
+  -DGeant4_DIR=/path/to/geant4/lib/cmake/Geant4
 
 cmake --build atris/build-modern -j4
 ```
-
-If you have a full UI/visualization-capable Geant4 build, you can set `-DWITH_GEANT4_UIVIS=ON`.
 
 ## Requirements:
  - Linux remains the primary supported runtime environment for the full workflow.
