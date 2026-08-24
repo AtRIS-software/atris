@@ -61,13 +61,15 @@ How to use:
     - if you do not see two processor cores at 100%, something is wrong. Check the protons.out and protons.error file for more information.
 """
 # Energy is constant
+import argparse
 import random
+import shutil
 import numpy as np
 import os
 import sys
 import subprocess
 
-def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,workerthreads):
+def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,workerthreads,output_dir="./atris/simulation"):
     lines =  ""
     lines += "/run/numberOfThreads %i\n"%workerthreads
     lines += "/run/initialize\n"
@@ -76,7 +78,7 @@ def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,workerthreads):
     lines += "/gps/ene/type User\n"
     lines += "/gps/hist/type energy\n"
     bins   = thebins*fact
-    np.savetxt('./atris/simulation/'+name+'.bins',bins)
+    np.savetxt(os.path.join(output_dir, name + '.bins'), bins)
     lines += "/gps/hist/point %.9f %.9f\n"%(bins[0],0.0)
     for thebin in bins[1:]:
         lines += "/gps/hist/point %.9f %.9f\n"%(thebin,1.0)
@@ -95,18 +97,22 @@ def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,workerthreads):
     return lines
 
 
-def macroSetup(prefix,part,fact,partspb,workerthreads):
-    radius  = np.loadtxt('./atris/simulation/simulation.psf')[-2,1] + 0.001 # we add 1 meter to the radius to aviod overlap.
-    bins    = 10**np.linspace(0,6,121)
+def macroSetup(prefix,part,fact,partspb,workerthreads,output_dir="./atris/simulation",base_bins=None,rng=None):
+    if base_bins is None:
+        base_bins = 10**np.linspace(0,6,121)
+    if rng is None:
+        rng = random
+    radius  = np.loadtxt(os.path.join(output_dir, 'simulation.psf'))[-2,1] + 0.001 # we add 1 meter to the radius to aviod overlap.
+    bins    = base_bins
     N       = bins.shape[0]*partspb # At 20 bins per decade, 2500 particles per bin is good. Even better would be 5k or 10k.
     # We are taking two random seeds. Control this for the ability to reproduce.
-    seed1     = random.randint(31,999999)
-    seed2     = random.randint(31,999999)
+    seed1     = rng.randint(31,999999)
+    seed2     = rng.randint(31,999999)
     #name      = str(seed1)+prefix
     name      = prefix
-    os.system('cp ./atris/simulation/simulation.gdml ./atris/simulation/' + name + '.gdml')
-    lines = genMacro(seed1,seed2,N,name,part,fact,bins,radius,workerthreads)
-    filehandle = open('./atris/simulation/'+name + '.mac', 'w')
+    shutil.copy2(os.path.join(output_dir, 'simulation.gdml'), os.path.join(output_dir, name + '.gdml'))
+    lines = genMacro(seed1,seed2,N,name,part,fact,bins,radius,workerthreads,output_dir)
+    filehandle = open(os.path.join(output_dir, name + '.mac'), 'w')
     filehandle.writelines(lines)
     filehandle.close()
     # we are not starting the sim here.
@@ -115,10 +121,36 @@ def macroSetup(prefix,part,fact,partspb,workerthreads):
     #subprocess.Popen(command,shell=True)
     
 
-def macroGenManager(partspb,workerthreads,alphafactor=1.0):
-    macroSetup('protons',"/gps/particle proton\n",1,partspb,workerthreads)
-    macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),workerthreads)
+def macroGenManager(partspb,workerthreads,alphafactor=1.0,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
+    if energy_points < 2:
+        raise ValueError("energy_points must be at least 2")
+    output_dir = os.path.abspath(output_dir)
+    if not os.path.isdir(output_dir):
+        raise FileNotFoundError("Run directory does not exist: " + output_dir)
+    rng = random.Random(random_seed) if random_seed is not None else random
+    base_bins = 10**np.linspace(energy_min_power,energy_max_power,energy_points)
+    macroSetup('protons',"/gps/particle proton\n",1,partspb,workerthreads,output_dir,base_bins,rng)
+    macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),workerthreads,output_dir,base_bins,rng)
 
 if __name__ == "__main__":
-    macroGenManager(3000,8,0.66)
-
+    parser = argparse.ArgumentParser(description="Generate proton and alpha input files for AtRIS.")
+    parser.add_argument("run_directory", nargs="?", default="./atris/simulation")
+    parser.add_argument("--particles-per-bin", type=int, default=3000)
+    parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--alpha-factor", type=float, default=0.66)
+    parser.add_argument("--random-seed", type=int)
+    parser.add_argument("--energy-min-power", type=float, default=0.0, help="Base-10 power of the minimum energy in MeV.")
+    parser.add_argument("--energy-max-power", type=float, default=6.0, help="Base-10 power of the maximum energy in MeV.")
+    parser.add_argument("--energy-points", type=int, default=121)
+    args = parser.parse_args()
+    macroGenManager(
+        args.particles_per_bin,
+        args.threads,
+        args.alpha_factor,
+        args.run_directory,
+        args.random_seed,
+        args.energy_min_power,
+        args.energy_max_power,
+        args.energy_points,
+    )
+    print("Generated proton and alpha input files in " + os.path.abspath(args.run_directory))
