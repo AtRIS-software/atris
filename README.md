@@ -1,8 +1,14 @@
-# Running AtRIS
+# AtRIS
 
-AtRIS is a C++ executable that reads prepared geometry, macro, energy-bin, and
-phantom files from its current directory. The one-time Geant4 and AtRIS build
-is documented in [INSTALL.md](INSTALL.md).
+AtRIS (Atmospheric Radiation Interaction Simulator) models the interaction of
+energetic particles with planetary atmospheres. It calculates atmospheric
+ionization, absorbed dose, dose equivalent, and count rate.
+
+AtRIS was developed by Saša Banjac and described and validated by
+[Banjac et al. (2018)](https://doi.org/10.1029/2018JA026042).
+
+This guide explains how to prepare, run, and inspect an AtRIS simulation. See
+[INSTALL.md](INSTALL.md) for installation and build instructions.
 
 ## Start a shell session
 
@@ -13,6 +19,7 @@ Geant4 version, for example `v11.4.2`.
 ```bash
 cd <ATRIS_WORK>
 source geant4-<VERSION>/install/bin/geant4.sh
+conda activate atris
 ```
 
 ## Prepare a run
@@ -147,14 +154,6 @@ The run directory then contains `protons.log`, `alphas.log`, and CSV output
 files beginning with `protons_` and `alphas_`.
 
 ## Inspect the results
-
-The inspection tools use the supplied Conda environment. Create it once:
-
-```bash
-cd <ATRIS_WORK>
-conda env create -f atris/environment.yml
-conda activate atris
-```
 
 Post-process the proton and alpha CSV files and create the PDF plots:
 

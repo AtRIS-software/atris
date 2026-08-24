@@ -1,0 +1,8 @@
+name: atris
+dependencies:
+  - python
+  - numpy
+  - pandas
+  - matplotlib
+  - requests
+  - ipython

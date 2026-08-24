@@ -5,7 +5,8 @@ This document covers the work done once for a machine or compiler environment:
 1. install the build requirements;
 2. build Geant4;
 3. build AtRIS;
-4. confirm that the executable and Geant4 runtime are present.
+4. confirm that the executable and Geant4 runtime are present;
+5. create the Python environment.
 
 The steps repeated for each shell session and simulation are in the
 [running instructions](README.md).
@@ -19,7 +20,9 @@ AtRIS requires:
 - [Xerces-C++](https://xerces.apache.org/xerces-c/) for GDML support;
 - [CMake](https://cmake.org/) 3.22 or newer;
 - a C++17 compiler, used consistently to build both Geant4 and AtRIS;
-- [Git](https://git-scm.com/) to obtain the AtRIS source.
+- [Git](https://git-scm.com/) to obtain the AtRIS source;
+- [Conda](https://docs.conda.io/projects/conda/en/stable/) to manage the Python
+  environment.
 
 The preparation tools and automated system test use
 [Python](https://www.python.org/).
@@ -164,6 +167,17 @@ The expected output is:
 
 ```text
 Usage: ./build/AtRIS <physics-list> <simulation-name> <mode> <phantom-count>
+```
+
+### Install the Python environment
+
+The atmosphere preparation and result-processing tools use the Python packages
+listed in `environment.yml`. Create the environment once from the target
+workspace:
+
+```bash
+cd <ATRIS_WORK>
+conda env create -f atris/environment.yml
 ```
 
 At this point installation is complete. Continue with the
