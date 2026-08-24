@@ -138,15 +138,18 @@ cd <ATRIS_WORK>
 git clone git@github.com:svaberg/atris.git
 ```
 
-Configure and build the AtRIS C++ executable with the same compiler used to
-build Geant4:
+### Build AtRIS
+
+Load the Geant4 environment so CMake can find the installed package, then
+configure and build AtRIS with the same compiler used to build Geant4:
 
 ```bash
+cd <ATRIS_WORK>
+
+source geant4-<VERSION>/install/bin/geant4.sh
+
 cd atris/atris
-
-cmake -B build \
-  -DGeant4_DIR="../../geant4-<VERSION>/install/lib/cmake/Geant4"
-
+cmake -B build
 cmake --build build -j
 ```
 
@@ -157,10 +160,10 @@ form:
 ./build/AtRIS
 ```
 
-The expected line is:
+The expected output is:
 
 ```text
-### AtRIS: ./AtRIS physicslist simname mode nrofphantoms
+Usage: ./build/AtRIS <physics-list> <simulation-name> <mode> <phantom-count>
 ```
 
 At this point installation is complete. Continue with the
@@ -211,6 +214,18 @@ source <ATRIS_WORK>/geant4-<VERSION>/install/bin/geant4.sh
 This environment applies only to the current shell, so source `geant4.sh`
 again after opening a new one.
 
+### I broke AtRIS! How do I rebuild it?
+
+If only the generated build is broken, remove it:
+
+```bash
+cd <ATRIS_WORK>/atris/atris
+rm -r build
+```
+
+Then repeat the [AtRIS build instructions](#build-atris). This recreates
+the build directory but does not undo changes to the AtRIS source files.
+
 ### Why does linking fail with undefined Geant4 symbols?
 
 This usually means that AtRIS and Geant4 were built with incompatible C++
@@ -221,18 +236,13 @@ AppleClang and `libc++`. Typical missing symbols include
 
 CMake remembers the selected compiler in the build directory, so changing the
 shell environment is not enough for an existing build. Remove the failed AtRIS
-build, select the compiler used for Geant4, and configure again. For example,
-if Geant4 was built with the system AppleClang compiler on macOS:
+build [as described above](#i-broke-atris-how-do-i-rebuild-it) and select the
+compiler used for Geant4. For example, if Geant4 was built with the system
+AppleClang compiler on macOS:
 
 ```bash
-cd <ATRIS_WORK>/atris/atris
-rm -rf build
-
 export CC=/usr/bin/clang
 export CXX=/usr/bin/clang++
-
-cmake -B build \
-  -DGeant4_DIR="../../geant4-<VERSION>/install/lib/cmake/Geant4"
-
-cmake --build build -j
 ```
+
+Then repeat the [AtRIS build instructions](#build-atris).

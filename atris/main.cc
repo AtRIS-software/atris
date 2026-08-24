@@ -46,9 +46,9 @@ void determine_nrofdetectors(G4String fname);
 
 int main(int argc,char** argv){
 	if (argc != 5){
-		G4cout << "### Incorrect use! Please modify and check version updates." << G4endl;
-		G4cout << "### AtRIS: ./AtRIS physicslist simname mode nrofphantoms"<< G4endl;
-		G4cout << "### AtRIS: ./AtRIS FTFP_BERT_HP protons 0 1"<< G4endl;
+		G4cout << "Usage: " << argv[0]
+		       << " <physics-list> <simulation-name> <mode> <phantom-count>" << G4endl;
+		// G4cout << "Example: " << argv[0] << " FTFP_BERT_HP protons 0 1" << G4endl;
 		return 0;
 	}
 	mode = std::stoi(argv[3]);
