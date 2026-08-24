@@ -222,10 +222,8 @@ phi_url = 'https://cosmicrays.oulu.fi/phi/Phi_mon_2017.txt'
 # We load "nist.exist", which holds information about which materials already
 # exist in the Geant4 material database. This information is useful when 
 # creating sheet materials. 
-try:
-    f      = open('./atris/interface/nist.exist','r')
-except:
-    f      = open('../../atris/interface/nist.exist','r')
+interface_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'atris', 'interface')
+f = open(os.path.join(interface_dir, 'nist.exist'), 'r')
 
 nistdb = f.readline()
 # Appending own materials. Here, I should add all the project-related molecules
@@ -579,7 +577,7 @@ def gdml_compile(materials, world, geometry, structure, filename):
     #Now the materials
     finalfile += "<materials>\n"
     #We also add the AtRIS material extensions
-    f = open("../interface/atris.materials","r")
+    f = open(os.path.join(interface_dir, "atris.materials"), "r")
     ff = f.readlines()
     for fff in ff:
         finalfile += fff
