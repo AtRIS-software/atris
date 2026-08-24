@@ -1,85 +1,177 @@
-# AtRIS2
-Atmospheric Radiation Interaction Simulator
-With multi-threading, count rate mode, multiple phantom calulations and improved usabilityty. 
+# Running AtRIS
 
-Description: This repository packages the AtRIS code, including all available phantom files and several helper tools that will help you:
- - Check if requirements are satisfied (see below)
- - Download and install geant4
- - Download and install AtRIS
- - Define your simulation
- - Start and monitor your simulation
- - Do data post-processing and prepare the data for evaluation with the Werkzeug
- 
- Under documentation, a schematic view of the approach is provided. Please use draw.io to open that file. 
+AtRIS is a C++ executable that reads prepared geometry, macro, energy-bin, and
+phantom files from its current directory. The one-time Geant4 and AtRIS build
+is documented in [INSTALL.md](INSTALL.md).
 
-Purpose:
- - Make AtRIS easier to use to calculate ionization, absorbed dose, dose equivalent and count rate, in particular useful for aircraft dosimetry. 
- - this is ment to help you start Earth atmosphere simulations. Advanced uses, such as Mars and Venus simulations are not available due to licencing constraints. 
- - It still cant produce secondary particle spectra.
- - It requires some knowledge about linux systems and python to be usable.
+## Start a shell session
 
-## Modern build status
- - The core `atris/` application now builds against Geant4 `11.4.2` with GDML enabled.
- - The build has been validated with Apple Clang `17` on macOS and uses CMake `3.22+` with C++17.
- - GDML support is required because AtRIS uses `G4GDMLParser.hh` directly. Your Geant4 build must therefore be configured with `-DGEANT4_USE_GDML=ON`.
- - The helper notebooks and scripts are still Linux-oriented, but the core C++ build no longer assumes an old Geant4 release.
-
-## Modern build recipe
-Point AtRIS at an existing Geant4 install instead of letting the repo manage Geant4 for you.
+These instructions use the [directory layout](INSTALL.md#directory-layout)
+from `INSTALL.md`. In the commands below, `<VERSION>` is the installed
+Geant4 version, for example `v11.4.2`.
 
 ```bash
-cmake -S atris -B atris/build-modern \
-  -DGeant4_DIR=/path/to/geant4/lib/cmake/Geant4
-
-cmake --build atris/build-modern -j4
+cd <ATRIS_WORK>
+source geant4-<VERSION>/install/bin/geant4.sh
 ```
 
-## Requirements:
- - Linux remains the primary supported runtime environment for the full workflow.
- - The core `atris/` build also works on recent macOS toolchains when Geant4 and Xerces-C++ are available.
- - Please make sure your system has a modern C++ compiler, CMake, and Xerces-C++ installed. We recommend system or package-manager installs instead of conda for Geant4 dependencies.
- - Python 3 is necessary. For Python packages, we recommend using Conda. Packages that are not available through Conda can be installed with pip.
- - To run the Werkzeug, docker is needed. The user must have docker run permissions. If that is given, just:
-> docker run --restart=always -p 9123:8888 werkzeug:mt
+## Prepare a run
 
-## Instructions:
- - clone: 
-> git clone https://gitlab.physik.uni-kiel.de/ET/atris2.git ./AtRIS2
- - cd in to the diretory, activate onda and start jupyter lab:
-> cd ./AtRIS2
-> jupyter lab
- - open the simstarter jupyter notebook and you are good to go. 
- - modify root dir, read the notebook and work with it.
- - if you are planning on using the Werkzeug, start the werkzeug - see info below. 
-  
-   
-## Folder structure
+Keep each simulation's inputs and outputs in a separate directory. This example
+uses `runs/my-first-run`:
 
-## About Werkyzeug
- - The Werkzeug is used to analize and visualize the data. The main inputs are:
-   - The simulation results
-   - Phantom selection (an index between 0 and 31)
-   - Solar modulation parameter phi
-   - Geomagnetic Cutoff rigidity 
- - Werkzeug is being updated:
-   - We are adding GUI scaling to have better visibility
-   - We will implemement a preselection of optimal phantoms and automatic loading of phi
-   - We will add band functions for the solar proton spetrum
-   - ETA march 2023
- - To run the werkzeug start:
- > docker run --restart=always -p 9123:8888 werkzeug:mt
-   - This will make the Werkzeug available under localhost:9123 in your browser.
-   - If you encounter any problems, hit refresh. 
-   - Once Werkzeug is updated, docker will recognize the new image and automatically download it.
- - Detailed information available on https://gitlab.physik.uni-kiel.de/banjac/atris-werkzeug
+```bash
+RUN_DIR="$PWD/runs/my-first-run"
+mkdir -p "$RUN_DIR"
+```
 
-## About simulating secondary particles
- - While AtRIS produces seondary partile information, in order to obtain spetra from this data, a lot of post processing needs to be done.
- - For the moment, additional work is required to make this available to third parties. This could be an extension of the current approach, however no plans have been set in to motion.
+Reusing a run directory overwrites files with the same names.
 
+### Create the PSF
 
+Download an atmosphere from the
+[NASA CCMC NRLMSIS Instant Run](https://kauai.ccmc.gsfc.nasa.gov/instantrun/nrlmsis/)
+page. Select NRLMSIS 2.0, choose the time, location, and altitude profile, and
+save the text result as `nrlmsis_output.txt` in `$RUN_DIR`.
 
-## Notes:
- - We are in preview. You will encounter errors. Please document and report the errors. 
- - Scaling beyond a certain number of cores doesn't yield better results. This is CPU speific and has to the with the cache topography. Test it.
- - 
+Convert the downloaded table to `simulation.psf`:
+
+```bash
+cd "$RUN_DIR"
+python ../../atris/nrlmsis_to_psf.py nrlmsis_output.txt
+cd <ATRIS_WORK>
+```
+
+The Planet Specification Format (PSF) is an editable table describing the
+planet's spherical layers, including their geometry, temperature, density,
+pressure, composition, and detector identifiers.
+
+### Create the GDML
+
+Convert the PSF into the Geant4 geometry read by AtRIS:
+
+```bash
+cd atris/atris/interface
+python psf2gdml.py "$RUN_DIR/simulation"
+cd <ATRIS_WORK>
+```
+
+This creates `simulation.gdml`. The converter is run from its own directory
+because it reads `nist.exist` and `atris.materials` there.
+
+### Create macros and energy bins
+
+Generate a small, reproducible proton and alpha test:
+
+```bash
+python atris/atrismacrogen.py "$RUN_DIR" \
+  --particles-per-bin 2 \
+  --threads 4 \
+  --alpha-factor 0.66 \
+  --random-seed 12345 \
+  --energy-max-power 3 \
+  --energy-points 7
+```
+
+This copies `simulation.gdml` to `protons.gdml` and `alphas.gdml`, then
+creates the matching `.mac` and `.bins` files. The reduced energy grid and
+particle count are intended only to verify that AtRIS runs.
+
+### Add a phantom
+
+Copy one radiation/counting response pair into the run directory:
+
+```bash
+cp atris/phantoms/radiation_phantom0.txt "$RUN_DIR/"
+cp atris/phantoms/counting_phantom0.txt "$RUN_DIR/"
+cp atris/phantoms/phantoms.txt "$RUN_DIR/"
+```
+
+The required proton inputs are now:
+
+```text
+protons.gdml
+protons.mac
+protons.bins
+radiation_phantom0.txt
+counting_phantom0.txt
+```
+
+- `protons.gdml` defines the planet, atmosphere, materials, and sensitive
+  layers.
+- `protons.mac` defines the particle source, worker threads, random seeds,
+  energy distribution, and event count.
+- `protons.bins` contains the energy values used by the AtRIS output.
+- The phantom pair contains the response matrices used for dose,
+  dose-equivalent, and count-rate calculations.
+- `phantoms.txt` contains the phantom mass and cross-sectional area used during
+  post-processing.
+
+## Run AtRIS
+
+Run the proton and alpha simulations from the run directory:
+
+```bash
+cd "$RUN_DIR"
+set -o pipefail
+../../atris/atris/build/AtRIS FTFP_BERT_HP protons -1 1 2>&1 | tee protons.log
+../../atris/atris/build/AtRIS FTFP_BERT_HP alphas -1 1 2>&1 | tee alphas.log
+```
+
+The four AtRIS arguments are:
+
+```text
+FTFP_BERT_HP   Geant4 physics list
+protons/alphas prefix for the .gdml, .mac, .bins, and output files
+-1             histogram/CSV output mode used by this workflow
+1              number of numbered phantom pairs to load
+```
+
+Worker threads are configured inside the generated macro files rather than
+passed to the executable.
+
+Starting a simulation is reported by:
+
+```text
+### AtRIS: Starting the simulation
+```
+
+A completed simulation later reports:
+
+```text
+### AtRIS: the simulation has completed
+### AtRIS: The logfile has been sucessfully closed...
+```
+
+The run directory then contains `protons.log`, `alphas.log`, and CSV output
+files beginning with `protons_` and `alphas_`.
+
+## Inspect the results
+
+The inspection tools use the supplied Conda environment. Create it once:
+
+```bash
+cd <ATRIS_WORK>
+conda env create -f atris/environment.yml
+conda activate atris
+```
+
+Post-process the proton and alpha CSV files and create the PDF plots:
+
+```bash
+cd <ATRIS_WORK>
+python atris/postprocess.py "$RUN_DIR"
+```
+
+This writes `protons.pdf` and `alphas.pdf` in the run directory, together with
+the processed ionization, dose, dose-equivalent, and count-rate files. The
+previews below come from the reduced test configuration in this guide and are
+not scientific production results.
+
+**Protons**
+
+![Proton response plots](examples/results/protons.png)
+
+**Alphas**
+
+![Alpha response plots](examples/results/alphas.png)

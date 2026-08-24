@@ -8,7 +8,7 @@ This document covers the work done once for a machine or compiler environment:
 4. confirm that the executable and Geant4 runtime are present.
 
 The steps repeated for each shell session and simulation are in the
-[running instructions](MODERN.md).
+[running instructions](README.md).
 
 ## Requirements
 
@@ -54,10 +54,10 @@ directories beside one another:
 
 ```text
 <ATRIS_WORK>/
-|-- atris/
-`-- geant4-<VERSION>/
-    |-- build/
-    `-- install/
+├── atris/
+└── geant4-<VERSION>/
+    ├── build/
+    └── install/
 ```
 
 Start in `<ATRIS_WORK>`:
@@ -167,7 +167,7 @@ Usage: ./build/AtRIS <physics-list> <simulation-name> <mode> <phantom-count>
 ```
 
 At this point installation is complete. Continue with the
-[running instructions](MODERN.md) to prepare and execute a simulation.
+[running instructions](README.md) to prepare and execute a simulation.
 
 ## FAQ
 
