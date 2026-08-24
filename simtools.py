@@ -109,7 +109,7 @@ def scale_data(data,nphat,ndet,nenbins,phantom_data,df):
         if hist_index == 3:
             # This is the ionization, we need to divide by mass
             #print("we scale the ionization histogram by dividing with the SDID volume")
-            data[hist_index] = data[hist_index] / df['volume/cm3'][:,None]
+            data[hist_index] = data[hist_index] / df['volume/cm3'].to_numpy()[:,None]
         if hist_index > 3:
             #print("we scale other histograms with the surface factor")
             phantom_nr       = int((hist_index-4)/3)
@@ -118,7 +118,7 @@ def scale_data(data,nphat,ndet,nenbins,phantom_data,df):
                 # for dose and equi, we divide by phantom mass, to get per g
                 #print("We also scale the dos/equi histograms by dividing with the phantom mass")
                 phantom_surface  = phantom_surface / phantom_data['mass/g'][phantom_nr]
-            data[hist_index] = data[hist_index]*phantom_surface/df['inn_surface/cm2'][:,None]
+            data[hist_index] = data[hist_index]*phantom_surface/df['inn_surface/cm2'].to_numpy()[:,None]
             pass
     return(data)
 
@@ -126,7 +126,12 @@ def make_allplots(data,xbins,df,simname,nphant):
     # The plots are only for doing a quick visual inspection
     ybins           = (df["inn_surface/cm2"] / (4.*np.pi))**0.5 / 100000.
     ybins           = ybins - ybins[2]
-    fig, allaxes    = plt.subplots(ncols=4,figsize=(16,5*nphant),nrows=nphant,sharey=True)
+    altitude_edges  = np.empty(ybins.size + 1)
+    altitude_edges[1:-1] = (ybins.values[:-1] + ybins.values[1:]) / 2
+    altitude_edges[0] = ybins.values[0] - (ybins.values[1] - ybins.values[0]) / 2
+    altitude_edges[-1] = ybins.values[-1] + (ybins.values[-1] - ybins.values[-2]) / 2
+    titles          = ['Ionization', 'Absorbed dose', 'Dose equivalent', 'Count rate']
+    fig, allaxes    = plt.subplots(ncols=4,figsize=(16,5*nphant),nrows=nphant,sharey=True,squeeze=False)
     for phantom_index in range(nphant):
         counter         = 0
         axes            = allaxes[phantom_index]
@@ -136,15 +141,22 @@ def make_allplots(data,xbins,df,simname,nphant):
         for data_idx in [3,4+phantom_index*3,4+phantom_index*3+1,4+phantom_index*3+2]:
             thedata  = data[data_idx]
             #print('plotting data has shape',thedata.shape)
-            vmin     = np.min(thedata[thedata>0])
-            vmax     = np.max(thedata)
+            positive = thedata[np.isfinite(thedata) & (thedata > 0)]
+            norm     = LogNorm(vmin=np.min(positive),vmax=np.max(positive)) if positive.size else None
             ax       = axes[counter]
-            ax.pcolormesh(xbins,ybins,thedata,norm=LogNorm(vmin=vmin,vmax=vmax))
-            counter += 1
+            mesh     = ax.pcolormesh(xbins,altitude_edges,thedata,norm=norm,shading='flat')
+            ax.set_title(simname.capitalize() + ' ' + titles[counter])
+            ax.set_xlabel('Primary kinetic energy [MeV]')
             ax.set_xscale('log')
+            ax.set_xticks(xbins)
+            ax.set_xticklabels(['%.3g' % value for value in xbins],rotation=45,ha='right')
+            fig.colorbar(mesh,ax=ax,label='Response per primary')
+            counter += 1
             ax.set_ylim(0,ybins.values[-2])
-    plt.tight_layout()
-    plt.savefig(simname+".pdf")
+        axes[0].set_ylabel('Altitude [km]\nPhantom %i' % phantom_index)
+    fig.tight_layout()
+    fig.savefig(simname+".pdf")
+    plt.close(fig)
 
 def make_output(data,df,simname,nphant):
     # calculate altitude in km from inner surface
@@ -180,7 +192,7 @@ def process_run(simname):
     data, filenames       = read_data(simname,nphant)
     print("Reading data complete.")
     scaled_data           = scale_data(data,nphant,ndet,nenbins,phantom_data,df)
-    #make_allplots(scaled_data,enbins,df,simname,nphant)
+    make_allplots(scaled_data,enbins,df,simname,nphant)
     print("Making output files.")
     make_output(scaled_data,df,simname,nphant)
     print('Response files have been created.')
