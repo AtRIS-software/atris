@@ -12,7 +12,6 @@ import json
 import shlex
 import atrismacrogen as amg
 import subprocess
-import atristoolset as ia
 from IPython.display import clear_output
 import time
 import matplotlib.pyplot as plt
@@ -145,7 +144,14 @@ def make_allplots(data,xbins,df,simname,nphant):
             positive = thedata[np.isfinite(thedata) & (thedata > 0)]
             norm     = LogNorm(vmin=np.min(positive),vmax=np.max(positive)) if positive.size else None
             ax       = axes[counter]
-            mesh     = ax.pcolormesh(xbins,altitude_edges,thedata,norm=norm,shading='flat')
+            mesh     = ax.pcolormesh(
+                xbins,
+                altitude_edges,
+                thedata,
+                norm=norm,
+                shading='flat',
+                rasterized=True,
+            )
             ax.set_title(simname.capitalize() + ' ' + titles[counter])
             ax.set_xlabel('Primary kinetic energy [MeV]')
             ax.set_xscale('log')

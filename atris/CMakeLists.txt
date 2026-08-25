@@ -44,12 +44,6 @@ target_compile_options(AtRIS PRIVATE
 #
 #install(TARGETS G4ET DESTINATION bin)
 
-#----------------------------------------------------------------------------
-# Copy helper tools
-#
-configure_file(files/reset.sh ./ COPYONLY)
-configure_file(files/monitor.sh ./ COPYONLY)
-configure_file(files/uniter.py ./ COPYONLY)
 #configure_file(files/example.gdml ./ COPYONLY)
 #configure_file(files/example.bins ./ COPYONLY)
 #configure_file(files/example.py ./ COPYONLY)

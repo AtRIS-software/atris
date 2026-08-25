@@ -24,7 +24,6 @@ postprocess = "postprocess:main"
 packages = ["atris_tools"]
 py-modules = [
     "atrismacrogen",
-    "atristoolset",
     "nrlmsis2psf",
     "postprocess",
     "simtools",
