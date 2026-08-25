@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nrlmsis_to_psf = "nrlmsis_to_psf:main"
+nrlmsis2psf = "nrlmsis2psf:main"
 psf2gdml = "simtools:psf2gdml_main"
 atrismacrogen = "atrismacrogen:main"
 postprocess = "postprocess:main"
@@ -25,7 +25,7 @@ packages = ["atris_tools"]
 py-modules = [
     "atrismacrogen",
     "atristoolset",
-    "nrlmsis_to_psf",
+    "nrlmsis2psf",
     "postprocess",
     "simtools",
 ]

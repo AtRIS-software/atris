@@ -54,7 +54,7 @@ save the text result as `nrlmsis_output.txt` in the run directory.
 Convert the downloaded table to `simulation.psf` in the run directory:
 
 ```bash
-nrlmsis_to_psf nrlmsis_output.txt
+nrlmsis2psf nrlmsis_output.txt
 ```
 
 The Planet Specification Format (PSF) is an editable table describing the

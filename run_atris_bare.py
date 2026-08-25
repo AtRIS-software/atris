@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 from queue import Empty, Queue
 
-from nrlmsis_to_psf import convert_nrlmsis
+from nrlmsis2psf import convert_nrlmsis
 
 REQUIRED_GEANT4_ENV_VARS = (
     "G4ENSDFSTATEDATA",
