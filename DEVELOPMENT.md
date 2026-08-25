@@ -26,8 +26,6 @@ The goals for version 3.0 are:
 
 The current layout contains duplication and overlapping responsibilities:
 
-- The root `README.md` and `atris/README.md` both describe AtRIS, but the
-  inner README contains older paths and build instructions.
 - Root `phantoms/` contains 64 numbered runtime response matrices.
 - Inner `atris/phantoms/` contains named response matrices, old response
   matrices, variance tables, plots, and a notebook.

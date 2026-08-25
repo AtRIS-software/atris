@@ -10,7 +10,8 @@ AtRIS was developed by Saša Banjac and is described and validated in
 This repository includes the AtRIS simulator, preparation and post-processing
 tools, and phantom response matrices. The supplied workflow focuses on Earth
 atmosphere simulations, particularly aircraft dosimetry. It supports
-multithreaded runs and calculations with multiple phantom responses. The
+multithreaded runs and calculations with multiple phantom responses. AtRIS can
+record secondary-particle information in binary output mode, but the supplied
 workflow does not provide the additional processing needed to derive
 secondary-particle spectra.
 
@@ -88,7 +89,8 @@ particle count are intended only to verify that AtRIS runs.
 
 ### Add phantom response files
 
-Copy one radiation/counting response pair into the run directory:
+The repository includes 32 numbered radiation/counting response pairs, indexed
+from `0` through `31`. This test uses pair `0`; copy it into the run directory:
 
 ```bash
 cp "$ATRIS_ROOT/phantoms/radiation_phantom0.txt" .
@@ -133,6 +135,10 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 -1             histogram/CSV output mode used by this workflow
 1              number of numbered phantom pairs to load
 ```
+
+The worker count is set by `--threads` when generating the macro files. More
+threads do not always make a simulation faster; scaling depends on the
+processor and its cache architecture.
 
 Starting a simulation is reported by:
 
