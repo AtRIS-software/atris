@@ -76,7 +76,6 @@ Generate a small, reproducible proton and alpha test in the run directory:
 ```bash
 atrismacrogen \
   --particles-per-bin 2 \
-  --threads 4 \
   --alpha-factor 0.66 \
   --random-seed 12345 \
   --energy-max-power 3 \
@@ -110,8 +109,8 @@ counting_phantom0.txt
 
 - `protons.gdml` defines the planet, atmosphere, materials, and sensitive
   layers.
-- `protons.mac` defines the particle source, worker threads, random seeds,
-  energy distribution, and event count.
+- `protons.mac` defines the particle source, random seeds, energy distribution,
+  and event count.
 - `protons.bins` contains the energy values used by the AtRIS output.
 - The phantom pair contains the response matrices used for dose,
   dose-equivalent, and count-rate calculations.
@@ -136,9 +135,15 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 1              number of numbered phantom pairs to load
 ```
 
-The worker count is set by `--threads` when generating the macro files. More
-threads do not always make a simulation faster; scaling depends on the
-processor and its cache architecture.
+AtRIS uses all processors detected by Geant4 by default. Set
+`G4FORCENUMBEROFTHREADS` before starting AtRIS to use a specific number:
+
+```bash
+export G4FORCENUMBEROFTHREADS=4
+```
+
+An existing macro containing `/run/numberOfThreads` retains that setting unless
+`G4FORCENUMBEROFTHREADS` is set.
 
 Starting a simulation is reported by:
 

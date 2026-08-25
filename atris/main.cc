@@ -1,5 +1,6 @@
 #include "G4RunManager.hh"
 #include "G4MTRunManager.hh"
+#include "G4Threading.hh"
 #include "G4UImanager.hh"
 #include "G4GDMLParser.hh"
 
@@ -12,6 +13,7 @@
 #include <string>
 #include <cstddef>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <fstream>
@@ -100,7 +102,10 @@ int main(int argc,char** argv){
 	// Therefore, we redirect them to a file. 
 	G4UImanager * UImanager	= G4UImanager::GetUIpointer();
 	G4Random::setTheEngine(new CLHEP::MTwistEngine); // Choose the Random engine
-	G4RunManager *runManager = new G4MTRunManager;     // Instantiate the run manager
+	G4MTRunManager *runManager = new G4MTRunManager;   // Instantiate the run manager
+	if (std::getenv("G4FORCENUMBEROFTHREADS") == nullptr) {
+		runManager->SetNumberOfThreads(G4Threading::G4GetNumberOfCores());
+	}
 	G4GDMLParser parser;                             //instantiate a GDML parser
 	parser.Read(gdmlname);	 //parse the 
 	atris::DetectorConstruction* detector = new atris::DetectorConstruction(parser);
@@ -140,6 +145,7 @@ int main(int argc,char** argv){
 	G4String tempString             ="/control/execute "+G4String (argv[2])+".mac";
 	G4cout << "### AtRIS: Starting the simulation " << G4endl;
 	UImanager->ApplyCommand(tempString);
+	G4cout << "### AtRIS: simulation used " << runManager->GetNumberOfThreads() << " worker thread(s)" << G4endl;
 	G4cout << "### AtRIS: the simulation has completed " << G4endl;
 	if (mode == 0) {std::fclose(tuples1);}
 	delete runManager;

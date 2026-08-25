@@ -796,9 +796,9 @@ def simprep_manager(year,month,day,hour_utc,latitude,longitude,hmin,hmax,deltah)
     print("In particular the simulation macro allows you to define additional control aspects for the simulation.")
     return phi
     
-def gen_macros(rootdir,number,workerthreads,alpha_factor):
+def gen_macros(rootdir,number,alpha_factor):
     os.chdir(rootdir)
-    amg.macroGenManager(number,workerthreads,alpha_factor)
+    amg.macroGenManager(number,alpha_factor)
     print("Simulation macros and files for protons and alphas have been created. The simulation can be started.")
 
 
