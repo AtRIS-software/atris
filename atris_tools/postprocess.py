@@ -7,13 +7,8 @@ from pathlib import Path
 
 
 os.environ.setdefault("MPLBACKEND", "Agg")
-repository_dir = Path(__file__).resolve().parent
-original_directory = Path.cwd()
-try:
-    os.chdir(repository_dir)
-    import simtools
-finally:
-    os.chdir(original_directory)
+
+from . import simtools
 
 
 def main():

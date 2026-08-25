@@ -4,10 +4,12 @@ import re
 import os
 import sys 
 
+data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+
 # We load "nist.exist", which holds information about which materials already
 # exist in the Geant4 material database. This information is useful when 
 # creating sheet materials. 
-f      = open('nist.exist','r')
+f      = open(os.path.join(data_dir, 'nist.exist'),'r')
 nistdb = f.readline()
 # Appending own materials. Here, I should add all the project-related molecules
 nistdb = nistdb[:-1]+",'G4_VACUUM']"
@@ -181,7 +183,7 @@ def gdml_compile(materials, world, geometry, structure, filename):
     #Now the materials
     finalfile += "<materials>\n"
     #We also add the AtRIS material extensions
-    f = open("atris.materials","r")
+    f = open(os.path.join(data_dir, "atris.materials"),"r")
     ff = f.readlines()
     for fff in ff:
         finalfile += fff
@@ -242,4 +244,3 @@ if __name__ == "__main__":
         gdml_compile(mat,wrld,geom,struct,arg1+'.gdml')
     else:
         print('\tThe file ' + arg1 + '.psf does not exist.')
-

@@ -10,7 +10,7 @@ import datetime
 import hashlib
 import json
 import shlex
-import atrismacrogen as amg
+from . import atrismacrogen as amg
 import subprocess
 from IPython.display import clear_output
 import time
@@ -222,8 +222,8 @@ phi_url = 'https://cosmicrays.oulu.fi/phi/Phi_mon_2017.txt'
 # We load "nist.exist", which holds information about which materials already
 # exist in the Geant4 material database. This information is useful when 
 # creating sheet materials. 
-interface_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'atris', 'interface')
-f = open(os.path.join(interface_dir, 'nist.exist'), 'r')
+data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+f = open(os.path.join(data_dir, 'nist.exist'), 'r')
 
 nistdb = f.readline()
 # Appending own materials. Here, I should add all the project-related molecules
@@ -577,7 +577,7 @@ def gdml_compile(materials, world, geometry, structure, filename):
     #Now the materials
     finalfile += "<materials>\n"
     #We also add the AtRIS material extensions
-    f = open(os.path.join(interface_dir, "atris.materials"), "r")
+    f = open(os.path.join(data_dir, "atris.materials"), "r")
     ff = f.readlines()
     for fff in ff:
         finalfile += fff

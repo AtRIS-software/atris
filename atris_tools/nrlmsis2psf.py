@@ -2,13 +2,9 @@
 """Convert a downloaded NASA NRLMSIS table to AtRIS PSF."""
 
 import argparse
-import os
 from pathlib import Path
 
-run_directory = Path.cwd()
-os.chdir(Path(__file__).resolve().parent)
-import simtools
-os.chdir(run_directory)
+from . import simtools
 
 
 def convert_nrlmsis(input_path):
