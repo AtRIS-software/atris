@@ -7,23 +7,29 @@ ionization, absorbed dose, dose equivalent, and count rate.
 AtRIS was developed by Saša Banjac and is described and validated in
 [Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
 
+This repository includes the AtRIS simulator, preparation and post-processing
+tools, and phantom response matrices. The supplied workflow focuses on Earth
+atmosphere simulations, particularly aircraft dosimetry. It supports
+multithreaded runs and calculations with multiple phantom responses. The
+workflow does not provide the additional processing needed to derive
+secondary-particle spectra.
+
 This guide explains how to prepare, run, and inspect an AtRIS simulation. See
 [INSTALL.md](INSTALL.md) for installation and build instructions.
 
 ## Start a shell session
 
 These instructions use the [directory layout](INSTALL.md#directory-layout)
-from `INSTALL.md`. In the commands below, `<VERSION>` is the installed
-Geant4 version, for example `v11.4.2`.
-
+from `INSTALL.md`.
 ```bash
 cd <ATRIS_WORK>
-export ATRIS_WORK="$PWD"
-export ATRIS_ROOT="$ATRIS_WORK/atris"
-export ATRIS_EXECUTABLE="$ATRIS_ROOT/atris/build/AtRIS"
-source geant4-<VERSION>/install/bin/geant4.sh
-conda activate atris
 ```
+Prepare the current shell to run AtRIS with Geant4:
+```bash
+source atris/setup_atris.sh
+```
+
+If you wish you can source this script from your rc file.
 
 ## Prepare a run
 
@@ -31,21 +37,20 @@ Keep each simulation's inputs and outputs in a separate directory. This example
 uses `runs/my-first-run`:
 
 ```bash
-RUN_DIR="$ATRIS_WORK/runs/my-first-run"
-mkdir -p "$RUN_DIR"
-cd "$RUN_DIR"
+mkdir -p runs/my-first-run
+cd runs/my-first-run
 ```
 
 Reusing a run directory overwrites files with the same names.
 
-### Create the PSF
+### Fetch the atmosphere model
 
 Download an atmosphere from the
 [NASA CCMC NRLMSIS Instant Run](https://kauai.ccmc.gsfc.nasa.gov/instantrun/nrlmsis/)
 page. Select NRLMSIS 2.0, choose the time, location, and altitude profile, and
-save the text result as `nrlmsis_output.txt` in `$RUN_DIR`.
+save the text result as `nrlmsis_output.txt` in the run directory.
 
-Convert the downloaded table to `simulation.psf`:
+Convert the downloaded table to `simulation.psf` in the run directory:
 
 ```bash
 nrlmsis_to_psf nrlmsis_output.txt
@@ -55,9 +60,7 @@ The Planet Specification Format (PSF) is an editable table describing the
 planet's spherical layers, including their geometry, temperature, density,
 pressure, composition, and detector identifiers.
 
-### Create the GDML
-
-Convert the PSF into the Geant4 geometry read by AtRIS:
+Convert the PSF into the Geant4 geometry read by AtRIS in the run directory:
 
 ```bash
 psf2gdml
@@ -65,9 +68,9 @@ psf2gdml
 
 This creates `simulation.gdml` beside `simulation.psf`.
 
-### Create macros and energy bins
+### Generate the particle inputs (`.mac` and `.bins`)
 
-Generate a small, reproducible proton and alpha test:
+Generate a small, reproducible proton and alpha test in the run directory:
 
 ```bash
 atrismacrogen \
@@ -83,7 +86,7 @@ This copies `simulation.gdml` to `protons.gdml` and `alphas.gdml`, then
 creates the matching `.mac` and `.bins` files. The reduced energy grid and
 particle count are intended only to verify that AtRIS runs.
 
-### Add a phantom
+### Add phantom response files
 
 Copy one radiation/counting response pair into the run directory:
 
@@ -93,7 +96,7 @@ cp "$ATRIS_ROOT/phantoms/counting_phantom0.txt" .
 cp "$ATRIS_ROOT/phantoms/phantoms.txt" .
 ```
 
-The required proton inputs are now:
+The required proton inputs are now in the run directory:
 
 ```text
 protons.gdml
@@ -115,12 +118,11 @@ counting_phantom0.txt
 
 ## Run AtRIS
 
-Run the proton and alpha simulations from the run directory:
+Run the proton and alpha simulations in the run directory:
 
 ```bash
-set -o pipefail
-"$ATRIS_EXECUTABLE" FTFP_BERT_HP protons -1 1 2>&1 | tee protons.log
-"$ATRIS_EXECUTABLE" FTFP_BERT_HP alphas -1 1 2>&1 | tee alphas.log
+AtRIS FTFP_BERT_HP protons -1 1
+AtRIS FTFP_BERT_HP alphas -1 1
 ```
 
 The four AtRIS arguments are:
@@ -131,9 +133,6 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 -1             histogram/CSV output mode used by this workflow
 1              number of numbered phantom pairs to load
 ```
-
-Worker threads are configured inside the generated macro files rather than
-passed to the executable.
 
 Starting a simulation is reported by:
 
@@ -148,12 +147,13 @@ A completed simulation later reports:
 ### AtRIS: The logfile has been sucessfully closed...
 ```
 
-The run directory then contains `protons.log`, `alphas.log`, and CSV output
-files beginning with `protons_` and `alphas_`.
+The run directory then contains CSV output files beginning with `protons_` and
+`alphas_`.
 
 ## Inspect the results
 
-Post-process the proton and alpha CSV files and create the PDF plots:
+Post-process the proton and alpha CSV files in the run directory and create the
+PDF plots:
 
 ```bash
 postprocess
