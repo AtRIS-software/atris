@@ -50,11 +50,12 @@ def get_nr_phantoms(simname):
     print("This run included %i %s" % (nrphantoms, label))
     return nrphantoms
 
-def get_nr_energy_bins(simname):
-    data = np.loadtxt(simname+'.bins')
-    nrbins = data.shape[0]
-    print ("This simulation had %i energy bins"%nrbins)
-    return nrbins, data
+def get_energy_edges(simname):
+    with open(simname + '_h1_h1.1.csv', 'r') as histogram:
+        axis_line = next(line for line in histogram if line.startswith('#axis edges '))
+    edges = np.fromstring(axis_line[len('#axis edges '):], sep=' ')
+    print("This simulation had %i energy bins" % (edges.shape[0] - 1))
+    return edges
 
 def process_phantoms(nrphantoms):
     phantoms   = pd.read_csv('phantoms.txt',sep=',',index_col=2,skiprows=2,names=['mass/g','crosssurface/cm2'])
@@ -86,7 +87,7 @@ def read_data(simname,nphant):
         counter   += 1
     return sim_data,names
 
-def scale_data(data,nphat,ndet,nenbins,phantom_data,df):
+def scale_data(data,nphat,ndet,nenergyedges,phantom_data,df):
     # Here we scale the data
     # Scaling is not done for the first 3 histograms
     nrparticles   = data[0][:,0]
@@ -94,7 +95,7 @@ def scale_data(data,nphat,ndet,nenbins,phantom_data,df):
     print(nrparticles)
     limit         = 1+nphat*3
     shapex        = ndet + 2
-    shapey        = nenbins + 1
+    shapey        = nenergyedges + 1
     #print("Now we will reshape the %i histograms with %i entries."%(limit,shapex*shapey))
     for hist_index in range(3,3+limit):
         new_data         = data[hist_index][:,1].reshape((shapex,shapey))
@@ -186,13 +187,13 @@ def make_output(data,df,simname,nphant):
 def process_run(simname):
     df, ndet              = process_psf()
     nphant                = get_nr_phantoms(simname)
-    nenbins,enbins        = get_nr_energy_bins(simname)
+    energy_edges          = get_energy_edges(simname)
     phantom_data          = process_phantoms(nphant)
     print('Processing phantoms')
     data, filenames       = read_data(simname,nphant)
     print("Reading data complete.")
-    scaled_data           = scale_data(data,nphant,ndet,nenbins,phantom_data,df)
-    make_allplots(scaled_data,enbins,df,simname,nphant)
+    scaled_data           = scale_data(data,nphant,ndet,energy_edges.shape[0],phantom_data,df)
+    make_allplots(scaled_data,energy_edges,df,simname,nphant)
     print("Making output files.")
     make_output(scaled_data,df,simname,nphant)
     print('Response files have been created.')
