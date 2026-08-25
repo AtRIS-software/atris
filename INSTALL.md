@@ -78,8 +78,6 @@ official [Building and Installing from Source](https://geant4-userdoc.web.cern.c
 guide describes the general procedure; the commands below provide the options
 required by AtRIS.
 
-### Why build from source
-
 Geant4 binary installations are available only for selected systems and do
 not necessarily include GDML support. Building from source lets us enable
 GDML, install the required runtime datasets, and use the same compiler
@@ -94,6 +92,7 @@ commands below, `<VERSION>` is a placeholder for the Geant4 version in the
 archive and directory names, for example `v11.4.2`.
 
 ```bash
+cd <ATRIS_WORK>
 tar -xf geant4-<VERSION>.tar.gz
 cd geant4-<VERSION>
 ```
@@ -178,7 +177,12 @@ workspace:
 ```bash
 cd <ATRIS_WORK>
 conda env create -f atris/environment.yml
+conda activate atris
+python -m pip install -e atris
 ```
+
+The editable installation registers the AtRIS preparation and post-processing
+commands while keeping their Python source in the checkout.
 
 At this point installation is complete. Continue with the
 [running instructions](README.md) to prepare and execute a simulation.

@@ -1,3 +1,4 @@
+import argparse
 import requests
 import pandas as pd
 import io
@@ -724,7 +725,17 @@ def psf2gdml():
     mat, geom, struct,wrld = line_processor('simulation.psf')
     wrld += 100
     gdml_compile(mat,wrld,geom,struct,'simulation.gdml')
-    
+
+
+def psf2gdml_main():
+    """Convert simulation.psf in the current directory to simulation.gdml."""
+    parser = argparse.ArgumentParser(
+        description="Convert simulation.psf to simulation.gdml in the current directory."
+    )
+    parser.parse_args()
+    psf2gdml()
+
+
 def convert_phi(phi):
     # K. Herbst phi conversion for LIS.
     new_phi = 1.025 * phi + 24.18

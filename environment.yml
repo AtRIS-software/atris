@@ -1,6 +1,7 @@
 name: atris
 dependencies:
   - python
+  - pip
   - numpy
   - pandas
   - matplotlib

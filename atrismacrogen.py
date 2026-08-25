@@ -132,9 +132,11 @@ def macroGenManager(partspb,workerthreads,alphafactor=1.0,output_dir="./atris/si
     macroSetup('protons',"/gps/particle proton\n",1,partspb,workerthreads,output_dir,base_bins,rng)
     macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),workerthreads,output_dir,base_bins,rng)
 
-if __name__ == "__main__":
+
+def main():
+    """Run the AtRIS macro-generation command."""
     parser = argparse.ArgumentParser(description="Generate proton and alpha input files for AtRIS.")
-    parser.add_argument("run_directory", nargs="?", default="./atris/simulation")
+    parser.add_argument("run_directory", nargs="?", default=".")
     parser.add_argument("--particles-per-bin", type=int, default=3000)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--alpha-factor", type=float, default=0.66)
@@ -154,3 +156,7 @@ if __name__ == "__main__":
         args.energy_points,
     )
     print("Generated proton and alpha input files in " + os.path.abspath(args.run_directory))
+
+
+if __name__ == "__main__":
+    main()

@@ -4,8 +4,8 @@ AtRIS (Atmospheric Radiation Interaction Simulator) models the interaction of
 energetic particles with planetary atmospheres. It calculates atmospheric
 ionization, absorbed dose, dose equivalent, and count rate.
 
-AtRIS was developed by Saša Banjac and described and validated by
-[Banjac et al. (2018)](https://doi.org/10.1029/2018JA026042).
+AtRIS was developed by Saša Banjac and is described and validated in
+[Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
 
 This guide explains how to prepare, run, and inspect an AtRIS simulation. See
 [INSTALL.md](INSTALL.md) for installation and build instructions.
@@ -18,6 +18,9 @@ Geant4 version, for example `v11.4.2`.
 
 ```bash
 cd <ATRIS_WORK>
+export ATRIS_WORK="$PWD"
+export ATRIS_ROOT="$ATRIS_WORK/atris"
+export ATRIS_EXECUTABLE="$ATRIS_ROOT/atris/build/AtRIS"
 source geant4-<VERSION>/install/bin/geant4.sh
 conda activate atris
 ```
@@ -28,8 +31,9 @@ Keep each simulation's inputs and outputs in a separate directory. This example
 uses `runs/my-first-run`:
 
 ```bash
-RUN_DIR="$PWD/runs/my-first-run"
+RUN_DIR="$ATRIS_WORK/runs/my-first-run"
 mkdir -p "$RUN_DIR"
+cd "$RUN_DIR"
 ```
 
 Reusing a run directory overwrites files with the same names.
@@ -44,9 +48,7 @@ save the text result as `nrlmsis_output.txt` in `$RUN_DIR`.
 Convert the downloaded table to `simulation.psf`:
 
 ```bash
-cd "$RUN_DIR"
-python ../../atris/nrlmsis_to_psf.py nrlmsis_output.txt
-cd <ATRIS_WORK>
+nrlmsis_to_psf nrlmsis_output.txt
 ```
 
 The Planet Specification Format (PSF) is an editable table describing the
@@ -58,20 +60,17 @@ pressure, composition, and detector identifiers.
 Convert the PSF into the Geant4 geometry read by AtRIS:
 
 ```bash
-cd atris/atris/interface
-python psf2gdml.py "$RUN_DIR/simulation"
-cd <ATRIS_WORK>
+psf2gdml
 ```
 
-This creates `simulation.gdml`. The converter is run from its own directory
-because it reads `nist.exist` and `atris.materials` there.
+This creates `simulation.gdml` beside `simulation.psf`.
 
 ### Create macros and energy bins
 
 Generate a small, reproducible proton and alpha test:
 
 ```bash
-python atris/atrismacrogen.py "$RUN_DIR" \
+atrismacrogen \
   --particles-per-bin 2 \
   --threads 4 \
   --alpha-factor 0.66 \
@@ -89,9 +88,9 @@ particle count are intended only to verify that AtRIS runs.
 Copy one radiation/counting response pair into the run directory:
 
 ```bash
-cp atris/phantoms/radiation_phantom0.txt "$RUN_DIR/"
-cp atris/phantoms/counting_phantom0.txt "$RUN_DIR/"
-cp atris/phantoms/phantoms.txt "$RUN_DIR/"
+cp "$ATRIS_ROOT/phantoms/radiation_phantom0.txt" .
+cp "$ATRIS_ROOT/phantoms/counting_phantom0.txt" .
+cp "$ATRIS_ROOT/phantoms/phantoms.txt" .
 ```
 
 The required proton inputs are now:
@@ -119,10 +118,9 @@ counting_phantom0.txt
 Run the proton and alpha simulations from the run directory:
 
 ```bash
-cd "$RUN_DIR"
 set -o pipefail
-../../atris/atris/build/AtRIS FTFP_BERT_HP protons -1 1 2>&1 | tee protons.log
-../../atris/atris/build/AtRIS FTFP_BERT_HP alphas -1 1 2>&1 | tee alphas.log
+"$ATRIS_EXECUTABLE" FTFP_BERT_HP protons -1 1 2>&1 | tee protons.log
+"$ATRIS_EXECUTABLE" FTFP_BERT_HP alphas -1 1 2>&1 | tee alphas.log
 ```
 
 The four AtRIS arguments are:
@@ -158,8 +156,7 @@ files beginning with `protons_` and `alphas_`.
 Post-process the proton and alpha CSV files and create the PDF plots:
 
 ```bash
-cd <ATRIS_WORK>
-python atris/postprocess.py "$RUN_DIR"
+postprocess
 ```
 
 This writes `protons.pdf` and `alphas.pdf` in the run directory, together with

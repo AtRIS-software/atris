@@ -20,7 +20,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Post-process AtRIS output and create PDF plots."
     )
-    parser.add_argument("run_directory", type=Path)
+    parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
     parser.add_argument(
         "simulations",
         nargs="*",

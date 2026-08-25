@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atris-tools"
+version = "0.0.0"
+description = "Python preparation and post-processing tools for AtRIS"
+dependencies = [
+    "ipython",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "requests",
+]
+
+[project.scripts]
+nrlmsis_to_psf = "nrlmsis_to_psf:main"
+psf2gdml = "simtools:psf2gdml_main"
+atrismacrogen = "atrismacrogen:main"
+postprocess = "postprocess:main"
+
+[tool.setuptools]
+packages = ["atris_tools"]
+py-modules = [
+    "atrismacrogen",
+    "atristoolset",
+    "nrlmsis_to_psf",
+    "postprocess",
+    "simtools",
+]
