@@ -85,7 +85,7 @@ toolchain for Geant4 and AtRIS.
 
 ### Obtain the source
 
-Download a source archive from the official
+Download a source archive in `tar.gz` format from the official
 [Geant4 releases](https://geant4.web.cern.ch/download/) page. Place it in
 `<ATRIS_WORK>`, then unpack it and enter the resulting directory. In the
 commands below, `<VERSION>` is a placeholder for the Geant4 version in the
