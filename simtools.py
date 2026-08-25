@@ -155,8 +155,6 @@ def make_allplots(data,xbins,df,simname,nphant):
             ax.set_title(simname.capitalize() + ' ' + titles[counter])
             ax.set_xlabel('Primary kinetic energy [MeV]')
             ax.set_xscale('log')
-            ax.set_xticks(xbins)
-            ax.set_xticklabels(['%.3g' % value for value in xbins],rotation=45,ha='right')
             fig.colorbar(mesh,ax=ax,label='Response per primary')
             counter += 1
             ax.set_ylim(0,ybins.values[-2])
