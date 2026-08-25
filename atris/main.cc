@@ -144,13 +144,17 @@ int main(int argc,char** argv){
 	// Get the pointer to the user interface manager and start the batch mode
 	G4String tempString             ="/control/execute "+G4String (argv[2])+".mac";
 	G4cout << "### AtRIS: Starting the simulation " << G4endl;
-	UImanager->ApplyCommand(tempString);
+	G4int commandStatus = UImanager->ApplyCommand(tempString);
 	G4cout << "### AtRIS: simulation used " << runManager->GetNumberOfThreads() << " worker thread(s)" << G4endl;
-	G4cout << "### AtRIS: the simulation has completed " << G4endl;
+	if (commandStatus == 0) {
+		G4cout << "### AtRIS: the simulation has completed " << G4endl;
+	} else {
+		G4cerr << "### AtRIS: macro execution failed with Geant4 status " << commandStatus << G4endl;
+	}
 	if (mode == 0) {std::fclose(tuples1);}
 	delete runManager;
 	G4cout << "### AtRIS: The logfile has been sucessfully closed... " << G4endl;
-	return 0;
+	return commandStatus == 0 ? 0 : 1;
 }
 
 void determine_nrofdetectors(G4String fname){
