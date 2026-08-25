@@ -20,39 +20,35 @@ import warnings
 warnings.filterwarnings('ignore')
 #pd.set_option('display.max_rows', 1000)
 
-def process_log(filename):
-    # We need to extract from the GDML file the inner radious of each detector, and we also need to know the mass of the detector.
-    # Format is :  SDIDr: $SDID, mass/kg, surface/cm2, volume/cm3, density g/cm3
-    sdid_data         = []
-    numberofdetectors = 0 
-    for aLine in open(filename+'.log','r'):
-        if aLine[:30] == "### AtRIS: proceeding to load ":
-            nrphantoms = int(aLine[30:-13])
-            print("This run included %i phantoms"%nrphantoms)
-        if aLine[:6] == "SDIDr:":
-            theLine = aLine[6:-1] # We remove the 'SDIDr:' from the start and the last newline character
-            theLine = np.fromstring(theLine, sep=',')
-            sdid_data.append(theLine)
-            numberofdetectors += 1
-    df = pd.DataFrame(sdid_data,columns=['sdid','mass/kg','tot_surface/cm2','volume/cm3','density/g/cm3'])
-    
-    df['inn_surface/cm2'] = 0 # inner surface
-    df['out_surface/cm2'] = 0 # outer surface
-    df.set_index(['sdid'],inplace=True)
-    df.sort_index(inplace=True)
-    
-    df.index = df.index.map(int)
-    
-    df.loc[0,'out_surface/cm2'] = df.loc[0,'tot_surface/cm2']
-    #df.loc[1,'out_surface/cm2'] = df.loc[0,'tot_surface/cm2']
-    # from SDID=0, we do not have spheres with surface pi4r2, so we need to correct
-    for anSDID in range(1,numberofdetectors):
-        #print(anSDID, df.loc[anSDID]['tot_surface/cm2'], df.loc[anSDID-1]['out_surface/cm2'],df.loc[anSDID]['tot_surface/cm2']- df.loc[anSDID-1]['out_surface/cm2'])
-        df.loc[anSDID,'out_surface/cm2'] = df.loc[anSDID]['tot_surface/cm2'] - df.loc[anSDID-1]['out_surface/cm2']
-    df['inn_surface/cm2'] = df['tot_surface/cm2'] - df['out_surface/cm2']
-    df['inn_surface/cm2'][0] = df['out_surface/cm2'][0] # overwrite the inner surface of the core to avoid division by zero
-    df.sort_values('inn_surface/cm2',inplace=True) # sort fix
-    return df, numberofdetectors, nrphantoms
+def process_psf(filename='simulation.psf'):
+    data = np.atleast_2d(np.loadtxt(filename))
+    rmin = data[:, 0] * 100000.0
+    rmax = data[:, 1] * 100000.0
+    delta_phi = data[:, 3] - data[:, 2]
+    theta_factor = np.cos(data[:, 4]) - np.cos(data[:, 5])
+    inner_surface = delta_phi * rmin**2 * theta_factor
+    outer_surface = delta_phi * rmax**2 * theta_factor
+    volume = delta_phi * theta_factor * (rmax**3 - rmin**3) / 3.0
+
+    core = inner_surface == 0
+    inner_surface[core] = outer_surface[core]
+
+    df = pd.DataFrame({
+        'sdid': data[:, 6].astype(int),
+        'volume/cm3': volume,
+        'inn_surface/cm2': inner_surface,
+    })
+    df.set_index('sdid', inplace=True)
+    df.sort_values('inn_surface/cm2', kind='stable', inplace=True)
+    return df, data.shape[0]
+
+
+def get_nr_phantoms(simname):
+    pattern = re.compile('^' + re.escape(simname) + r'_h2_h2\.dos\d+\.csv$')
+    nrphantoms = sum(pattern.match(filename) is not None for filename in os.listdir('.'))
+    label = 'phantom' if nrphantoms == 1 else 'phantoms'
+    print("This run included %i %s" % (nrphantoms, label))
+    return nrphantoms
 
 def get_nr_energy_bins(simname):
     data = np.loadtxt(simname+'.bins')
@@ -60,11 +56,9 @@ def get_nr_energy_bins(simname):
     print ("This simulation had %i energy bins"%nrbins)
     return nrbins, data
 
-def process_phantoms():
+def process_phantoms(nrphantoms):
     phantoms   = pd.read_csv('phantoms.txt',sep=',',index_col=2,skiprows=2,names=['mass/g','crosssurface/cm2'])
-    nrphantoms = phantoms.shape[0]
-    print("we have %i phantoms in this run"%nrphantoms)
-    return phantoms
+    return phantoms.iloc[:nrphantoms]
 
 def read_data(simname,nphant):
     # This read the histograms:
@@ -190,9 +184,10 @@ def make_output(data,df,simname,nphant):
         np.savetxt(outputfname,outdata,fmt=npformat,delimiter=' ',encoding='utf-8')
 
 def process_run(simname):
-    df, ndet, nphant      = process_log(simname)
+    df, ndet              = process_psf()
+    nphant                = get_nr_phantoms(simname)
     nenbins,enbins        = get_nr_energy_bins(simname)
-    phantom_data          = process_phantoms()
+    phantom_data          = process_phantoms(nphant)
     print('Processing phantoms')
     data, filenames       = read_data(simname,nphant)
     print("Reading data complete.")
