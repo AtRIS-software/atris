@@ -1,19 +1,19 @@
 # AtRIS
 
-AtRIS (Atmospheric Radiation Interaction Simulator) models the interaction of
-energetic particles with planetary atmospheres. It calculates atmospheric
-ionization, absorbed dose, dose equivalent, and count rate.
+AtRIS (Atmospheric Radiation Interaction Simulator) is a Geant4-based
+particle-transport code for parametric studies of radiation propagation through
+planetary and exoplanetary atmospheres. Its flexible description of the
+atmosphere and regolith supports studies of altitude-dependent secondary
+particles and ion-pair production for atmospheric chemistry and habitability
+research.
 
-AtRIS was developed by Saša Banjac and is described and validated in
-[Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
-
-This repository includes the AtRIS simulator, preparation and post-processing
-tools, and phantom response matrices. The supplied workflow focuses on Earth
-atmosphere simulations, particularly aircraft dosimetry. It supports
-multithreaded runs and calculations with multiple phantom responses. AtRIS can
-record secondary-particle information in binary output mode, but the supplied
-workflow does not provide the additional processing needed to derive
-secondary-particle spectra.
+AtRIS also calculates atmospheric ionization, absorbed dose, dose equivalent,
+and count rate. It was developed by Saša Banjac and validated against Earth
+measurements, as described by
+[Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042). This
+repository provides the simulator, preparation and post-processing tools, and
+phantom response matrices; the workflow below focuses on multithreaded Earth
+atmosphere simulations.
 
 This guide explains how to prepare, run, and inspect an AtRIS simulation. See
 [INSTALL.md](INSTALL.md) for installation and build instructions.
