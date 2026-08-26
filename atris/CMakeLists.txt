@@ -4,14 +4,22 @@ project(AtRIS LANGUAGES CXX)
 
 find_package(Geant4 REQUIRED COMPONENTS gdml multithreaded)
 
-execute_process(
-  COMMAND git describe --tags --always --dirty
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  OUTPUT_VARIABLE ATRIS_VERSION
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  ERROR_QUIET
-)
-if(NOT ATRIS_VERSION)
+get_filename_component(ATRIS_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set(ATRIS_VERSION "unknown")
+if(EXISTS "${ATRIS_SOURCE_ROOT}/.git")
+  execute_process(
+    COMMAND git describe --tags --always --dirty
+    WORKING_DIRECTORY "${ATRIS_SOURCE_ROOT}"
+    OUTPUT_VARIABLE ATRIS_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+elseif(EXISTS "${ATRIS_SOURCE_ROOT}/.git_archival.txt")
+  file(STRINGS "${ATRIS_SOURCE_ROOT}/.git_archival.txt" ATRIS_ARCHIVE_VERSION
+       REGEX "^describe-name: ")
+  string(REPLACE "describe-name: " "" ATRIS_VERSION "${ATRIS_ARCHIVE_VERSION}")
+endif()
+if(NOT ATRIS_VERSION OR ATRIS_VERSION MATCHES "\\$Format")
   set(ATRIS_VERSION "unknown")
 endif()
 message(STATUS "AtRIS version: ${ATRIS_VERSION}")
