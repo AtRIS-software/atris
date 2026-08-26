@@ -20,7 +20,7 @@ def versions_match(tools_version, executable_version):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Show the atris-tools and AtRIS versions."
+        description="Show the atris-tools version and check the AtRIS source revision."
     )
     parser.parse_args()
 
@@ -42,7 +42,6 @@ def main():
         print("Warning: could not determine the AtRIS executable version.", file=sys.stderr)
         return
 
-    print(output)
     executable_version = output[len("AtRIS "):]
     if not versions_match(tools_version, executable_version):
         print(
