@@ -1,9 +1,36 @@
 """Report the Python tools and C++ executable versions."""
 
 import argparse
+from datetime import datetime, timezone
 from importlib.metadata import version
+import re
 import subprocess
 import sys
+
+
+GIT_DESCRIBE_VERSION = re.compile(
+    r"^v?(\d+)\.(\d+)\.(\d+)-(\d+)-g([0-9a-f]+)(-dirty)?$"
+)
+PEP440_COMMIT = re.compile(r"(\+g[0-9a-f]{7})[0-9a-f]+")
+
+
+def git_describe_to_pep440(git_version):
+    match = GIT_DESCRIBE_VERSION.fullmatch(git_version)
+    if match is None:
+        return git_version.lstrip("v")
+
+    major, minor, patch, distance, commit, dirty = match.groups()
+    pep440_version = (
+        major + "." + minor + "." + str(int(patch) + 1)
+        + ".dev" + distance + "+g" + commit
+    )
+    if dirty:
+        pep440_version += ".d" + datetime.now(timezone.utc).strftime("%Y%m%d")
+    return pep440_version
+
+
+def shorten_pep440_commit(pep440_version):
+    return PEP440_COMMIT.sub(r"\1", pep440_version)
 
 
 def versions_match(tools_version, executable_version):
@@ -25,6 +52,7 @@ def main():
     parser.parse_args()
 
     tools_version = version("atris-tools")
+    displayed_tools_version = shorten_pep440_commit(tools_version)
 
     try:
         result = subprocess.run(
@@ -39,18 +67,18 @@ def main():
     output = result.stdout.strip() if result is not None else ""
     if result is None or result.returncode != 0 or not output.startswith("AtRIS "):
         print("AtRIS executable version: unavailable")
-        print("atris-tools version:      " + tools_version)
+        print("atris-tools version:      " + displayed_tools_version)
         print("Warning: could not determine the AtRIS executable version.", file=sys.stderr)
         return
 
     executable_version = output[len("AtRIS "):]
-    displayed_executable_version = executable_version.lstrip("v")
+    displayed_executable_version = git_describe_to_pep440(executable_version)
     print("AtRIS executable version: " + displayed_executable_version)
-    print("atris-tools version:      " + tools_version)
+    print("atris-tools version:      " + displayed_tools_version)
     if not versions_match(tools_version, executable_version):
         print(
             "Warning: the AtRIS executable was built from a different source "
-            "revision (atris-tools " + tools_version
+            "revision (atris-tools " + displayed_tools_version
             + "; AtRIS " + displayed_executable_version + ").",
             file=sys.stderr,
         )
