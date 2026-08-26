@@ -7,7 +7,7 @@ find_package(Geant4 REQUIRED COMPONENTS gdml multithreaded)
 get_filename_component(ATRIS_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 
 # Format Git metadata like setuptools-scm's default Python package version.
-function(atris_format_version description archive_node output_variable)
+function(atris_format_version description output_variable)
   set(formatted_version "unknown")
 
   if(description MATCHES "^v?([0-9]+)\\.([0-9]+)\\.([0-9]+)-([0-9]+)-g([0-9a-f]+)(-dirty)?$")
@@ -18,16 +18,17 @@ function(atris_format_version description archive_node output_variable)
     set(version_node "${CMAKE_MATCH_5}")
     set(version_dirty "${CMAKE_MATCH_6}")
 
-    if(archive_node MATCHES "^[0-9a-f]+$")
-      set(version_node "${archive_node}")
-    endif()
-
     if(version_distance EQUAL 0 AND NOT version_dirty)
       set(formatted_version "${version_major}.${version_minor}.${version_patch}")
     else()
       math(EXPR next_patch "${version_patch} + 1")
-      # setuptools-scm formats a Git node as "g" followed by nine hash characters.
-      string(SUBSTRING "${version_node}" 0 9 short_node)
+      string(LENGTH "${version_node}" node_length)
+      if(node_length GREATER 9)
+        # setuptools-scm limits live Git nodes to nine hash characters.
+        string(SUBSTRING "${version_node}" 0 9 short_node)
+      else()
+        set(short_node "${version_node}")
+      endif()
       set(formatted_version
           "${version_major}.${version_minor}.${next_patch}.dev${version_distance}+g${short_node}")
       if(version_dirty)
@@ -43,7 +44,6 @@ function(atris_format_version description archive_node output_variable)
 endfunction()
 
 set(ATRIS_GIT_DESCRIPTION "")
-set(ATRIS_ARCHIVE_NODE "")
 if(EXISTS "${ATRIS_SOURCE_ROOT}/.git")
   execute_process(
     COMMAND git describe --dirty --tags --long --abbrev=40 --match "*[0-9]*"
@@ -56,13 +56,10 @@ endif()
 if(NOT ATRIS_GIT_DESCRIPTION AND EXISTS "${ATRIS_SOURCE_ROOT}/.git_archival.txt")
   file(STRINGS "${ATRIS_SOURCE_ROOT}/.git_archival.txt" ATRIS_ARCHIVE_VERSION
        REGEX "^describe-name: ")
-  file(STRINGS "${ATRIS_SOURCE_ROOT}/.git_archival.txt" ATRIS_ARCHIVE_NODE_LINE
-       REGEX "^node: ")
   string(REPLACE "describe-name: " "" ATRIS_GIT_DESCRIPTION "${ATRIS_ARCHIVE_VERSION}")
-  string(REPLACE "node: " "" ATRIS_ARCHIVE_NODE "${ATRIS_ARCHIVE_NODE_LINE}")
 endif()
 
-atris_format_version("${ATRIS_GIT_DESCRIPTION}" "${ATRIS_ARCHIVE_NODE}" ATRIS_VERSION)
+atris_format_version("${ATRIS_GIT_DESCRIPTION}" ATRIS_VERSION)
 message(STATUS "AtRIS version: ${ATRIS_VERSION}")
 
 set(ATRIS_HEADERS
