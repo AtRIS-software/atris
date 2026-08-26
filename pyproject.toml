@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atris-tools"
-version = "0.0.0"
+version = "3.1.0"
 description = "Python preparation and post-processing tools for AtRIS"
 dependencies = [
     "ipython",
