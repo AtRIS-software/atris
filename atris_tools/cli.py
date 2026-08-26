@@ -3,7 +3,6 @@
 import argparse
 from importlib import import_module
 from importlib.metadata import version
-import os
 import subprocess
 import sys
 
@@ -55,11 +54,9 @@ def versions_match(tools_version, executable_version):
 
 
 def warn_version_mismatch(tools_version):
-    executable = os.environ.get("ATRIS_EXECUTABLE", "AtRIS")
-
     try:
         result = subprocess.run(
-            [executable, "--version"],
+            ["AtRIS", "--version"],
             capture_output=True,
             text=True,
             check=False,
