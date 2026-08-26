@@ -1,9 +1,11 @@
 #!/bin/bash
 
-# This is the normal Slurm wrapper for AtRIS. Submit it as an array job from a
-# prepared run directory containing chunks.txt, the shared proton/alpha inputs,
-# and the chunks/ directory created by atrismacrogen --runs. The shell submitted
-# to Slurm must already have ATRIS_EXECUTABLE and the Geant4 environment set.
+# This is the recommended Slurm wrapper for AtRIS. It divides the work into
+# independently seeded array tasks so completed work survives timeouts and
+# failed tasks can be resubmitted. Submit it from a prepared run directory
+# containing chunks.txt, the shared proton/alpha inputs, and the chunks/
+# directory created by atrismacrogen --runs. The shell submitted to Slurm must
+# already have ATRIS_EXECUTABLE and the Geant4 environment set.
 
 #SBATCH --job-name=atris
 #SBATCH --nodes=1
