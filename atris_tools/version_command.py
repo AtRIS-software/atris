@@ -39,13 +39,13 @@ def main():
     output = result.stdout.strip() if result is not None else ""
     if result is None or result.returncode != 0 or not output.startswith("AtRIS "):
         print("AtRIS executable version: unavailable")
-        print("atris-tools version: " + tools_version)
+        print("atris-tools version:      " + tools_version)
         print("Warning: could not determine the AtRIS executable version.", file=sys.stderr)
         return
 
     executable_version = output[len("AtRIS "):]
     print("AtRIS executable version: " + executable_version)
-    print("atris-tools version: " + tools_version)
+    print("atris-tools version:      " + tools_version)
     if not versions_match(tools_version, executable_version):
         print(
             "Warning: the AtRIS executable was built from a different source "
