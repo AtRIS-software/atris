@@ -47,7 +47,7 @@ def versions_match(tools_version, executable_version):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Show the AtRIS and atris-tools versions and compare their source revisions."
+        description="Show the AtRIS and atris-tools versions in PEP 440 format and compare their source revisions."
     )
     parser.parse_args()
 
@@ -66,15 +66,15 @@ def main():
 
     output = result.stdout.strip() if result is not None else ""
     if result is None or result.returncode != 0 or not output.startswith("AtRIS "):
-        print("AtRIS executable version: unavailable")
-        print("atris-tools version:      " + displayed_tools_version)
+        print("AtRIS executable version (PEP 440): unavailable")
+        print("atris-tools version (PEP 440):      " + displayed_tools_version)
         print("Warning: could not determine the AtRIS executable version.", file=sys.stderr)
         return
 
     executable_version = output[len("AtRIS "):]
     displayed_executable_version = git_describe_to_pep440(executable_version)
-    print("AtRIS executable version: " + displayed_executable_version)
-    print("atris-tools version:      " + displayed_tools_version)
+    print("AtRIS executable version (PEP 440): " + displayed_executable_version)
+    print("atris-tools version (PEP 440):      " + displayed_tools_version)
     if not versions_match(tools_version, executable_version):
         print(
             "Warning: the AtRIS executable was built from a different source "
