@@ -7,15 +7,7 @@ import sys
 
 
 def versions_match(tools_version, executable_version):
-    executable_version = executable_version.lstrip("v")
-    if "-g" not in executable_version:
-        return tools_version == executable_version
-
-    executable_commit = executable_version.rsplit("-g", 1)[1].split("-", 1)[0]
-    if "+g" not in tools_version:
-        return False
-    tools_commit = tools_version.split("+g", 1)[1].split(".", 1)[0]
-    return tools_commit.startswith(executable_commit)
+    return tools_version == executable_version
 
 
 def main():

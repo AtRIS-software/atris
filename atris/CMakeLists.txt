@@ -5,23 +5,64 @@ project(AtRIS LANGUAGES CXX)
 find_package(Geant4 REQUIRED COMPONENTS gdml multithreaded)
 
 get_filename_component(ATRIS_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
-set(ATRIS_VERSION "unknown")
+
+# Format Git metadata like setuptools-scm's default Python package version.
+function(atris_format_version description archive_node output_variable)
+  set(formatted_version "unknown")
+
+  if(description MATCHES "^v?([0-9]+)\\.([0-9]+)\\.([0-9]+)-([0-9]+)-g([0-9a-f]+)(-dirty)?$")
+    set(version_major "${CMAKE_MATCH_1}")
+    set(version_minor "${CMAKE_MATCH_2}")
+    set(version_patch "${CMAKE_MATCH_3}")
+    set(version_distance "${CMAKE_MATCH_4}")
+    set(version_node "${CMAKE_MATCH_5}")
+    set(version_dirty "${CMAKE_MATCH_6}")
+
+    if(archive_node MATCHES "^[0-9a-f]+$")
+      set(version_node "${archive_node}")
+    endif()
+
+    if(version_distance EQUAL 0 AND NOT version_dirty)
+      set(formatted_version "${version_major}.${version_minor}.${version_patch}")
+    else()
+      math(EXPR next_patch "${version_patch} + 1")
+      # setuptools-scm formats a Git node as "g" followed by nine hash characters.
+      string(SUBSTRING "${version_node}" 0 9 short_node)
+      set(formatted_version
+          "${version_major}.${version_minor}.${next_patch}.dev${version_distance}+g${short_node}")
+      if(version_dirty)
+        string(TIMESTAMP dirty_date "%Y%m%d" UTC)
+        string(APPEND formatted_version ".d${dirty_date}")
+      endif()
+    endif()
+  elseif(description MATCHES "^v?([0-9]+\\.[0-9]+\\.[0-9]+)$")
+    set(formatted_version "${CMAKE_MATCH_1}")
+  endif()
+
+  set(${output_variable} "${formatted_version}" PARENT_SCOPE)
+endfunction()
+
+set(ATRIS_GIT_DESCRIPTION "")
+set(ATRIS_ARCHIVE_NODE "")
 if(EXISTS "${ATRIS_SOURCE_ROOT}/.git")
   execute_process(
-    COMMAND git describe --tags --always --dirty
+    COMMAND git describe --dirty --tags --long --abbrev=40 --match "*[0-9]*"
     WORKING_DIRECTORY "${ATRIS_SOURCE_ROOT}"
-    OUTPUT_VARIABLE ATRIS_VERSION
+    OUTPUT_VARIABLE ATRIS_GIT_DESCRIPTION
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET
   )
-elseif(EXISTS "${ATRIS_SOURCE_ROOT}/.git_archival.txt")
+endif()
+if(NOT ATRIS_GIT_DESCRIPTION AND EXISTS "${ATRIS_SOURCE_ROOT}/.git_archival.txt")
   file(STRINGS "${ATRIS_SOURCE_ROOT}/.git_archival.txt" ATRIS_ARCHIVE_VERSION
        REGEX "^describe-name: ")
-  string(REPLACE "describe-name: " "" ATRIS_VERSION "${ATRIS_ARCHIVE_VERSION}")
+  file(STRINGS "${ATRIS_SOURCE_ROOT}/.git_archival.txt" ATRIS_ARCHIVE_NODE_LINE
+       REGEX "^node: ")
+  string(REPLACE "describe-name: " "" ATRIS_GIT_DESCRIPTION "${ATRIS_ARCHIVE_VERSION}")
+  string(REPLACE "node: " "" ATRIS_ARCHIVE_NODE "${ATRIS_ARCHIVE_NODE_LINE}")
 endif()
-if(NOT ATRIS_VERSION OR ATRIS_VERSION MATCHES "\\$Format")
-  set(ATRIS_VERSION "unknown")
-endif()
+
+atris_format_version("${ATRIS_GIT_DESCRIPTION}" "${ATRIS_ARCHIVE_NODE}" ATRIS_VERSION)
 message(STATUS "AtRIS version: ${ATRIS_VERSION}")
 
 set(ATRIS_HEADERS
