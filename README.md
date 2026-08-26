@@ -192,14 +192,8 @@ sbatch --array=1-40 "$ATRIS_ROOT/examples/run-atris.slurm.sh"
 Each successful repetition writes a `COMPLETE` marker. Submitting the same
 array again skips completed repetitions and reruns the rest.
 
-The same wrapper can run every plan entry sequentially outside Slurm. Run it
-with Bash from the run directory:
-
-```bash
-bash "$ATRIS_ROOT/examples/run-atris.slurm.sh"
-```
-
-Pass a one-based `chunks.txt` line number to run only that entry.
+For convenience, the wrapper can also be run with Bash; it processes the plan
+sequentially and accepts an optional one-based `chunks.txt` line number.
 
 Gather whichever repetitions have completed so far into ordinary proton and
 alpha CSV outputs in the run directory:
@@ -220,11 +214,7 @@ sbatch "$ATRIS_ROOT/examples/run-atris-singleton.slurm.sh"
 
 The singleton job runs protons and alphas sequentially and writes their
 ordinary outputs directly. It does not use `chunks.txt` or `atris-gather`.
-Outside Slurm, invoke it with Bash from the run directory:
-
-```bash
-bash "$ATRIS_ROOT/examples/run-atris-singleton.slurm.sh"
-```
+It can also be run with Bash for convenience.
 
 ## Inspect the results
 
