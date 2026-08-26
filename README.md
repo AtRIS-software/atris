@@ -109,8 +109,8 @@ counting_phantom0.txt
 
 - `protons.gdml` defines the planet, atmosphere, materials, and sensitive
   layers.
-- `protons.mac` defines the particle source, random seeds, energy distribution,
-  and event count.
+- `protons.mac` defines the particle source, energy distribution, and event
+  count. Ordinary single-run macros also contain their random seeds.
 - `protons.bins` contains the energy values used by the AtRIS output.
 - The phantom pair contains the response matrices used for dose,
   dose-equivalent, and count-rate calculations.
@@ -160,6 +160,47 @@ A completed simulation later reports:
 
 The run directory then contains CSV output files beginning with `protons_` and
 `alphas_`.
+
+### Run independent repetitions with SLURM
+
+To prepare repeated runs instead of one proton and one alpha run, add `--runs`
+when generating the particle inputs. For example, this creates 20 proton and
+20 alpha entries:
+
+```bash
+atrismacrogen \
+  --particles-per-bin 3000 \
+  --alpha-factor 0.66 \
+  --random-seed 12345 \
+  --runs 20
+```
+
+The run directory now contains the shared proton and alpha inputs, an empty
+`chunks/` output directory, and `chunks.txt`. Each line of `chunks.txt` gives a
+simulation name and two random seeds. The generator will not overwrite an
+existing chunk plan or a nonempty `chunks/` directory.
+
+The generic array-job example is
+[`examples/run-atris-chunks.slurm.sh`](examples/run-atris-chunks.slurm.sh).
+Its array indices are one-based and correspond to lines in `chunks.txt`. The
+example above has 40 lines, so it can be submitted from the run directory with:
+
+```bash
+sbatch --array=1-40 "$ATRIS_ROOT/examples/run-atris-chunks.slurm.sh"
+```
+
+Each successful repetition writes a `COMPLETE` marker. Submitting the same
+array again skips completed repetitions and reruns the rest.
+
+Gather whichever repetitions have completed so far into ordinary proton and
+alpha CSV outputs in the run directory:
+
+```bash
+atris-gather
+```
+
+Running `atris-gather` again replaces those files with a new aggregate of all
+repetitions complete at that time.
 
 ## Inspect the results
 
