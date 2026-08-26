@@ -11,8 +11,9 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 from . import simtools
 
 
-def main():
+def main(argv=None, prog=None):
     parser = argparse.ArgumentParser(
+        prog=prog,
         description="Post-process AtRIS output and create PDF plots."
     )
     parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
@@ -22,7 +23,7 @@ def main():
         default=("protons", "alphas"),
         help="Simulation prefixes to process.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     run_directory = args.run_directory.expanduser().resolve()
     if not run_directory.is_dir():

@@ -16,13 +16,14 @@ def convert_nrlmsis(input_path):
     return Path.cwd() / "simulation.psf"
 
 
-def main():
+def main(argv=None, prog=None):
     """Run the NRLMSIS-to-PSF command."""
     parser = argparse.ArgumentParser(
+        prog=prog,
         description="Convert a downloaded NASA NRLMSIS table to simulation.psf."
     )
     parser.add_argument("nrlmsis_output", type=Path, help="Downloaded NRLMSIS text file.")
-    convert_nrlmsis(parser.parse_args().nrlmsis_output)
+    convert_nrlmsis(parser.parse_args(argv).nrlmsis_output)
 
 
 if __name__ == "__main__":

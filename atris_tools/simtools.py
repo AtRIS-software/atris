@@ -727,12 +727,13 @@ def psf2gdml():
     gdml_compile(mat,wrld,geom,struct,'simulation.gdml')
 
 
-def psf2gdml_main():
+def psf2gdml_main(argv=None, prog=None):
     """Convert simulation.psf in the current directory to simulation.gdml."""
     parser = argparse.ArgumentParser(
+        prog=prog,
         description="Convert simulation.psf to simulation.gdml in the current directory."
     )
-    parser.parse_args()
+    parser.parse_args(argv)
     psf2gdml()
 
 

@@ -173,9 +173,12 @@ def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",rand
         createChunkPlan(output_dir, runs, rng)
 
 
-def main():
+def main(argv=None, prog=None):
     """Run the AtRIS macro-generation command."""
-    parser = argparse.ArgumentParser(description="Generate proton and alpha input files for AtRIS.")
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Generate proton and alpha input files for AtRIS.",
+    )
     parser.add_argument("run_directory", nargs="?", default=".")
     parser.add_argument("--particles-per-bin", type=int, default=3000)
     parser.add_argument("--alpha-factor", type=float, default=0.66)
@@ -184,7 +187,7 @@ def main():
     parser.add_argument("--energy-max-power", type=float, default=6.0, help="Base-10 power of the maximum energy in MeV.")
     parser.add_argument("--energy-points", type=int, default=121)
     parser.add_argument("--runs", type=int, help="Prepare this many independent proton and alpha runs.")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     macroGenManager(
         args.particles_per_bin,
         args.alpha_factor,

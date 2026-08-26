@@ -106,6 +106,9 @@ These tests exercise the supported workflow and may take longer.
   chunk, and verify that the final aggregate includes it once.
 - Install the Python package in a clean environment and run each documented
   command-line entry point.
+- Verify that each legacy command and its unified `atris` subcommand reach the
+  same implementation and accept the same arguments.
+- Verify top-level and per-command help for the unified `atris` interface.
 - Follow `INSTALL.md` and `README.md` from a clean workspace as a release
   acceptance test.
 - Submit a small array on a supported HPC system as a manual release test.

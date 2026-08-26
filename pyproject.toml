@@ -15,6 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
+atris = "atris_tools.cli:main"
 nrlmsis2psf = "atris_tools.nrlmsis2psf:main"
 psf2gdml = "atris_tools.simtools:psf2gdml_main"
 atrismacrogen = "atris_tools.atrismacrogen:main"

@@ -1,8 +1,15 @@
+import argparse
 import numpy as np
-import sys
 
 
-def main():
+def main(argv=None, prog=None):
+    parser = argparse.ArgumentParser(
+        prog=prog,
+        description="Convert AtRIS binary output to ASCII."
+    )
+    parser.add_argument("prefix", help="File path without the .binary suffix.")
+    args = parser.parse_args(argv)
+
     docstr  = "Welcome to bin2ascii, a script which converts your 1.binary and 2.binary data\n"
     docstr += "For data analysis we recomend working with the binary data. Please examine the\n"
     docstr += "code of this script to se how. Binary data reads in approx 30 times faster and\n"
@@ -11,7 +18,7 @@ def main():
     docstr += "that comes before '.binary'\n"
     print(docstr)
     dt      = np.dtype("i4,u2,u2, (2)f4")
-    prefix  = sys.argv[1]
+    prefix  = args.prefix
     print("### AtRIS: reading binary data....", end="")
     d = np.fromfile(prefix+".binary", dtype = dt)
     print(".........done.")
