@@ -4,8 +4,12 @@
 # independently seeded array tasks so completed work survives timeouts and
 # failed tasks can be resubmitted. Submit it from a prepared run directory
 # containing chunks.txt, the shared proton/alpha inputs, and the chunks/
-# directory created by atrismacrogen --runs. The shell submitted to Slurm must
-# already have ATRIS_EXECUTABLE and the Geant4 environment set.
+# directory created by atrismacrogen --runs. Before using either execution
+# mode, set ATRIS_EXECUTABLE and load the Geant4 environment.
+#
+# Outside Slurm, run this file with Bash from the run directory. With no
+# argument it processes every plan entry sequentially; an optional one-based
+# line number processes only that entry.
 
 #SBATCH --job-name=atris
 #SBATCH --nodes=1
@@ -20,26 +24,36 @@
 set -eu
 set -o pipefail
 
-# SLURM_SUBMIT_DIR is the run directory from which sbatch was invoked.
-cd "$SLURM_SUBMIT_DIR"
+# Use the Slurm submission directory in a batch job and the current directory
+# when invoked directly with Bash.
+cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-# Restrict Geant4 to the CPU cores allocated to this array task.
-export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
+# Under Slurm, restrict Geant4 to the cores allocated to this array task. A
+# direct Bash run keeps the user's existing setting or AtRIS's all-core default.
+if [[ -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
+    export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
+fi
 
-# Array indices are one-based and map directly to lines in chunks.txt. awk
-# fails the task when an index does not have a corresponding plan entry.
-awk -v line="$SLURM_ARRAY_TASK_ID" \
-    'NR == line { print; found = 1 } END { if (!found) exit 1 }' chunks.txt |
+# Slurm array indices and optional Bash arguments are one-based chunks.txt line
+# numbers. Without either, pass every plan entry to the sequential loop.
+task_id="${SLURM_ARRAY_TASK_ID:-${1:-}}"
+if [[ -n "$task_id" ]]; then
+    awk -v line="$task_id" \
+        'NR == line { print; found = 1 } END { if (!found) exit 1 }' chunks.txt
+else
+    awk '{ print }' chunks.txt
+fi |
 while read -r simulation seed1 seed2; do
     # AtRIS extracts the seeds from this output prefix while reading the shared
     # species-named .mac, .gdml, and .bins files from the run directory.
     run_name="${simulation}_${seed1}_${seed2}"
     complete="chunks/${run_name}.COMPLETE"
 
-    # A successful earlier attempt needs no work when the array is resubmitted.
+    # Skip successful earlier attempts while continuing through a direct Bash
+    # run that may contain other unfinished entries.
     if [[ -f "$complete" ]]; then
         echo "$run_name is already complete"
-        exit 0
+        continue
     fi
 
     "$ATRIS_EXECUTABLE" FTFP_BERT_HP "chunks/$run_name" -1 1

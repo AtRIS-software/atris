@@ -76,6 +76,9 @@ The Slurm wrappers can be tested locally with scheduler variables and a stub
 AtRIS executable; most cases do not require Slurm itself.
 
 - Treat `run-atris.slurm.sh` as the default Slurm workflow.
+- Run every unfinished plan entry sequentially when the default wrapper is
+  invoked directly with Bash and no line number.
+- Run only the requested one-based plan entry when Bash receives a line number.
 - Map each one-based array index to the corresponding `chunks.txt` line.
 - Pass the expected physics list, seeded output prefix, mode, and phantom count
   to AtRIS.
@@ -85,7 +88,8 @@ AtRIS executable; most cases do not require Slurm itself.
 - Fail when the array index has no corresponding plan entry.
 - Set `G4FORCENUMBEROFTHREADS` from `SLURM_CPUS_PER_TASK`.
 - Confirm that the singleton wrapper runs the ordinary proton and alpha
-  prefixes sequentially and stops if either invocation fails.
+  prefixes sequentially under Slurm or Bash and stops if either invocation
+  fails.
 
 ## End-To-End Tests
 

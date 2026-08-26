@@ -8,8 +8,10 @@
 # Submit this file from a prepared AtRIS run directory to run one proton and
 # one alpha simulation without chunking. The run must use ordinary macros
 # generated without atrismacrogen --runs so that each macro contains its seeds.
-# The shell submitted to Slurm must already have ATRIS_EXECUTABLE and the Geant4
-# environment set.
+# Before using either execution mode, set ATRIS_EXECUTABLE and load the Geant4
+# environment.
+#
+# Outside Slurm, run this file with Bash from the prepared run directory.
 
 #SBATCH --job-name=atris-single
 #SBATCH --nodes=1
@@ -24,11 +26,15 @@
 # alpha run is not started.
 set -eu
 
-# SLURM_SUBMIT_DIR is the run directory from which sbatch was invoked.
-cd "$SLURM_SUBMIT_DIR"
+# Use the Slurm submission directory in a batch job and the current directory
+# when invoked directly with Bash.
+cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-# Restrict Geant4 to the CPU cores allocated to this job.
-export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
+# Under Slurm, restrict Geant4 to the cores allocated to this job. A direct Bash
+# run keeps the user's existing setting or AtRIS's all-core default.
+if [[ -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
+    export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
+fi
 
 # These runs execute sequentially and write the ordinary protons_* and alphas_*
 # outputs directly. A resubmission starts them again and replaces files with the
