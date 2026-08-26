@@ -20,10 +20,6 @@
 #include <fstream>
 #include <sstream>
 
-#ifndef ATRIS_VERSION
-#define ATRIS_VERSION "unknown"
-#endif
-
 G4String outputFileName;
 G4int    mode = -1;
 G4int    nrofdetectors=0;

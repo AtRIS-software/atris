@@ -104,8 +104,8 @@ def main(argv=None):
         parser.print_help()
         return 0
 
-    tools_version = version("atris-tools")
     if argv == ["--version"]:
+        tools_version = version("atris-tools")
         print("atris-tools " + tools_version)
         warn_version_mismatch(tools_version)
         return 0
@@ -114,7 +114,6 @@ def main(argv=None):
     if command not in COMMANDS:
         parser.error("unknown command: " + command)
 
-    warn_version_mismatch(tools_version)
     _, module_name, function_name = COMMANDS[command]
     command_main = getattr(import_module(module_name), function_name)
     return command_main(argv[1:], prog="atris " + command)
