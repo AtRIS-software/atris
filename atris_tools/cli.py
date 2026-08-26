@@ -55,9 +55,7 @@ def versions_match(tools_version, executable_version):
 
 
 def warn_version_mismatch(tools_version):
-    executable = os.environ.get("ATRIS_EXECUTABLE")
-    if not executable:
-        return
+    executable = os.environ.get("ATRIS_EXECUTABLE", "AtRIS")
 
     try:
         result = subprocess.run(
