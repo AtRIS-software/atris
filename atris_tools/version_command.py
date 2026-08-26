@@ -52,10 +52,11 @@ def main():
             "compare their source revisions."
         ),
         epilog=(
-            "AtRIS --version uses git describe: v3.1.0-5-gabcdef0 means "
-            "five commits after tag v3.1.0. This command renders the same state "
-            "as the PEP 440 version 3.1.1.dev5+gabcdef0, identifying it as a "
-            "development build toward version 3.1.1."
+            "Note that atris-version uses PEP 440 format for the AtRIS version "
+            "string, while the underlying string reported by AtRIS --version "
+            "is in git describe format. For example, v3.1.0-5-gabcdef0 means "
+            "five commits after tag v3.1.0 and is rendered as the PEP 440 version "
+            "3.1.1.dev5+gabcdef0."
         ),
     )
     parser.parse_args()
