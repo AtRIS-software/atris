@@ -44,13 +44,14 @@ def main():
         return
 
     executable_version = output[len("AtRIS "):]
-    print("AtRIS executable version: " + executable_version)
+    displayed_executable_version = executable_version.lstrip("v")
+    print("AtRIS executable version: " + displayed_executable_version)
     print("atris-tools version:      " + tools_version)
     if not versions_match(tools_version, executable_version):
         print(
             "Warning: the AtRIS executable was built from a different source "
             "revision (atris-tools " + tools_version
-            + "; AtRIS " + executable_version + ").",
+            + "; AtRIS " + displayed_executable_version + ").",
             file=sys.stderr,
         )
 
