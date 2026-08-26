@@ -137,14 +137,13 @@ def gather_simulation(run_directory, entries, simulation):
     return len(prefixes)
 
 
-def main(argv=None, prog=None):
+def main():
     parser = argparse.ArgumentParser(
-        prog=prog,
         description="Gather completed AtRIS repetitions into canonical histogram files."
     )
     parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
     parser.add_argument("simulations", nargs="*", default=("protons", "alphas"))
-    args = parser.parse_args(argv)
+    args = parser.parse_args()
 
     run_directory = args.run_directory.expanduser().resolve()
     entries = read_chunk_plan(run_directory)

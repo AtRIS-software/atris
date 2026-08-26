@@ -2,13 +2,12 @@ import argparse
 import numpy as np
 
 
-def main(argv=None, prog=None):
+def main():
     parser = argparse.ArgumentParser(
-        prog=prog,
         description="Convert AtRIS binary output to ASCII."
     )
     parser.add_argument("prefix", help="File path without the .binary suffix.")
-    args = parser.parse_args(argv)
+    args = parser.parse_args()
 
     docstr  = "Welcome to bin2ascii, a script which converts your 1.binary and 2.binary data\n"
     docstr += "For data analysis we recomend working with the binary data. Please examine the\n"

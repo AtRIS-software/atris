@@ -86,10 +86,9 @@ command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
 macro generation, chunk gathering, post-processing, and binary conversion.
 These commands are also importable as Python modules.
 
-The package also provides a unified `atris` command with subcommands for these
-operations. Existing standalone commands remain available for compatibility
-and to preserve the current user documentation. New commands should be added
-only as `atris` subcommands.
+The package uses `atris-*` command names for these operations. Existing
+standalone commands remain available for compatibility and to preserve the
+current user documentation. New commands should use the `atris-` prefix.
 
 For version 3.0, this package should be reorganised into focused modules and
 may be renamed `atris` as shown in the target structure. Atmosphere retrieval,

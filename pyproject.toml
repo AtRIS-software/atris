@@ -15,11 +15,18 @@ dependencies = [
 ]
 
 [project.scripts]
-atris = "atris_tools.cli:main"
+atris-version = "atris_tools.version_command:main"
+atris-nrlmsis-to-psf = "atris_tools.nrlmsis2psf:main"
+atris-psf-to-gdml = "atris_tools.simtools:psf2gdml_main"
+atris-generate-macros = "atris_tools.atrismacrogen:main"
+atris-gather = "atris_tools.gather:main"
+atris-postprocess = "atris_tools.postprocess:main"
+atris-bin-to-ascii = "atris_tools.bin2asci:main"
+
+# Legacy command names.
 nrlmsis2psf = "atris_tools.nrlmsis2psf:main"
 psf2gdml = "atris_tools.simtools:psf2gdml_main"
 atrismacrogen = "atris_tools.atrismacrogen:main"
-atris-gather = "atris_tools.gather:main"
 postprocess = "atris_tools.postprocess:main"
 bin2ascii = "atris_tools.bin2asci:main"
 
