@@ -22,6 +22,8 @@ The goals for version 3.0 are:
 - Protect existing scientific behaviour with numerical regression tests.
 - Make workstation and HPC use follow the same documented input workflow.
 
+The proposed test coverage and test tiers are listed in [TESTS.md](TESTS.md).
+
 ## Current Duplication
 
 The current layout contains duplication and overlapping responsibilities:
@@ -31,9 +33,9 @@ The current layout contains duplication and overlapping responsibilities:
   matrices, variance tables, plots, and a notebook.
 - Byte-level comparison shows that 60 of the 64 numbered runtime matrices are
   copies of named files in `atris/phantoms/`.
-- Atmosphere and geometry preparation currently overlaps between
-  `prepare_psf.py`, `nrlm2psf.py`, `psf2gdml.py`, `simtools.py`, and the
-  temporary `run_atris_bare.py` test harness.
+- Atmosphere and geometry preparation still overlaps between the dedicated
+  `atris_tools/nrlm2psf.py` and `atris_tools/psf2gdml.py` modules and the
+  implementations retained in `atris_tools/simtools.py`.
 - Generated CMake output currently appears under the inner application
   directory at `atris/build/`.
 
@@ -70,6 +72,7 @@ atris/
 ├── README.md
 ├── INSTALL.md
 ├── DEVELOPMENT.md
+├── TESTS.md
 └── LICENSE
 ```
 
@@ -78,17 +81,18 @@ which historical or development files should be retained.
 
 ## Companion Python Package
 
-AtRIS should include an `atris` Python package for the workflow surrounding
-the C++ simulation executable. Atmosphere retrieval, PSF preparation, PSF to
-GDML conversion, macro generation, input validation, simulation launch, and
-post-processing can share tested Python functions instead of duplicating logic
-across unrelated scripts.
+The repository now contains an initial `atris_tools` package. It provides
+command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
+macro generation, chunk gathering, post-processing, and binary conversion.
+These commands are also importable as Python modules.
 
-The package should also provide command-line entry points for normal use, such
-as `atris-prepare-psf`, `atris-psf-to-gdml`, and `atris-run`. The same
-implementation would remain importable for tests and more specialised
-workflows. The C++ executable remains the scientific simulation core; the
-Python package prepares its inputs and manages the surrounding workflow.
+For version 3.0, this package should be reorganised into focused modules and
+may be renamed `atris` as shown in the target structure. Atmosphere retrieval,
+PSF preparation, PSF-to-GDML conversion, macro generation, input validation,
+simulation launch, gathering, and post-processing should share tested Python
+functions instead of duplicating logic. The C++ executable remains the
+scientific simulation core; the Python package prepares its inputs and manages
+the surrounding workflow.
 
 The atmosphere-to-PSF path should move away from pandas. Its current role is
 limited to reading whitespace-separated NRLMSIS output, joining downloaded
@@ -98,9 +102,8 @@ tools. The existing implementation should remain in place until regression
 tests cover the generated PSF files. Pandas may still be useful in
 post-processing code that performs substantial tabular analysis.
 
-Temporary end-to-end harnesses such as `run_atris_bare.py` are not part of the
-supported Python interface. Useful harnesses should be converted into
-reproducible smoke or system tests; those that do not provide lasting test
-coverage should be removed. The repository can contain several focused tests
-covering installation, input preparation, short simulation runs, and complete
-workflows.
+Temporary end-to-end harnesses are not part of the supported Python interface.
+Useful harnesses should be converted into reproducible smoke or system tests;
+those that do not provide lasting test coverage should be removed. The
+repository can contain several focused tests covering installation, input
+preparation, short simulation runs, and complete workflows.
