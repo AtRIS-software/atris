@@ -18,6 +18,7 @@ dependencies = [
 nrlmsis2psf = "atris_tools.nrlmsis2psf:main"
 psf2gdml = "atris_tools.simtools:psf2gdml_main"
 atrismacrogen = "atris_tools.atrismacrogen:main"
+atris-gather = "atris_tools.gather:main"
 postprocess = "atris_tools.postprocess:main"
 bin2ascii = "atris_tools.bin2asci:main"
 

@@ -9,6 +9,7 @@
 #include "Randomize.hh"
 #include "G4PhysListFactory.hh"
 #include "G4StepLimiterPhysics.hh"
+#include <array>
 #include <vector>
 #include <string>
 #include <cstddef>
@@ -43,6 +44,39 @@ G4bool atrisverbose = false;
 // functions of main
 void Phantoms(G4int howmany);
 void determine_nrofdetectors(G4String fname);
+
+struct SimulationRun {
+	G4String inputPrefix;
+	std::array<G4long, 3> seeds = {0, 0, 0}; // CLHEP expects two seeds followed by a zero terminator.
+	G4bool hasSeeds = false;
+};
+
+SimulationRun parseSimulationRun(const G4String& argument) {
+	SimulationRun run;
+	run.inputPrefix = argument;
+
+	std::string path = argument.c_str();
+	std::size_t pathSeparator = path.find_last_of("/\\");
+	std::string name = pathSeparator == std::string::npos
+	                     ? path
+	                     : path.substr(pathSeparator + 1);
+	std::size_t secondSeparator = name.rfind('_');
+	if (secondSeparator == std::string::npos) return run;
+	std::size_t firstSeparator = name.rfind('_', secondSeparator - 1);
+	if (firstSeparator == std::string::npos || firstSeparator == 0) return run;
+
+	std::string firstSeed = name.substr(firstSeparator + 1, secondSeparator - firstSeparator - 1);
+	std::string secondSeed = name.substr(secondSeparator + 1);
+	if (firstSeed.size() != 6 || secondSeed.size() != 6) return run;
+	if (firstSeed.find_first_not_of("0123456789") != std::string::npos) return run;
+	if (secondSeed.find_first_not_of("0123456789") != std::string::npos) return run;
+
+	run.inputPrefix = name.substr(0, firstSeparator);
+	run.seeds[0] = std::stol(firstSeed);
+	run.seeds[1] = std::stol(secondSeed);
+	run.hasSeeds = true;
+	return run;
+}
 
 
 
@@ -80,15 +114,16 @@ int main(int argc,char** argv){
 	G4cout << "\t\t "<< prefix <<".error\t\t::       error stream file" << G4endl;
 	*/
 	Phantoms(nrphantoms);
+	SimulationRun simulation = parseSimulationRun(argv[2]);
 	outputFileName    = argv[2];
-	G4String gdmlname = outputFileName+".gdml"; 
+	G4String gdmlname = simulation.inputPrefix+".gdml";
 	determine_nrofdetectors(gdmlname);
 	G4cout << "### AtRIS: Generating detbins with the determined number of detectors" << G4endl;
 	for(int i=0;i<=nrofdetectors;i++){
 		detbins.push_back(i-0.5);
 	}
 	// Create the enbinsa for the histograms
-	G4String binedgesFile = G4String (argv[2])+".bins";
+	G4String binedgesFile = simulation.inputPrefix+".bins";
 	G4double newbinedge = 0;
 	std::ifstream is(binedgesFile);
 	G4int j=0;
@@ -103,6 +138,11 @@ int main(int argc,char** argv){
 	G4UImanager * UImanager	= G4UImanager::GetUIpointer();
 	G4Random::setTheEngine(new CLHEP::MTwistEngine); // Choose the Random engine
 	G4MTRunManager *runManager = new G4MTRunManager;   // Instantiate the run manager
+	if (simulation.hasSeeds) {
+		G4Random::setTheSeeds(simulation.seeds.data());
+		G4cout << "### AtRIS: using random seeds " << simulation.seeds[0]
+		       << " and " << simulation.seeds[1] << G4endl;
+	}
 	if (std::getenv("G4FORCENUMBEROFTHREADS") == nullptr) {
 		runManager->SetNumberOfThreads(G4Threading::G4GetNumberOfCores());
 	}
@@ -142,7 +182,7 @@ int main(int argc,char** argv){
 
 
 	// Get the pointer to the user interface manager and start the batch mode
-	G4String tempString             ="/control/execute "+G4String (argv[2])+".mac";
+	G4String tempString             ="/control/execute "+simulation.inputPrefix+".mac";
 	G4cout << "### AtRIS: Starting the simulation " << G4endl;
 	G4int commandStatus = UImanager->ApplyCommand(tempString);
 	G4cout << "### AtRIS: simulation used " << runManager->GetNumberOfThreads() << " worker thread(s)" << G4endl;
