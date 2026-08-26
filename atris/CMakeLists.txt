@@ -4,6 +4,18 @@ project(AtRIS LANGUAGES CXX)
 
 find_package(Geant4 REQUIRED COMPONENTS gdml multithreaded)
 
+execute_process(
+  COMMAND git describe --tags --always --dirty
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  OUTPUT_VARIABLE ATRIS_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+)
+if(NOT ATRIS_VERSION)
+  set(ATRIS_VERSION "unknown")
+endif()
+message(STATUS "AtRIS version: ${ATRIS_VERSION}")
+
 set(ATRIS_HEADERS
   include/DetectorConstruction.hh
   include/HistoManager.hh
@@ -27,6 +39,7 @@ add_executable(AtRIS)
 target_sources(AtRIS PRIVATE ${ATRIS_SOURCES} ${ATRIS_HEADERS})
 target_include_directories(AtRIS PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(AtRIS PRIVATE ${Geant4_LIBRARIES})
+target_compile_definitions(AtRIS PRIVATE ATRIS_VERSION="${ATRIS_VERSION}")
 target_compile_features(AtRIS PRIVATE cxx_std_17)
 set_property(TARGET AtRIS PROPERTY CXX_EXTENSIONS OFF)
 target_compile_options(AtRIS PRIVATE

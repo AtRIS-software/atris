@@ -20,6 +20,9 @@
 #include <fstream>
 #include <sstream>
 
+#ifndef ATRIS_VERSION
+#define ATRIS_VERSION "unknown"
+#endif
 
 G4String outputFileName;
 G4int    mode = -1;
@@ -81,6 +84,10 @@ SimulationRun parseSimulationRun(const G4String& argument) {
 
 
 int main(int argc,char** argv){
+	if (argc == 2 && std::string(argv[1]) == "--version") {
+		std::cout << "AtRIS " << ATRIS_VERSION << '\n';
+		return 0;
+	}
 	if (argc != 5){
 		G4cout << "Usage: " << argv[0]
 		       << " <physics-list> <simulation-name> <mode> <phantom-count>" << G4endl;
