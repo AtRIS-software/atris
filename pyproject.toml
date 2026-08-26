@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=80", "setuptools-scm[simple]~=10.2"]
+requires = ["setuptools>=80", "setuptools-scm[simple]>=9.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -35,7 +35,3 @@ packages = ["atris_tools"]
 
 [tool.setuptools.package-data]
 atris_tools = ["data/*"]
-
-[tool.setuptools_scm]
-version_scheme = "guess-next-dev"
-local_scheme = "node-and-date"

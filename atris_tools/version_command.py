@@ -7,7 +7,15 @@ import sys
 
 
 def versions_match(tools_version, executable_version):
-    return tools_version == executable_version
+    executable_version = executable_version.lstrip("v")
+    if "-g" not in executable_version:
+        return tools_version == executable_version
+
+    executable_commit = executable_version.rsplit("-g", 1)[1].split("-", 1)[0]
+    if "+g" not in tools_version:
+        return False
+    tools_commit = tools_version.split("+g", 1)[1].split(".", 1)[0]
+    return tools_commit.startswith(executable_commit)
 
 
 def main():
@@ -38,8 +46,9 @@ def main():
     executable_version = output[len("AtRIS "):]
     if not versions_match(tools_version, executable_version):
         print(
-            "Warning: atris-tools " + tools_version
-            + " does not match AtRIS " + executable_version + ".",
+            "Warning: the AtRIS executable was built from a different source "
+            "revision (atris-tools " + tools_version
+            + "; AtRIS " + executable_version + ").",
             file=sys.stderr,
         )
 
