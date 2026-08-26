@@ -161,11 +161,11 @@ A completed simulation later reports:
 The run directory then contains CSV output files beginning with `protons_` and
 `alphas_`.
 
-### Run independent repetitions with SLURM
+### Run with SLURM
 
-To prepare repeated runs instead of one proton and one alpha run, add `--runs`
-when generating the particle inputs. For example, this creates 20 proton and
-20 alpha entries:
+Chunked repetitions are the normal way to run AtRIS with Slurm. Add `--runs`
+when generating the particle inputs. For example, this creates 20 proton and 20
+alpha entries:
 
 ```bash
 atrismacrogen \
@@ -180,13 +180,13 @@ The run directory now contains the shared proton and alpha inputs, an empty
 simulation name and two random seeds. The generator will not overwrite an
 existing chunk plan or a nonempty `chunks/` directory.
 
-The generic array-job example is
-[`examples/run-atris-chunks.slurm.sh`](examples/run-atris-chunks.slurm.sh).
-Its array indices are one-based and correspond to lines in `chunks.txt`. The
-example above has 40 lines, so it can be submitted from the run directory with:
+The array-job wrapper is
+[`examples/run-atris.slurm.sh`](examples/run-atris.slurm.sh). Its array indices
+are one-based and correspond to lines in `chunks.txt`. The example above has 40
+lines, so it can be submitted from the run directory with:
 
 ```bash
-sbatch --array=1-40 "$ATRIS_ROOT/examples/run-atris-chunks.slurm.sh"
+sbatch --array=1-40 "$ATRIS_ROOT/examples/run-atris.slurm.sh"
 ```
 
 Each successful repetition writes a `COMPLETE` marker. Submitting the same
@@ -201,6 +201,16 @@ atris-gather
 
 Running `atris-gather` again replaces those files with a new aggregate of all
 repetitions complete at that time.
+
+For a single non-array Slurm job, generate ordinary macros without `--runs`
+and submit the singleton wrapper instead:
+
+```bash
+sbatch "$ATRIS_ROOT/examples/run-atris-singleton.slurm.sh"
+```
+
+The singleton job runs protons and alphas sequentially and writes their
+ordinary outputs directly. It does not use `chunks.txt` or `atris-gather`.
 
 ## Inspect the results
 

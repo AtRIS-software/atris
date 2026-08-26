@@ -70,11 +70,12 @@ should use one worker and very few primary particles.
   and worker count to determine whether their raw histograms are exactly
   reproducible.
 
-## Wrapper Tests
+## Slurm Wrapper Tests
 
-The Slurm wrapper can be tested locally with scheduler variables and a stub
+The Slurm wrappers can be tested locally with scheduler variables and a stub
 AtRIS executable; most cases do not require Slurm itself.
 
+- Treat `run-atris.slurm.sh` as the default Slurm workflow.
 - Map each one-based array index to the corresponding `chunks.txt` line.
 - Pass the expected physics list, seeded output prefix, mode, and phantom count
   to AtRIS.
@@ -83,6 +84,8 @@ AtRIS executable; most cases do not require Slurm itself.
 - Skip a chunk that already has a completion marker.
 - Fail when the array index has no corresponding plan entry.
 - Set `G4FORCENUMBEROFTHREADS` from `SLURM_CPUS_PER_TASK`.
+- Confirm that the singleton wrapper runs the ordinary proton and alpha
+  prefixes sequentially and stops if either invocation fails.
 
 ## End-To-End Tests
 
