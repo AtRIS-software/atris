@@ -163,22 +163,18 @@ The run directory then contains CSV output files beginning with `protons_` and
 
 ### Run with SLURM
 
-Chunked repetitions are the normal way to run AtRIS with Slurm. Add `--runs`
-when generating the particle inputs. For example, this creates 20 proton and 20
-alpha entries:
+Chunked execution is the normal way to run AtRIS with Slurm. After generating
+the ordinary particle inputs, scatter them into 20 proton and 20 alpha chunks:
 
 ```bash
-atrismacrogen \
-  --particles-per-bin 3000 \
-  --alpha-factor 0.66 \
-  --random-seed 12345 \
-  --runs 20
+atris-scatter --chunks 20 --random-seed 12345
 ```
 
-The run directory now contains the shared proton and alpha inputs, an empty
-`chunks/` output directory, and `chunks.txt`. Each line of `chunks.txt` gives a
-simulation name and two random seeds. The generator will not overwrite an
-existing chunk plan or a nonempty `chunks/` directory.
+This creates seed-free `protons.chunk.mac` and `alphas.chunk.mac` variants, an
+empty `chunks/` output directory, and `chunks.txt`. The ordinary macros are not
+changed and remain available for single runs. Each line of `chunks.txt` gives a
+particle species and two random seeds. `atris-scatter` will not overwrite an
+existing plan, chunk macro, or nonempty `chunks/` directory.
 
 The array-job wrapper is
 [`examples/run-atris.slurm.sh`](examples/run-atris.slurm.sh). Its array indices
@@ -195,18 +191,17 @@ array again skips completed repetitions and reruns the rest.
 For convenience, the wrapper can also be run with Bash; it processes the plan
 sequentially and accepts an optional one-based `chunks.txt` line number.
 
-Gather whichever repetitions have completed so far into ordinary proton and
-alpha CSV outputs in the run directory:
+Gather whichever chunks have completed so far into ordinary proton and alpha
+CSV outputs in the run directory:
 
 ```bash
 atris-gather
 ```
 
 Running `atris-gather` again replaces those files with a new aggregate of all
-repetitions complete at that time.
+chunks complete at that time.
 
-For a single non-array Slurm job, generate ordinary macros without `--runs`
-and submit the singleton wrapper instead:
+For a single non-array Slurm job, submit the singleton wrapper instead:
 
 ```bash
 sbatch "$ATRIS_ROOT/examples/run-atris-singleton.slurm.sh"

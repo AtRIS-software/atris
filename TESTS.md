@@ -23,12 +23,12 @@ change.
 
 - Generate exactly the requested number of proton and alpha chunk entries.
 - Generate unique, six-digit seed pairs and reproduce the same plan when the
-  macro generator receives the same random seed.
-- Leave chunked shared macros free of `/random/setSeeds` while retaining seeds
-  in ordinary single-run macros.
+  scatter command receives the same random seed.
+- Leave ordinary macros unchanged and create `.chunk.mac` variants without
+  `/random/setSeeds`.
 - Preserve the requested event count in both chunked and ordinary macros.
 - Create an empty `chunks/` directory and refuse to overwrite an existing
-  `chunks.txt` or a nonempty `chunks/` directory.
+  `chunks.txt`, chunk macro, or nonempty `chunks/` directory.
 - Verify that destination refusal happens before existing macros are changed.
 - Accept an existing empty `chunks/` directory.
 - Parse valid `chunks.txt` entries and reject malformed lines with the correct
@@ -59,7 +59,9 @@ should use one worker and very few primary particles.
   writes the ordinary simulation prefix.
 - Run a six-digit seeded output prefix such as
   `chunks/protons_123456_654321` and confirm that AtRIS reads `protons.gdml`,
-  `protons.mac`, and `protons.bins` from the run root.
+  `protons.chunk.mac`, and `protons.bins` from the run root.
+- Confirm that an older chunk setup without `protons.chunk.mac` falls back to
+  `protons.mac`.
 - Confirm that the two suffix seeds are reported and that all histogram files
   are written under the seeded chunk prefix.
 - Confirm that a name without two six-digit suffixes retains the original

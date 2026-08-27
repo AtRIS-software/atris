@@ -4,7 +4,7 @@
 # independently seeded array tasks so completed work survives timeouts and
 # failed tasks can be resubmitted. Submit it from a prepared run directory
 # containing chunks.txt, the shared proton/alpha inputs, and the chunks/
-# directory created by atrismacrogen --runs. Before using either execution
+# directory created by atris-scatter. Before using either execution
 # mode, set ATRIS_EXECUTABLE and load the Geant4 environment.
 #
 # Outside Slurm, run this file with Bash from the run directory. With no
@@ -45,7 +45,7 @@ else
 fi |
 while read -r simulation seed1 seed2; do
     # AtRIS extracts the seeds from this output prefix while reading the shared
-    # species-named .mac, .gdml, and .bins files from the run directory.
+    # species-named .chunk.mac, .gdml, and .bins files from the run directory.
     run_name="${simulation}_${seed1}_${seed2}"
     complete="chunks/${run_name}.COMPLETE"
 

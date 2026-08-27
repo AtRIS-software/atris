@@ -83,7 +83,8 @@ which historical or development files should be retained.
 
 The repository now contains an initial `atris_tools` package. It provides
 command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
-macro generation, chunk gathering, post-processing, and binary conversion.
+macro generation, chunk scattering and gathering, post-processing, and binary
+conversion.
 These commands are also importable as Python modules.
 
 The package uses `atris-*` command names for these operations. Existing
