@@ -1,22 +1,20 @@
 import argparse
-import requests
-import pandas as pd
-import io
-import numpy as np
-import os
-import re
-import requests
 import datetime
 import hashlib
+import io
 import json
-import shlex
-from . import atrismacrogen as amg
-import subprocess
-from IPython.display import clear_output
-import time
+import os
+import re
+import warnings
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-import warnings
+import numpy as np
+import pandas as pd
+import requests
+
+from . import atrismacrogen as amg
+
 warnings.filterwarnings('ignore')
 #pd.set_option('display.max_rows', 1000)
 
@@ -802,61 +800,6 @@ def gen_macros(rootdir,number,alpha_factor):
     print("Simulation macros and files for protons and alphas have been created. The simulation can be started.")
 
 
-def resolve_geant4_setup_script(rootdir):
-    candidates = []
-    geant4_sh = os.environ.get("GEANT4_SH")
-    geant4_install_dir = os.environ.get("GEANT4_INSTALL_DIR")
-    if geant4_sh:
-        candidates.append(geant4_sh)
-    if geant4_install_dir:
-        candidates.append(os.path.join(geant4_install_dir, "bin", "geant4.sh"))
-    candidates.append(os.path.join(rootdir, "install", "bin", "geant4.sh"))
-    for candidate in candidates:
-        if candidate and os.path.exists(candidate):
-            return candidate
-    return None
-    
-def start_sim(rootdir,simname,physlist):
-    os.chdir(rootdir+'atris/simulation/')
-    os.system('rm -f ./%s.log'%simname)
-    print('the %s simulation is starting using the following command:'%simname)
-    command      = './AtRIS '+physlist+' '+simname+' -1 32 > ' + simname + ".log"
-    geant4_sh = resolve_geant4_setup_script(rootdir)
-    if geant4_sh is not None:
-        command = "source " + shlex.quote(geant4_sh) + "; " + command
-    else:
-        print("No geant4.sh found via GEANT4_SH, GEANT4_INSTALL_DIR, or rootdir/install/bin/geant4.sh.")
-        print("Proceeding without sourcing Geant4 from simtools.py.")
-    print(command)
-    #subprocess.run(command, shell=True)
-    subprocess.Popen(command,shell=True)
-    print('Now we start simulation monitoring and wait for finish')
-
-def monitor_process(simname):
-    result = subprocess.check_output(['tail', '-n4', './%s.log'%simname]).decode('utf-8')
-    #while result.splitlines()[-1] != "sasa":
-    return(result)
-    
-def monitor_sim(simname):
-    lastResultLine = ""
-    expected       = "Sasa"
-    old_result     = ""
-    while lastResultLine != expected:
-        time.sleep(5)
-        results = monitor_process(simname)
-        if old_result != results:
-            clear_output(wait=False)
-            print(results)
-            old_result = results
-            if results.split('\n')[-2][-4:]=='ed. ':
-                lastResultLine = "Sasa"
-                if simname == "protons":
-                    print(simname, " simulation has finished at least one thread. It will take 5 more minutes to finish all threads. You can proceed with the alpha simulations.")
-                elif simname == "alphas":
-                    print(simname, " simulation has finished at least one thread. It will take 5 more minutes to finish all threads. Now it is time to postprocess the data.")
-
-    
-    
 if __name__ == "__main__":
     #simprep_manager(1999,11,17,12.5,23,-33,0,100,1.)
     copy_sim_files()

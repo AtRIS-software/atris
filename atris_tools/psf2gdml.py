@@ -1,8 +1,9 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import re
 import os
-import sys 
+import re
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
 
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 

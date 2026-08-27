@@ -62,12 +62,13 @@ How to use:
 """
 # Energy is constant
 import argparse
+import os
 import random
 import shutil
-import numpy as np
-import os
-import sys
 import subprocess
+import sys
+
+import numpy as np
 
 def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,output_dir="./atris/simulation"):
     lines =  ""
