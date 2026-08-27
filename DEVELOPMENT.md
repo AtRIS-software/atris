@@ -33,9 +33,6 @@ The current layout contains duplication and overlapping responsibilities:
   matrices, variance tables, plots, and a notebook.
 - Byte-level comparison shows that 60 of the 64 numbered runtime matrices are
   copies of named files in `phantoms-archive/`.
-- Atmosphere and geometry preparation still overlaps between the dedicated
-  `atris_tools/nrlm2psf.py` and `atris_tools/psf2gdml.py` modules and the
-  implementations retained in `atris_tools/simtools.py`.
 - Generated CMake output currently appears under the inner application
   directory at `atris/build/`.
 
@@ -91,13 +88,11 @@ The package uses `atris-*` command names for these operations. Existing
 standalone commands remain available for compatibility and to preserve the
 current user documentation. New commands should use the `atris-` prefix.
 
-For version 3.0, this package should be reorganised into focused modules and
-may be renamed `atris` as shown in the target structure. Atmosphere retrieval,
-PSF preparation, PSF-to-GDML conversion, macro generation, input validation,
-simulation launch, gathering, and post-processing should share tested Python
-functions instead of duplicating logic. The C++ executable remains the
-scientific simulation core; the Python package prepares its inputs and manages
-the surrounding workflow.
+The package now separates atmosphere preparation, PSF-to-GDML conversion,
+macro generation, chunk management, numerical post-processing, and plotting.
+For version 3.0, it may be renamed `atris` as shown in the target structure.
+The C++ executable remains the scientific simulation core; the Python package
+prepares its inputs and manages the surrounding workflow.
 
 Temporary end-to-end harnesses are not part of the supported Python interface.
 Useful harnesses should be converted into reproducible smoke or system tests;
