@@ -51,7 +51,6 @@ jobs:
       CXX: g++-13
       GEANT4_VERSION: "11.4.2"
       GEANT4_SOURCE_SHA256: f9d5c7d108ae6be644d12997e0289e23e5d2da18df1cab9aaacd9b76412dfec6
-      GEANT4_INSTALL_PREFIX: ${{ github.workspace }}/../geant4-v11.4.2/install
       GEANT4_CACHE_KEY: geant4-ubuntu-24.04-x64-gcc13-11.4.2-gdml-mt-data-v1
 
     steps:
@@ -63,11 +62,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes cmake gcc-13 g++-13 libxerces-c-dev
 
+      - name: Configure Geant4 installation path
+        id: geant4-path
+        run: |
+          install_prefix="$(realpath -m "$GITHUB_WORKSPACE/../geant4-v${GEANT4_VERSION}/install")"
+          echo "install-prefix=$install_prefix" >> "$GITHUB_OUTPUT"
+          echo "GEANT4_INSTALL_PREFIX=$install_prefix" >> "$GITHUB_ENV"
+
       - name: Restore Geant4
         id: geant4-cache
         uses: actions/cache/restore@v4
         with:
-          path: ${{ env.GEANT4_INSTALL_PREFIX }}
+          path: ${{ steps.geant4-path.outputs.install-prefix }}
           key: ${{ env.GEANT4_CACHE_KEY }}
 
       - name: Build and install Geant4
@@ -109,7 +115,7 @@ jobs:
         if: steps.geant4-cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.GEANT4_INSTALL_PREFIX }}
+          path: ${{ steps.geant4-path.outputs.install-prefix }}
           key: ${{ env.GEANT4_CACHE_KEY }}
 
       - name: Set up Python
