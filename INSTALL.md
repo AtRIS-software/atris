@@ -150,7 +150,7 @@ cd <ATRIS_WORK>
 
 source geant4-<VERSION>/install/bin/geant4.sh
 
-cd atris/atris
+cd atris
 cmake -B build
 cmake --build build -j
 ```
@@ -237,7 +237,7 @@ again after opening a new one.
 If only the generated build is broken, remove it:
 
 ```bash
-cd <ATRIS_WORK>/atris/atris
+cd <ATRIS_WORK>/atris
 rm -r build
 ```
 

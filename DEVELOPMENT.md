@@ -33,8 +33,6 @@ The current layout contains duplication and overlapping responsibilities:
   matrices, variance tables, plots, and a notebook.
 - Byte-level comparison shows that 60 of the 64 numbered runtime matrices are
   copies of named files in `phantoms-archive/`.
-- Generated CMake output currently appears under the inner application
-  directory at `atris/build/`.
 
 ## Target Structure
 

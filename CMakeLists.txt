@@ -4,7 +4,7 @@ project(AtRIS LANGUAGES CXX)
 
 find_package(Geant4 REQUIRED COMPONENTS gdml multithreaded)
 
-get_filename_component(ATRIS_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set(ATRIS_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 set(ATRIS_VERSION "unknown")
 if(EXISTS "${ATRIS_SOURCE_ROOT}/.git")
   execute_process(

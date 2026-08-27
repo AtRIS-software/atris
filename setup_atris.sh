@@ -11,7 +11,7 @@ else
 fi
 
 _set_root="export ATRIS_ROOT=\"$_atris_root\""
-_set_path='export PATH="$ATRIS_ROOT/atris/build:$PATH"'
+_set_path='export PATH="$ATRIS_ROOT/build:$PATH"'
 _source_geant4='source "$ATRIS_ROOT"/../geant4-*/install/bin/geant4.sh'
 
 echo "$_set_root"

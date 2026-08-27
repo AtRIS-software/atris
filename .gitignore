@@ -1,6 +1,6 @@
-atris/build-*/
-atris/build/
-atris/simulation/
+build-*/
+build/
+simulation/
 atris_install_ok
 geant4_install_ok
 __pycache__/
