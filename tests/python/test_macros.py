@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from atris_tools.atrismacrogen import macroGenManager
-from atris_tools.simtools import psf2gdml
+from atris_tools.psf2gdml import psf2gdml
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"

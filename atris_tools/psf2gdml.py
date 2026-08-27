@@ -1,8 +1,7 @@
+import argparse
 import os
 import re
-import sys
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -15,12 +14,6 @@ nistdb = f.readline()
 # Appending own materials. Here, I should add all the project-related molecules
 nistdb = nistdb[:-1]+",'G4_VACUUM']"
 f.close()
-
-                                                                                                                                                                                                                                                            
-# I like colored printing:
-STA = "\x1B["
-STO = STA + "0m"
-COL = ["31;40m", "36;40m", "32;40m", "35;40m"]
 
 
 def parse_solid(formula):
@@ -223,25 +216,25 @@ def gdml_compile(materials, world, geometry, structure, filename):
     f.write(finalfile)
     f.close()
 
+def psf2gdml():
+    materials, geometry, structure, world = line_processor("simulation.psf")
+    gdml_compile(
+        materials,
+        world + 100,
+        geometry,
+        structure,
+        "simulation.gdml",
+    )
+
+
+def main():
+    """Convert simulation.psf in the current directory to simulation.gdml."""
+    parser = argparse.ArgumentParser(
+        description="Convert simulation.psf to simulation.gdml in the current directory."
+    )
+    parser.parse_args()
+    psf2gdml()
+
+
 if __name__ == "__main__":
-    os.system("clear")
-    print("\t################################################################")
-    print("\t$$                  PSF 2 GDML                                $$")
-    print("\t################################################################")
-    print("\tThis is a script which converts a psf file to a gdml file.")
-    print("\tFor more information check the documentation or visit the wiki.")
-    print("\tUse:")
-    print("\t")
-    print("\t\tpython psf2gdml.py filenameprefix")
-    print("\t")
-    print("\twhere filenameprefix is the filename without the extension .gdml")
-    print("\t################################################################")
-    print("\t################################################################")
-    # load data, count the abundance and save the data:
-    arg1 = sys.argv[1]
-    if os.path.isfile(arg1+'.psf'):
-        mat, geom, struct,wrld = line_processor(arg1+'.psf')
-        wrld += 100
-        gdml_compile(mat,wrld,geom,struct,arg1+'.gdml')
-    else:
-        print('\tThe file ' + arg1 + '.psf does not exist.')
+    main()

@@ -4,15 +4,15 @@
 import argparse
 from pathlib import Path
 
-from . import simtools
+from . import nrlmsis
 
 
 def convert_nrlmsis(input_path):
     """Convert a downloaded NRLMSIS table using the existing AtRIS tools."""
     table = Path(input_path).read_text(encoding="utf-8")
     table = table[table.index("Year Mon Day"):]
-    atmosphere = simtools._parse_nrlmsis_output(table)
-    simtools.nrml2psf(simtools.nrlm_reformer(atmosphere))
+    atmosphere = nrlmsis._parse_nrlmsis_output(table)
+    nrlmsis.nrml2psf(nrlmsis.nrlm_reformer(atmosphere))
     return Path.cwd() / "simulation.psf"
 
 

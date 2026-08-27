@@ -7,17 +7,17 @@ name = "atris-tools"
 dynamic = ["version"]
 description = "Python preparation and post-processing tools for AtRIS"
 dependencies = [
-    "matplotlib",
     "numpy",
 ]
 
 [project.optional-dependencies]
+plot = ["matplotlib"]
 test = ["pytest"]
 
 [project.scripts]
 atris-version = "atris_tools.version_command:main"
 atris-nrlmsis-to-psf = "atris_tools.nrlmsis2psf:main"
-atris-psf-to-gdml = "atris_tools.simtools:psf2gdml_main"
+atris-psf-to-gdml = "atris_tools.psf2gdml:main"
 atris-generate-macros = "atris_tools.atrismacrogen:main"
 atris-scatter = "atris_tools.scatter:main"
 atris-gather = "atris_tools.gather:main"
@@ -26,7 +26,7 @@ atris-bin-to-ascii = "atris_tools.bin2asci:main"
 
 # Legacy command names.
 nrlmsis2psf = "atris_tools.nrlmsis2psf:main"
-psf2gdml = "atris_tools.simtools:psf2gdml_main"
+psf2gdml = "atris_tools.psf2gdml:main"
 atrismacrogen = "atris_tools.atrismacrogen:main"
 postprocess = "atris_tools.postprocess:main"
 bin2ascii = "atris_tools.bin2asci:main"
