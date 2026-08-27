@@ -29,10 +29,10 @@ The proposed test coverage and test tiers are listed in [TESTS.md](TESTS.md).
 The current layout contains duplication and overlapping responsibilities:
 
 - Root `phantoms/` contains 64 numbered runtime response matrices.
-- Inner `atris/phantoms/` contains named response matrices, old response
+- `phantoms-archive/` contains named response matrices, old response
   matrices, variance tables, plots, and a notebook.
 - Byte-level comparison shows that 60 of the 64 numbered runtime matrices are
-  copies of named files in `atris/phantoms/`.
+  copies of named files in `phantoms-archive/`.
 - Atmosphere and geometry preparation still overlaps between the dedicated
   `atris_tools/nrlm2psf.py` and `atris_tools/psf2gdml.py` modules and the
   implementations retained in `atris_tools/simtools.py`.
