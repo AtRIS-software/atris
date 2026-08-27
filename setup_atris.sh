@@ -1,24 +1,49 @@
 #!/usr/bin/env bash
-# Determine the AtRIS path from this script's location.
-# Export ATRIS_ROOT, add the AtRIS executable to PATH, and load Geant4.
-# The script can be sourced from Bash or zsh.
+# Configure the current shell for AtRIS.
+#
+# Usage:
+#   source setup_atris.sh
+#
+# The script finds the AtRIS checkout from its own location, exports ATRIS_ROOT,
+# adds the compiled AtRIS executable to PATH, and loads the Geant4 environment.
+# It supports Bash and zsh and is expected to be sourced so these changes remain
+# in the current shell.
+#
+# By default, exactly one geant4-vX.Y.Z directory is expected beside the AtRIS
+# checkout, with Geant4 installed below it in install/. Change the geant4_dir
+# glob below if Geant4 uses a different layout.
 
+# Find the AtRIS checkout from this file, not from the shell's current directory.
 if [[ -n "${BASH_VERSION:-}" ]]
 then
-    _atris_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    atris_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 else
-    _atris_root="$(cd "$(dirname "${(%):-%x}")" && pwd)"
+    atris_root="$(cd "$(dirname "${(%):-%x}")" && pwd)"
 fi
 
-_set_root="export ATRIS_ROOT=\"$_atris_root\""
-_set_path='export PATH="$ATRIS_ROOT/build:$PATH"'
-_source_geant4='source "$ATRIS_ROOT"/../geant4-*/install/bin/geant4.sh'
+# The default layout has one versioned Geant4 directory beside the AtRIS
+# checkout. Change this pattern if the Geant4 source and install are elsewhere.
+geant4_dir=("$atris_root"/../geant4-v[0-9][0-9].[0-9].[0-9])
+if [[ "${#geant4_dir[@]}" -ne 1 || ! -d "${geant4_dir[@]}" ]]
+then
+    echo "Expected exactly one geant4-v<version> directory beside AtRIS." >&2
+    return 1
+fi
 
-echo "$_set_root"
-eval "$_set_root"
-echo "$_set_path"
-eval "$_set_path"
-echo "$_source_geant4"
-eval "$_source_geant4"
+# Helper function to print one command string, then execute that same string.
+run() {
+    echo "$1"
+    eval "$1"
+}
 
-unset _atris_root _set_root _set_path _source_geant4
+# Export the checkout path for the Python tools.
+run "export ATRIS_ROOT=\"$atris_root\""
+
+# Add the compiled AtRIS executable to PATH.
+run 'export PATH="$ATRIS_ROOT/build:$PATH"'
+
+# Load the Geant4 environment from the adjacent installation.
+run "source \"${geant4_dir[@]}/install/bin/geant4.sh\""
+
+unset atris_root geant4_dir
+unset -f run
