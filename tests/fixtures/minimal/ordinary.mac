@@ -1,0 +1,8 @@
+/run/initialize
+/gps/particle proton
+/gps/ene/mono 10 MeV
+/gps/pos/type Point
+/gps/pos/centre 0 0 0 mm
+/gps/direction 1 0 0
+/random/setSeeds 123456 654321
+/run/beamOn 2

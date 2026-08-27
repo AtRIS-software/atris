@@ -4,8 +4,9 @@
 # independently seeded array tasks so completed work survives timeouts and
 # failed tasks can be resubmitted. Submit it from a prepared run directory
 # containing chunks.txt, the shared proton/alpha inputs, and the chunks/
-# directory created by atris-scatter. Before using either execution
-# mode, set ATRIS_EXECUTABLE and load the Geant4 environment.
+# directory created by atris-scatter. Before submitting or invoking this
+# wrapper, prepare the shell with `source atris/setup_atris.sh` as described in
+# README.md.
 #
 # Outside Slurm, run this file with Bash from the run directory. With no
 # argument it processes every plan entry sequentially; an optional one-based
@@ -56,7 +57,7 @@ while read -r simulation seed1 seed2; do
         continue
     fi
 
-    "$ATRIS_EXECUTABLE" FTFP_BERT_HP "chunks/$run_name" -1 1
+    AtRIS FTFP_BERT_HP "chunks/$run_name" -1 1
 
     # set -e reaches this line only after AtRIS exits successfully. Failed or
     # timed-out chunks therefore remain unmarked and are retried on resubmission.

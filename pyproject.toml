@@ -14,6 +14,9 @@ dependencies = [
     "requests",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.scripts]
 atris-version = "atris_tools.version_command:main"
 atris-nrlmsis-to-psf = "atris_tools.nrlmsis2psf:main"
@@ -36,3 +39,9 @@ packages = ["atris_tools"]
 
 [tool.setuptools.package-data]
 atris_tools = ["data/*"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+markers = [
+    "regression: requires AtRIS on PATH and a loaded Geant4 runtime",
+]

@@ -1,0 +1,86 @@
+import random
+import re
+
+import pytest
+
+from atris_tools.scatter import chunk_plan, scatter
+
+
+ORDINARY_MACRO = """/run/initialize
+  /random/setSeeds 123456 654321
+/gps/particle {particle}
+/run/beamOn 7
+"""
+
+
+def write_ordinary_macros(run_directory):
+    contents = {}
+    for species, particle in (("protons", "proton"), ("alphas", "alpha")):
+        text = ORDINARY_MACRO.format(particle=particle)
+        (run_directory / f"{species}.mac").write_text(text)
+        contents[species] = text
+    return contents
+
+
+def test_chunk_plan_is_reproducible_unique_and_six_digit():
+    first = chunk_plan(4, random.Random(20260827))
+    second = chunk_plan(4, random.Random(20260827))
+
+    assert first == second
+    assert len(first) == 8
+    assert [line.split()[0] for line in first] == ["protons"] * 4 + ["alphas"] * 4
+    assert all(re.fullmatch(r"(?:protons|alphas) \d{6} \d{6}\n", line) for line in first)
+
+    pairs = [tuple(line.split()[1:]) for line in first]
+    assert len(set(pairs)) == len(pairs)
+
+
+def test_scatter_preserves_ordinary_macros_and_event_count(tmp_path):
+    originals = write_ordinary_macros(tmp_path)
+    (tmp_path / "chunks").mkdir()
+
+    result = scatter(tmp_path, chunks=2, random_seed=17)
+
+    assert result == tmp_path.resolve()
+    assert (tmp_path / "chunks").is_dir()
+    assert list((tmp_path / "chunks").iterdir()) == []
+    assert len((tmp_path / "chunks.txt").read_text().splitlines()) == 4
+
+    for species in ("protons", "alphas"):
+        assert (tmp_path / f"{species}.mac").read_text() == originals[species]
+        chunk = (tmp_path / f"{species}.chunk.mac").read_text()
+        assert "/random/setSeeds" not in chunk
+        assert "/run/beamOn 7" in chunk
+
+
+def test_scatter_refuses_all_destinations_before_writing(tmp_path):
+    write_ordinary_macros(tmp_path)
+    existing = tmp_path / "alphas.chunk.mac"
+    existing.write_text("keep me\n")
+
+    with pytest.raises(FileExistsError, match="alphas.chunk.mac"):
+        scatter(tmp_path, chunks=1, random_seed=3)
+
+    assert existing.read_text() == "keep me\n"
+    assert not (tmp_path / "protons.chunk.mac").exists()
+    assert not (tmp_path / "chunks.txt").exists()
+    assert not (tmp_path / "chunks").exists()
+
+
+def test_scatter_rejects_nonempty_chunks_directory(tmp_path):
+    write_ordinary_macros(tmp_path)
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    (chunks / "partial.csv").write_text("partial\n")
+
+    with pytest.raises(FileExistsError, match="not empty"):
+        scatter(tmp_path, chunks=1)
+
+    assert not (tmp_path / "protons.chunk.mac").exists()
+    assert not (tmp_path / "alphas.chunk.mac").exists()
+    assert not (tmp_path / "chunks.txt").exists()
+
+
+def test_scatter_rejects_zero_chunks(tmp_path):
+    with pytest.raises(ValueError, match="at least 1"):
+        scatter(tmp_path, chunks=0)

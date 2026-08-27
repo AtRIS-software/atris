@@ -1,0 +1,336 @@
+"""Characterize the observable AtRIS command-line contract.
+
+Tests whose names contain ``currently`` record permissive behavior in the
+existing executable; they do not imply that the behavior is desirable.
+"""
+
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+
+import numpy as np
+import pytest
+
+
+REPOSITORY_ROOT = Path(__file__).parents[2]
+FIXTURE = REPOSITORY_ROOT / "tests" / "fixtures" / "minimal"
+PHANTOMS = REPOSITORY_ROOT / "phantoms"
+EXPECTED_HISTOGRAM_SUFFIXES = {
+    "_h1_h1.1.csv",
+    "_h2_h2.dir.csv",
+    "_h2_h2.dos0.csv",
+    "_h2_h2.equi0.csv",
+    "_h2_h2.ion.csv",
+    "_h2_h2.pos.csv",
+    "_h2_h2.rates0.csv",
+}
+EXPECTED_HISTOGRAM_SUFFIXES_WITHOUT_PHANTOMS = {
+    "_h1_h1.1.csv",
+    "_h2_h2.dir.csv",
+    "_h2_h2.ion.csv",
+    "_h2_h2.pos.csv",
+}
+
+
+@pytest.fixture(scope="session")
+def atris_command():
+    command = shutil.which("AtRIS")
+    if command is None:
+        pytest.fail(
+            "AtRIS is not on PATH; source atris/setup_atris.sh from the "
+            "workspace root before running tests/regression"
+        )
+    return command
+
+
+def prepare_run(run_directory, *, chunked=False):
+    shutil.copyfile(FIXTURE / "simulation.gdml", run_directory / "protons.gdml")
+    shutil.copyfile(FIXTURE / "simulation.bins", run_directory / "protons.bins")
+    shutil.copyfile(FIXTURE / "ordinary.mac", run_directory / "protons.mac")
+    shutil.copyfile(
+        PHANTOMS / "radiation_phantom0.txt",
+        run_directory / "radiation_phantom0.txt",
+    )
+    shutil.copyfile(
+        PHANTOMS / "counting_phantom0.txt",
+        run_directory / "counting_phantom0.txt",
+    )
+    if chunked:
+        shutil.copyfile(FIXTURE / "chunk.mac", run_directory / "protons.chunk.mac")
+        (run_directory / "chunks").mkdir()
+
+
+def invoke_atris(command, run_directory, *arguments):
+    environment = os.environ.copy()
+    environment["G4FORCENUMBEROFTHREADS"] = "1"
+    return subprocess.run(
+        [command, *arguments],
+        cwd=run_directory,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+def run_atris(
+    command,
+    run_directory,
+    simulation,
+    *,
+    physics="FTFP_BERT_HP",
+    mode="-1",
+    phantom_count="1",
+):
+    return invoke_atris(
+        command,
+        run_directory,
+        physics,
+        simulation,
+        str(mode),
+        str(phantom_count),
+    )
+
+
+def histogram_entries(path):
+    lines = path.read_text().splitlines()
+    column_index = next(
+        index for index, line in enumerate(lines) if not line.startswith("#")
+    )
+    data = np.atleast_2d(
+        np.loadtxt(path, delimiter=",", skiprows=column_index + 1)
+    )
+    return int(data[:, 0].sum())
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("mode", "creates_binary"),
+    [
+        pytest.param("-1", False, id="csv-response-mode"),
+        pytest.param("0", True, id="binary-interface-mode"),
+        pytest.param("1", False, id="legacy-ascii-mode"),
+    ],
+)
+def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
+    tmp_path, atris_command, mode, creates_binary
+):
+    prepare_run(tmp_path)
+
+    result = run_atris(atris_command, tmp_path, "protons", mode=mode)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "### AtRIS: executing macro protons.mac" in result.stdout
+    assert "### AtRIS: Starting the simulation" in result.stdout
+    assert "### AtRIS: simulation used 1 worker thread(s)" in result.stdout
+    assert "### AtRIS: the simulation has completed" in result.stdout
+
+    written_suffixes = {
+        path.name[len("protons"):]
+        for path in tmp_path.glob("protons_*.csv")
+    }
+    assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
+    assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
+    assert (tmp_path / "protons.binary").exists() is creates_binary
+
+
+@pytest.mark.regression
+def test_seeded_prefix_uses_shared_chunk_inputs_and_seeded_output_prefix(
+    tmp_path, atris_command
+):
+    prepare_run(tmp_path, chunked=True)
+    simulation = "chunks/protons_123456_654321"
+
+    result = run_atris(atris_command, tmp_path, simulation)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "### AtRIS: using random seeds 123456 and 654321" in result.stdout
+    assert "### AtRIS: executing macro protons.chunk.mac" in result.stdout
+
+    prefix = "protons_123456_654321"
+    written_suffixes = {
+        path.name[len(prefix):]
+        for path in (tmp_path / "chunks").glob(prefix + "_*.csv")
+    }
+    assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
+    assert histogram_entries(tmp_path / "chunks" / f"{prefix}_h1_h1.1.csv") == 1
+    assert not (tmp_path / "protons_h1_h1.1.csv").exists()
+
+
+@pytest.mark.regression
+def test_version_form_reports_version_without_simulation_inputs(tmp_path, atris_command):
+    result = invoke_atris(atris_command, tmp_path, "--version")
+
+    assert result.returncode == 0
+    assert re.fullmatch(r"AtRIS \S+\n", result.stdout)
+    assert result.stderr == ""
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        pytest.param((), id="no-arguments"),
+        pytest.param(("FTFP_BERT_HP",), id="too-few-arguments"),
+        pytest.param(
+            ("FTFP_BERT_HP", "protons", "-1", "1", "extra"),
+            id="too-many-arguments",
+        ),
+    ],
+)
+def test_wrong_argument_count_prints_usage_and_currently_returns_success(
+    tmp_path, atris_command, arguments
+):
+    result = invoke_atris(atris_command, tmp_path, *arguments)
+
+    assert result.returncode == 0
+    assert "Usage:" in result.stdout
+    assert "<physics-list> <simulation-name> <mode> <phantom-count>" in result.stdout
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("mode", "phantom_count"),
+    [
+        pytest.param("not-an-integer", "1", id="nonnumeric-mode"),
+        pytest.param("-1", "not-an-integer", id="nonnumeric-phantom-count"),
+    ],
+)
+def test_nonnumeric_integer_arguments_exit_nonzero(
+    tmp_path, atris_command, mode, phantom_count
+):
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        "protons",
+        mode=mode,
+        phantom_count=phantom_count,
+    )
+
+    assert result.returncode != 0
+    assert not list(tmp_path.glob("*.csv"))
+
+
+@pytest.mark.regression
+def test_unsupported_physics_list_exits_nonzero(tmp_path, atris_command):
+    prepare_run(tmp_path)
+
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        "protons",
+        physics="NOT_A_GEANT4_PHYSICS_LIST",
+    )
+
+    assert result.returncode != 0
+    assert "NOT_A_GEANT4_PHYSICS_LIST is not valid" in result.stdout
+    assert "FTFP_BERT_HP" in result.stdout
+    assert not list(tmp_path.glob("protons_*.csv"))
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    "macro_contents",
+    [
+        pytest.param(None, id="missing-macro"),
+        pytest.param("/not/an/atris/command\n", id="invalid-macro-command"),
+    ],
+)
+def test_missing_or_invalid_macro_exits_nonzero(
+    tmp_path, atris_command, macro_contents
+):
+    prepare_run(tmp_path)
+    macro = tmp_path / "protons.mac"
+    if macro_contents is None:
+        macro.unlink()
+    else:
+        macro.write_text(macro_contents)
+
+    result = run_atris(atris_command, tmp_path, "protons")
+
+    assert result.returncode != 0
+    assert "### AtRIS: macro execution failed with Geant4 status" in result.stderr
+    assert "### AtRIS: the simulation has completed" not in result.stdout
+
+
+@pytest.mark.regression
+def test_missing_geometry_exits_nonzero(tmp_path, atris_command):
+    prepare_run(tmp_path)
+    (tmp_path / "protons.gdml").unlink()
+
+    result = run_atris(atris_command, tmp_path, "protons")
+
+    assert result.returncode != 0
+    assert "### AtRIS: the simulation has completed" not in result.stdout
+
+
+@pytest.mark.regression
+def test_missing_energy_bins_currently_runs_with_zero_edges(tmp_path, atris_command):
+    prepare_run(tmp_path)
+    (tmp_path / "protons.bins").unlink()
+
+    result = run_atris(atris_command, tmp_path, "protons")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "### AtRIS: read 0 binedges." in result.stdout
+    assert "### AtRIS: the simulation has completed" in result.stdout
+    assert {path.name for path in tmp_path.glob("protons_*.csv")} == {
+        "protons_h2_h2.dir.csv",
+        "protons_h2_h2.pos.csv",
+    }
+
+
+@pytest.mark.regression
+def test_zero_phantom_count_runs_without_phantom_histograms(tmp_path, atris_command):
+    prepare_run(tmp_path)
+
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        "protons",
+        phantom_count="0",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    written_suffixes = {
+        path.name[len("protons"):]
+        for path in tmp_path.glob("protons_*.csv")
+    }
+    assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES_WITHOUT_PHANTOMS
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("mode", ["-2", "2", "999"])
+def test_undocumented_integer_modes_currently_follow_csv_path(
+    tmp_path, atris_command, mode
+):
+    prepare_run(tmp_path)
+
+    result = run_atris(atris_command, tmp_path, "protons", mode=mode)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "protons_h1_h1.1.csv").is_file()
+    assert not (tmp_path / "protons.binary").exists()
+
+
+@pytest.mark.regression
+def test_negative_phantom_count_currently_behaves_as_zero(tmp_path, atris_command):
+    prepare_run(tmp_path)
+
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        "protons",
+        phantom_count="-1",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "### AtRIS: proceeding to load -1 phantom(s)." in result.stdout
+    written_suffixes = {
+        path.name[len("protons"):]
+        for path in tmp_path.glob("protons_*.csv")
+    }
+    assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES_WITHOUT_PHANTOMS

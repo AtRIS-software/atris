@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gdml>
+  <define>
+    <position name="center" x="0" y="0" z="0" unit="mm"/>
+  </define>
+  <materials>
+    <element name="test_hydrogen" formula="H" Z="1">
+      <atom value="1.00794" unit="g/mole"/>
+    </element>
+    <material name="test_hydrogen_material" state="solid">
+      <D value="1e-25" unit="g/cm3"/>
+      <fraction n="1" ref="test_hydrogen"/>
+    </material>
+    <material name="test_vacuum" state="gas">
+      <D value="1e-30" unit="g/cm3"/>
+      <fraction n="1" ref="test_hydrogen"/>
+    </material>
+  </materials>
+  <solids>
+    <box name="world_box" x="204" y="204" z="204" lunit="km"/>
+    <sphere name="inner_sphere" rmin="0" rmax="1"
+            startphi="0" deltaphi="360" starttheta="0" deltatheta="180"
+            aunit="deg" lunit="km"/>
+    <sphere name="outer_shell" rmin="1" rmax="2"
+            startphi="0" deltaphi="360" starttheta="0" deltatheta="180"
+            aunit="deg" lunit="km"/>
+  </solids>
+  <structure>
+    <volume name="inner_volume">
+      <materialref ref="test_hydrogen_material"/>
+      <solidref ref="inner_sphere"/>
+      <auxiliary auxtype="SensDet" auxvalue="0"/>
+    </volume>
+    <volume name="outer_volume">
+      <materialref ref="test_hydrogen_material"/>
+      <solidref ref="outer_shell"/>
+      <auxiliary auxtype="SensDet" auxvalue="1"/>
+    </volume>
+    <volume name="world_volume">
+      <materialref ref="test_vacuum"/>
+      <solidref ref="world_box"/>
+      <physvol>
+        <volumeref ref="inner_volume"/>
+        <positionref ref="center"/>
+      </physvol>
+      <physvol>
+        <volumeref ref="outer_volume"/>
+        <positionref ref="center"/>
+      </physvol>
+    </volume>
+  </structure>
+  <setup name="minimal" version="1.0">
+    <world ref="world_volume"/>
+  </setup>
+</gdml>
