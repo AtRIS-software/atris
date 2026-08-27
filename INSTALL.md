@@ -6,7 +6,7 @@ This document covers the work done once for a machine or compiler environment:
 2. build Geant4;
 3. build AtRIS;
 4. confirm that the executable and Geant4 runtime are present;
-5. create the Python environment.
+5. install the Python tools.
 
 The steps repeated for each shell session and simulation are in the
 [running instructions](README.md).
@@ -21,11 +21,8 @@ AtRIS requires:
 - [CMake](https://cmake.org/) 3.22 or newer;
 - a C++17 compiler, used consistently to build both Geant4 and AtRIS;
 - [Git](https://git-scm.com/) to obtain the AtRIS source;
-- [Conda](https://docs.conda.io/projects/conda/en/stable/) to manage the Python
-  environment.
-
-The preparation tools and automated system test use
-[Python](https://www.python.org/).
+- [Python](https://www.python.org/) with `pip` for the preparation and
+  post-processing tools.
 
 On macOS, Apple's
 [Command Line Tools](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/)
@@ -63,6 +60,9 @@ directories beside one another:
     └── install/
 ```
 
+`<VERSION>` represents the Geant4 version in the downloaded archive and
+extracted directory.
+
 Start in `<ATRIS_WORK>`:
 
 ```bash
@@ -87,15 +87,17 @@ toolchain for Geant4 and AtRIS.
 
 Download a source archive in `tar.gz` format from the official
 [Geant4 releases](https://geant4.web.cern.ch/download/) page. Place it in
-`<ATRIS_WORK>`, then unpack it and enter the resulting directory. In the
-commands below, `<VERSION>` is a placeholder for the Geant4 version in the
-archive and directory names, for example `v11.4.2`.
-
+`<ATRIS_WORK>`. 
+From `<ATRIS_WORK>`, unpack it and enter the resulting directory.
 ```bash
 cd <ATRIS_WORK>
-tar -xf geant4-<VERSION>.tar.gz
-cd geant4-<VERSION>
 ```
+This step assumes that only one Geant4 version is present in `<ATRIS_WORK>`. Otherwise replace `*` with the specific version number.
+```bash
+tar -xf geant4-*.tar.gz
+cd geant4-*/
+```
+
 
 ### Configure and install
 
@@ -134,23 +136,24 @@ full standard set for convenience.
 
 ## Installing AtRIS
 
-Start again from the directory containing the target workspace, and clone the AtRIS repository:
+From `<ATRIS_WORK>`, clone the AtRIS repository:
+
 ```bash
-cd <ATRIS_WORK>
 git clone git@github.com:svaberg/atris.git
 ```
 
 ### Build AtRIS
 
-Load the Geant4 environment so CMake can find the installed package, then
-configure and build AtRIS with the same compiler used to build Geant4:
+From `<ATRIS_WORK>/atris`, load the AtRIS shell setup so CMake can find the
+installed Geant4 package:
 
 ```bash
-cd <ATRIS_WORK>
+source setup_atris.sh
+```
 
-source geant4-<VERSION>/install/bin/geant4.sh
+Configure and build AtRIS with the same compiler used to build Geant4:
 
-cd atris
+```bash
 cmake -B build
 cmake --build build -j
 ```
@@ -168,21 +171,18 @@ The expected output is:
 Usage: ./build/AtRIS <physics-list> <simulation-name> <mode> <phantom-count>
 ```
 
-### Install the Python environment
+### Install the Python tools
 
-The atmosphere preparation and result-processing tools use the Python packages
-listed in `environment.yml`. Create the environment once from the target
-workspace:
+From `<ATRIS_WORK>/atris`, install the Python package with its plotting
+support:
 
 ```bash
-cd <ATRIS_WORK>
-conda env create -f atris/environment.yml
-conda activate atris
-python -m pip install -e atris
+pip install --editable ".[plot]"
 ```
 
-The editable installation registers the AtRIS preparation and post-processing
-commands while keeping their Python source in the checkout.
+This makes the AtRIS commands available in the current Python environment.
+Because of the `--editable` flag, source changes take effect without
+reinstalling the package.
 
 At this point installation is complete. Continue with the
 [running instructions](README.md) to prepare and execute a simulation.
@@ -223,21 +223,21 @@ again. Compiler modules must be loaded again after opening a new shell.
 
 ### I ran `geant4-config` and got `command not found`
 
-After installing Geant4, load its environment into the current shell:
+After installing Geant4, load its environment into the current shell from
+`<ATRIS_WORK>/atris`:
 
 ```bash
-source <ATRIS_WORK>/geant4-<VERSION>/install/bin/geant4.sh
+source setup_atris.sh
 ```
 
-This environment applies only to the current shell, so source `geant4.sh`
-again after opening a new one.
+This environment applies only to the current shell, so source
+`setup_atris.sh` again after opening a new one.
 
 ### I broke AtRIS! How do I rebuild it?
 
-If only the generated build is broken, remove it:
+If only the generated build is broken, remove it from `<ATRIS_WORK>/atris`:
 
 ```bash
-cd <ATRIS_WORK>/atris
 rm -r build
 ```
 
