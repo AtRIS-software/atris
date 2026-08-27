@@ -91,8 +91,7 @@ def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,output_dir="./atris/simulat
     lines += "/gps/number 1\n"
     lines += "/run/setCut 100. m\n"           #CONFIGURE
     lines += "/run/particle/dumpCutValues\n"
-    if nr1 is not None and nr2 is not None:
-        lines += "/random/setSeeds %i %i\n"%(nr1,nr2)
+    lines += "/random/setSeeds %i %i\n"%(nr1,nr2)
     lines += "/run/beamOn %i\n"%N
     return lines
 
@@ -105,8 +104,9 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
     radius  = np.loadtxt(os.path.join(output_dir, 'simulation.psf'))[-2,1] + 0.001 # we add 1 meter to the radius to aviod overlap.
     bins    = base_bins
     N       = bins.shape[0]*partspb # At 20 bins per decade, 2500 particles per bin is good. Even better would be 5k or 10k.
-    seed1 = rng.randint(31,999999)
-    seed2 = rng.randint(31,999999)
+    # We are taking two random seeds. Control this for the ability to reproduce.
+    seed1     = rng.randint(31,999999)
+    seed2     = rng.randint(31,999999)
     #name      = str(seed1)+prefix
     name      = prefix
     shutil.copy2(os.path.join(output_dir, 'simulation.gdml'), os.path.join(output_dir, name + '.gdml'))
@@ -118,7 +118,7 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
     #command      = './AtRIS FTFP_BERT_HP '+name+' -1 32 > ' + name + ".log"
     #print(command)
     #subprocess.Popen(command,shell=True)
-
+    
 
 def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
     if energy_points < 2:
@@ -128,16 +128,13 @@ def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",rand
         raise FileNotFoundError("Run directory does not exist: " + output_dir)
     rng = random.Random(random_seed) if random_seed is not None else random
     base_bins = 10**np.linspace(energy_min_power,energy_max_power,energy_points)
-
     macroSetup('protons',"/gps/particle proton\n",1,partspb,output_dir,base_bins,rng)
     macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),output_dir,base_bins,rng)
 
 
 def main():
     """Run the AtRIS macro-generation command."""
-    parser = argparse.ArgumentParser(
-        description="Generate proton and alpha input files for AtRIS.",
-    )
+    parser = argparse.ArgumentParser(description="Generate proton and alpha input files for AtRIS.")
     parser.add_argument("run_directory", nargs="?", default=".")
     parser.add_argument("--particles-per-bin", type=int, default=3000)
     parser.add_argument("--alpha-factor", type=float, default=0.66)
