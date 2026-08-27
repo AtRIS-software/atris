@@ -99,14 +99,6 @@ functions instead of duplicating logic. The C++ executable remains the
 scientific simulation core; the Python package prepares its inputs and manages
 the surrounding workflow.
 
-The atmosphere-to-PSF path should move away from pandas. Its current role is
-limited to reading whitespace-separated NRLMSIS output, joining downloaded
-chunks, sorting rows, removing duplicate altitudes, and selecting columns.
-These operations do not justify making pandas a dependency of the preparation
-tools. The existing implementation should remain in place until regression
-tests cover the generated PSF files. Pandas may still be useful in
-post-processing code that performs substantial tabular analysis.
-
 Temporary end-to-end harnesses are not part of the supported Python interface.
 Useful harnesses should be converted into reproducible smoke or system tests;
 those that do not provide lasting test coverage should be removed. The

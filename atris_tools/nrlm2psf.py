@@ -4,7 +4,6 @@ import sys
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
-import pandas as pd
 
 # I like colored printing:
 STA = "\x1B["

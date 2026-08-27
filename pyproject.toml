@@ -9,7 +9,6 @@ description = "Python preparation and post-processing tools for AtRIS"
 dependencies = [
     "matplotlib",
     "numpy",
-    "pandas",
     "requests",
 ]
 

@@ -10,14 +10,11 @@ import warnings
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
-import pandas as pd
 import requests
 
 from . import atrismacrogen as amg
 
 warnings.filterwarnings('ignore')
-#pd.set_option('display.max_rows', 1000)
-
 def process_psf(filename='simulation.psf'):
     data = np.atleast_2d(np.loadtxt(filename))
     rmin = data[:, 0] * 100000.0
@@ -31,14 +28,13 @@ def process_psf(filename='simulation.psf'):
     core = inner_surface == 0
     inner_surface[core] = outer_surface[core]
 
-    df = pd.DataFrame({
-        'sdid': data[:, 6].astype(int),
-        'volume/cm3': volume,
-        'inn_surface/cm2': inner_surface,
-    })
-    df.set_index('sdid', inplace=True)
-    df.sort_values('inn_surface/cm2', kind='stable', inplace=True)
-    return df, data.shape[0]
+    order = np.argsort(inner_surface, kind='stable')
+    geometry = {
+        'sdid': data[:, 6].astype(int)[order],
+        'volume/cm3': volume[order],
+        'inn_surface/cm2': inner_surface[order],
+    }
+    return geometry, data.shape[0]
 
 
 def get_nr_phantoms(simname):
@@ -56,8 +52,14 @@ def get_energy_edges(simname):
     return edges
 
 def process_phantoms(nrphantoms):
-    phantoms   = pd.read_csv('phantoms.txt',sep=',',index_col=2,skiprows=2,names=['mass/g','crosssurface/cm2'])
-    return phantoms.iloc[:nrphantoms]
+    phantoms = np.loadtxt(
+        'phantoms.txt',
+        delimiter=',',
+        comments='#',
+        usecols=(0, 1),
+        ndmin=2,
+    )
+    return phantoms[:nrphantoms]
 
 def read_data(simname,nphant):
     # This read the histograms:
@@ -85,7 +87,7 @@ def read_data(simname,nphant):
         counter   += 1
     return sim_data,names
 
-def scale_data(data,nphat,ndet,nenergyedges,phantom_data,df):
+def scale_data(data,nphat,ndet,nenergyedges,phantom_data,geometry):
     # Here we scale the data
     # Scaling is not done for the first 3 histograms
     nrparticles   = data[0][:,0]
@@ -102,27 +104,27 @@ def scale_data(data,nphat,ndet,nenergyedges,phantom_data,df):
         if hist_index == 3:
             # This is the ionization, we need to divide by mass
             #print("we scale the ionization histogram by dividing with the SDID volume")
-            data[hist_index] = data[hist_index] / df['volume/cm3'].to_numpy()[:,None]
+            data[hist_index] = data[hist_index] / geometry['volume/cm3'][:,None]
         if hist_index > 3:
             #print("we scale other histograms with the surface factor")
             phantom_nr       = int((hist_index-4)/3)
-            phantom_surface  = phantom_data['crosssurface/cm2'][phantom_nr]
+            phantom_surface  = phantom_data[phantom_nr, 1]
             if ((hist_index-4)%3) != 2:
                 # for dose and equi, we divide by phantom mass, to get per g
                 #print("We also scale the dos/equi histograms by dividing with the phantom mass")
-                phantom_surface  = phantom_surface / phantom_data['mass/g'][phantom_nr]
-            data[hist_index] = data[hist_index]*phantom_surface/df['inn_surface/cm2'].to_numpy()[:,None]
+                phantom_surface  = phantom_surface / phantom_data[phantom_nr, 0]
+            data[hist_index] = data[hist_index]*phantom_surface/geometry['inn_surface/cm2'][:,None]
             pass
     return(data)
 
-def make_allplots(data,xbins,df,simname,nphant):
+def make_allplots(data,xbins,geometry,simname,nphant):
     # The plots are only for doing a quick visual inspection
-    ybins           = (df["inn_surface/cm2"] / (4.*np.pi))**0.5 / 100000.
+    ybins           = (geometry["inn_surface/cm2"] / (4.*np.pi))**0.5 / 100000.
     ybins           = ybins - ybins[2]
     altitude_edges  = np.empty(ybins.size + 1)
-    altitude_edges[1:-1] = (ybins.values[:-1] + ybins.values[1:]) / 2
-    altitude_edges[0] = ybins.values[0] - (ybins.values[1] - ybins.values[0]) / 2
-    altitude_edges[-1] = ybins.values[-1] + (ybins.values[-1] - ybins.values[-2]) / 2
+    altitude_edges[1:-1] = (ybins[:-1] + ybins[1:]) / 2
+    altitude_edges[0] = ybins[0] - (ybins[1] - ybins[0]) / 2
+    altitude_edges[-1] = ybins[-1] + (ybins[-1] - ybins[-2]) / 2
     titles          = ['Ionization', 'Absorbed dose', 'Dose equivalent', 'Count rate']
     fig, allaxes    = plt.subplots(ncols=4,figsize=(16,5*nphant),nrows=nphant,sharey=True,squeeze=False)
     for phantom_index in range(nphant):
@@ -150,20 +152,19 @@ def make_allplots(data,xbins,df,simname,nphant):
             ax.set_xscale('log')
             fig.colorbar(mesh,ax=ax,label='Response per primary')
             counter += 1
-            ax.set_ylim(0,ybins.values[-2])
+            ax.set_ylim(0,ybins[-2])
         axes[0].set_ylabel('Altitude [km]\nPhantom %i' % phantom_index)
     fig.tight_layout()
     fig.savefig(simname+".pdf")
     plt.close(fig)
 
-def make_output(data,df,simname,nphant):
+def make_output(data,geometry,simname,nphant):
     # calculate altitude in km from inner surface
-    altitude        = (df["inn_surface/cm2"] / (4.*np.pi))**0.5 / 100000.
+    altitude        = (geometry["inn_surface/cm2"] / (4.*np.pi))**0.5 / 100000.
     altitude        = altitude - altitude[2]
-    altitude        = altitude.values
     altitude        = altitude[1:-1,None]
     # obtain SDID:
-    SDID            = df.index.values
+    SDID            = geometry['sdid']
     SDID            = SDID[1:-1,None]
     # We need to remove the first and the last row
     extensions      = ['.dose','.equi','.rates']
@@ -183,17 +184,17 @@ def make_output(data,df,simname,nphant):
         np.savetxt(outputfname,outdata,fmt=npformat,delimiter=' ',encoding='utf-8')
 
 def process_run(simname):
-    df, ndet              = process_psf()
+    geometry, ndet        = process_psf()
     nphant                = get_nr_phantoms(simname)
     energy_edges          = get_energy_edges(simname)
     phantom_data          = process_phantoms(nphant)
     print('Processing phantoms')
     data, filenames       = read_data(simname,nphant)
     print("Reading data complete.")
-    scaled_data           = scale_data(data,nphant,ndet,energy_edges.shape[0],phantom_data,df)
-    make_allplots(scaled_data,energy_edges,df,simname,nphant)
+    scaled_data           = scale_data(data,nphant,ndet,energy_edges.shape[0],phantom_data,geometry)
+    make_allplots(scaled_data,energy_edges,geometry,simname,nphant)
     print("Making output files.")
-    make_output(scaled_data,df,simname,nphant)
+    make_output(scaled_data,geometry,simname,nphant)
     print('Response files have been created.')
     
 
@@ -355,7 +356,7 @@ def _load_nrlmsis_content(payload):
 
 
 def _parse_nrlmsis_output(content):
-    return pd.read_csv(io.StringIO(content), sep=r'\s+', engine='python', skiprows=1, header=None)
+    return np.loadtxt(io.StringIO(content), skiprows=1, ndmin=2)
 
 def get_atmosphere(year, month, day, hour, longitutde, latitude, hmin=0,hmax=100,deltah=1):
     chunk_ranges = _nrlmsis_chunk_ranges(hmin, hmax, deltah)
@@ -384,19 +385,19 @@ def get_atmosphere(year, month, day, hour, longitutde, latitude, hmin=0,hmax=100
         payload = _nrlmsis_payload(year, month, day, hour, longitutde, latitude, chunk_start, chunk_stop, deltah)
         print('Requesting chunk %.3f km -> %.3f km' % (chunk_start, chunk_stop))
         content = _load_nrlmsis_content(payload)
-        data_frame = _parse_nrlmsis_output(content)
+        chunk_data = _parse_nrlmsis_output(content)
         expected_rows = _expected_nrlmsis_rows(chunk_start, chunk_stop, deltah)
-        if data_frame.shape[0] != expected_rows:
+        if chunk_data.shape[0] != expected_rows:
             raise RuntimeError(
                 'CCMC NRLMSIS response row count mismatch for chunk %.3f..%.3f km: expected %i rows, got %i'
-                % (chunk_start, chunk_stop, expected_rows, data_frame.shape[0])
+                % (chunk_start, chunk_stop, expected_rows, chunk_data.shape[0])
             )
-        frames.append(data_frame)
+        frames.append(chunk_data)
 
-    merged = pd.concat(frames, ignore_index=True)
-    merged.drop_duplicates(subset=5, keep='first', inplace=True)
-    merged.sort_values(by=5, inplace=True)
-    merged.reset_index(drop=True, inplace=True)
+    merged = np.vstack(frames)
+    first_indices = np.unique(merged[:, 5], return_index=True)[1]
+    merged = merged[first_indices]
+    merged = merged[np.argsort(merged[:, 5], kind='stable')]
     expected_total_rows = _expected_nrlmsis_rows(hmin, hmax, deltah)
     if merged.shape[0] != expected_total_rows:
         raise RuntimeError(
@@ -422,7 +423,7 @@ def nrlm_reformer(nrlm20data):
         modern_idx = [5,8,9,10,12,13,15,16,17,18] # NRLMSIS 2.1 includes nitric oxide ahead of density and temperature
     else:
         modern_idx = [5,8,9,10,11,12,14,15,16,17] # NRLMSIS 2.0 / NRLMSIS-00
-    newdata    = nrlm20data.values[:,modern_idx]
+    newdata    = nrlm20data[:,modern_idx]
     return newdata
     
 def nrml2psf(data):
