@@ -185,7 +185,14 @@ int main(int argc,char** argv){
 
 
 	// Get the pointer to the user interface manager and start the batch mode
-	G4String tempString             ="/control/execute "+simulation.inputPrefix+".mac";
+	G4String macroName = simulation.inputPrefix+".mac";
+	if (simulation.hasSeeds) {
+		G4String chunkMacroName = simulation.inputPrefix+".chunk.mac";
+		std::ifstream chunkMacro(chunkMacroName);
+		if (chunkMacro.good()) macroName = chunkMacroName;
+	}
+	G4String tempString = "/control/execute "+macroName;
+	G4cout << "### AtRIS: executing macro " << macroName << G4endl;
 	G4cout << "### AtRIS: Starting the simulation " << G4endl;
 	G4int commandStatus = UImanager->ApplyCommand(tempString);
 	G4cout << "### AtRIS: simulation used " << runManager->GetNumberOfThreads() << " worker thread(s)" << G4endl;
