@@ -6,11 +6,12 @@ import json
 import os
 import re
 import warnings
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
-import requests
 
 from . import atrismacrogen as amg
 
@@ -325,20 +326,33 @@ def _fetch_nrlmsis_output(payload):
         "Origin": "https://kauai.ccmc.gsfc.nasa.gov",
         "Referer": "https://kauai.ccmc.gsfc.nasa.gov/instantrun/nrlmsis/",
     }
-    response = requests.post(NRLMSIS_API_URL, headers=api_headers, data=json.dumps(payload), timeout=120)
+    request = Request(
+        NRLMSIS_API_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=api_headers,
+        method="POST",
+    )
     try:
-        response_data = response.json()
+        with urlopen(request, timeout=120) as response:
+            response_text = response.read().decode("utf-8")
+    except HTTPError as exc:
+        response_text = exc.read().decode("utf-8", errors="replace")
+        try:
+            response_data = json.loads(response_text)
+        except ValueError:
+            response_data = {}
+        message = response_data.get("error") or response_data.get("message") or response_text
+        raise RuntimeError("CCMC NRLMSIS API request failed: %s" % message) from exc
+    try:
+        response_data = json.loads(response_text)
     except ValueError as exc:
         raise RuntimeError("CCMC NRLMSIS API returned a non-JSON response.") from exc
-    if not response.ok:
-        message = response_data.get("error") or response_data.get("message") or response.text
-        raise RuntimeError("CCMC NRLMSIS API request failed: %s" % message)
     txt_url = response_data.get("txt")
     if not txt_url:
         raise RuntimeError("CCMC NRLMSIS API response did not include an output URL.")
-    txt_response = requests.get(txt_url, headers={"User-Agent": headers["User-Agent"]}, timeout=120)
-    txt_response.raise_for_status()
-    return txt_response.text
+    request = Request(txt_url, headers={"User-Agent": headers["User-Agent"]})
+    with urlopen(request, timeout=120) as response:
+        return response.read().decode("utf-8")
 
 
 def _load_nrlmsis_content(payload):
@@ -741,8 +755,9 @@ def convert_phi(phi):
     return new_phi
 
 def load_array(theurl,rowstoskip=7):
-    response = requests.get(theurl, verify=False)
-    phidata  = response.content.decode('utf-16')
+    request = Request(theurl, headers={"User-Agent": headers["User-Agent"]})
+    with urlopen(request, timeout=120) as response:
+        phidata = response.read().decode('utf-16')
     phis     = []
     for k in phidata.split('\n'):
         thesplit = k.split()

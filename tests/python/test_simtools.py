@@ -1,7 +1,11 @@
+import json
 import shutil
+from io import BytesIO
 from pathlib import Path
+from urllib.error import HTTPError
 
 import numpy as np
+import pytest
 
 from atris_tools import simtools
 
@@ -20,6 +24,20 @@ def nrlmsis_row(altitude, marker):
     row[5] = altitude
     row[8] = marker
     return row
+
+
+class Response:
+    def __init__(self, content):
+        self.content = content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def read(self):
+        return self.content
 
 
 def test_process_psf_and_phantoms_return_numpy_data(tmp_path, monkeypatch):
@@ -84,3 +102,58 @@ def test_nrlmsis_chunks_keep_first_duplicate_and_sort(monkeypatch):
 
     np.testing.assert_allclose(atmosphere[:, 5], [0.0, 1.0, 2.0])
     np.testing.assert_allclose(atmosphere[:, 8], [10.0, 11.0, 12.0])
+
+
+def test_fetch_nrlmsis_output_posts_json_and_downloads_text(monkeypatch):
+    calls = []
+
+    def open_url(request, timeout):
+        calls.append((request, timeout))
+        if len(calls) == 1:
+            return Response(b'{"txt": "https://example.test/atmosphere.txt"}')
+        return Response(b"header\n1 2 3\n")
+
+    monkeypatch.setattr(simtools, "urlopen", open_url)
+    payload = {"version": "NRLMSIS2", "start": 0.0, "stop": 1.0}
+
+    content = simtools._fetch_nrlmsis_output(payload)
+
+    api_request, api_timeout = calls[0]
+    output_request, output_timeout = calls[1]
+    assert api_request.full_url == simtools.NRLMSIS_API_URL
+    assert api_request.get_method() == "POST"
+    assert json.loads(api_request.data) == payload
+    assert api_timeout == 120
+    assert output_request.full_url == "https://example.test/atmosphere.txt"
+    assert output_request.get_method() == "GET"
+    assert output_timeout == 120
+    assert content == "header\n1 2 3\n"
+
+
+def test_fetch_nrlmsis_output_reports_api_error(monkeypatch):
+    def open_url(request, timeout):
+        raise HTTPError(
+            request.full_url,
+            429,
+            "Too Many Requests",
+            {},
+            BytesIO(b'{"error": "Rate limit exceeded"}'),
+        )
+
+    monkeypatch.setattr(simtools, "urlopen", open_url)
+
+    with pytest.raises(RuntimeError, match="Rate limit exceeded"):
+        simtools._fetch_nrlmsis_output({"version": "NRLMSIS2"})
+
+
+def test_load_array_downloads_utf16_data(monkeypatch):
+    content = "2026.0 500.0\n2026.5 550.0\n".encode("utf-16")
+    monkeypatch.setattr(
+        simtools,
+        "urlopen",
+        lambda request, timeout: Response(content),
+    )
+
+    values = simtools.load_array("https://example.test/phi.txt")
+
+    np.testing.assert_allclose(values, [[2026.0, 500.0], [2026.5, 550.0]])
