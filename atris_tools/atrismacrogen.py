@@ -97,7 +97,7 @@ def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,output_dir="./atris/simulat
     return lines
 
 
-def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bins=None,rng=None,include_seeds=True):
+def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bins=None,rng=None):
     if base_bins is None:
         base_bins = 10**np.linspace(0,6,121)
     if rng is None:
@@ -105,8 +105,8 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
     radius  = np.loadtxt(os.path.join(output_dir, 'simulation.psf'))[-2,1] + 0.001 # we add 1 meter to the radius to aviod overlap.
     bins    = base_bins
     N       = bins.shape[0]*partspb # At 20 bins per decade, 2500 particles per bin is good. Even better would be 5k or 10k.
-    seed1 = rng.randint(31,999999) if include_seeds else None
-    seed2 = rng.randint(31,999999) if include_seeds else None
+    seed1 = rng.randint(31,999999)
+    seed2 = rng.randint(31,999999)
     #name      = str(seed1)+prefix
     name      = prefix
     shutil.copy2(os.path.join(output_dir, 'simulation.gdml'), os.path.join(output_dir, name + '.gdml'))
@@ -120,57 +120,17 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
     #subprocess.Popen(command,shell=True)
 
 
-def checkChunkDestination(output_dir):
-    plan_path = os.path.join(output_dir, 'chunks.txt')
-    chunks_dir = os.path.join(output_dir, 'chunks')
-    if os.path.exists(plan_path):
-        raise FileExistsError("Chunk plan already exists: " + plan_path)
-    if os.path.exists(chunks_dir):
-        if not os.path.isdir(chunks_dir):
-            raise FileExistsError("Chunk output path is not a directory: " + chunks_dir)
-        if os.listdir(chunks_dir):
-            raise FileExistsError("Chunk output directory is not empty: " + chunks_dir)
-
-
-def createChunkPlan(output_dir, runs, rng):
-    plan_path = os.path.join(output_dir, 'chunks.txt')
-    os.makedirs(os.path.join(output_dir, 'chunks'), exist_ok=True)
-
-    used_pairs = set()
-    lines = []
-    for prefix in ('protons', 'alphas'):
-        for _ in range(runs):
-            while True:
-                seed_pair = (rng.randint(31,999999), rng.randint(31,999999))
-                if seed_pair not in used_pairs:
-                    break
-            used_pairs.add(seed_pair)
-            lines.append('%s %06i %06i\n' % (prefix, seed_pair[0], seed_pair[1]))
-
-    with open(plan_path, 'x') as plan:
-        plan.writelines(lines)
-
-
-def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121,runs=None):
+def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
     if energy_points < 2:
         raise ValueError("energy_points must be at least 2")
-    if runs is not None and runs < 1:
-        raise ValueError("runs must be at least 1")
     output_dir = os.path.abspath(output_dir)
     if not os.path.isdir(output_dir):
         raise FileNotFoundError("Run directory does not exist: " + output_dir)
     rng = random.Random(random_seed) if random_seed is not None else random
     base_bins = 10**np.linspace(energy_min_power,energy_max_power,energy_points)
-    include_seeds = runs is None
 
-    if runs is not None:
-        checkChunkDestination(output_dir)
-
-    macroSetup('protons',"/gps/particle proton\n",1,partspb,output_dir,base_bins,rng,include_seeds)
-    macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),output_dir,base_bins,rng,include_seeds)
-
-    if runs is not None:
-        createChunkPlan(output_dir, runs, rng)
+    macroSetup('protons',"/gps/particle proton\n",1,partspb,output_dir,base_bins,rng)
+    macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),output_dir,base_bins,rng)
 
 
 def main():
@@ -185,7 +145,6 @@ def main():
     parser.add_argument("--energy-min-power", type=float, default=0.0, help="Base-10 power of the minimum energy in MeV.")
     parser.add_argument("--energy-max-power", type=float, default=6.0, help="Base-10 power of the maximum energy in MeV.")
     parser.add_argument("--energy-points", type=int, default=121)
-    parser.add_argument("--runs", type=int, help="Prepare this many independent proton and alpha runs.")
     args = parser.parse_args()
     macroGenManager(
         args.particles_per_bin,
@@ -195,11 +154,8 @@ def main():
         args.energy_min_power,
         args.energy_max_power,
         args.energy_points,
-        args.runs,
     )
     print("Generated proton and alpha input files in " + os.path.abspath(args.run_directory))
-    if args.runs is not None:
-        print("Generated %i proton and %i alpha entries in chunks.txt" % (args.runs, args.runs))
 
 
 if __name__ == "__main__":
