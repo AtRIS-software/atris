@@ -42,8 +42,6 @@ mkdir -p runs/my-first-run
 cd runs/my-first-run
 ```
 
-Reusing a run directory overwrites files with the same names.
-
 ### Fetch the atmosphere model
 
 Download an atmosphere from the
@@ -84,7 +82,8 @@ atrismacrogen \
 
 This copies `simulation.gdml` to `protons.gdml` and `alphas.gdml`, then
 creates the matching `.mac` and `.bins` files. The reduced energy grid and
-particle count are intended only to verify that AtRIS runs.
+particle count are intended only to verify that AtRIS runs. The command refuses
+to run if any of those proton or alpha input files already exist.
 
 ### Add phantom response files
 

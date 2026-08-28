@@ -67,6 +67,22 @@ def test_macro_generation_rejects_too_short_energy_grid(tmp_path):
         macroGenManager(1, output_dir=tmp_path, energy_points=1)
 
 
+def test_macro_generation_refuses_existing_inputs_before_writing(tmp_path):
+    prepare_run(tmp_path)
+    existing = tmp_path / "protons.mac"
+    existing.write_text("keep me\n")
+
+    with pytest.raises(FileExistsError, match="protons.mac"):
+        macroGenManager(2, output_dir=tmp_path, energy_points=3)
+
+    assert existing.read_text() == "keep me\n"
+    assert not (tmp_path / "protons.bins").exists()
+    assert not (tmp_path / "protons.gdml").exists()
+    assert not (tmp_path / "alphas.mac").exists()
+    assert not (tmp_path / "alphas.bins").exists()
+    assert not (tmp_path / "alphas.gdml").exists()
+
+
 def test_psf_conversion_preserves_reviewed_layer_geometry(tmp_path, monkeypatch):
     shutil.copyfile(FIXTURE / "simulation.psf", tmp_path / "simulation.psf")
     monkeypatch.chdir(tmp_path)

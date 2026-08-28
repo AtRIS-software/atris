@@ -70,6 +70,29 @@ import sys
 
 import numpy as np
 
+
+GENERATED_INPUTS = (
+    "protons.mac",
+    "protons.bins",
+    "protons.gdml",
+    "alphas.mac",
+    "alphas.bins",
+    "alphas.gdml",
+)
+
+
+def refuse_existing_inputs(output_dir):
+    existing = [
+        filename
+        for filename in GENERATED_INPUTS
+        if os.path.lexists(os.path.join(output_dir, filename))
+    ]
+    if existing:
+        raise FileExistsError(
+            "Refusing to overwrite existing AtRIS inputs: " + ", ".join(existing)
+        )
+
+
 def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,output_dir="./atris/simulation"):
     lines =  ""
     lines += "/run/initialize\n"
@@ -127,6 +150,7 @@ def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",rand
     output_dir = os.path.abspath(output_dir)
     if not os.path.isdir(output_dir):
         raise FileNotFoundError("Run directory does not exist: " + output_dir)
+    refuse_existing_inputs(output_dir)
     rng = random.Random(random_seed) if random_seed is not None else random
     base_bins = 10**np.linspace(energy_min_power,energy_max_power,energy_points)
     macroSetup('protons',"/gps/particle proton\n",1,partspb,output_dir,base_bins,rng)
