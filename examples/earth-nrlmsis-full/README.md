@@ -104,33 +104,34 @@ atris-stage-phantoms .
 
 ## Scatter and run the example
 
-Divide each particle species into 121 independently seeded chunks:
+Divide each particle species into 1,210 independently seeded chunks:
 
 ```bash
-atris-scatter --chunks 121 --random-seed 12345
+atris-scatter --chunks 1210 --random-seed 12345
 ```
 
-This preserves those totals: each proton chunk contains 3,000 events, and each
-alpha chunk contains 1,980 events.
+This preserves those totals: each proton chunk contains 300 events, and each
+alpha chunk contains 198 events.
 
-Each array task requests 40 cores and runs one chunk. On comparable hardware,
-allow roughly 20 minutes for a proton chunk and 50 minutes for an alpha chunk.
-Across all 242 chunks, that is about 141 forty-core node-hours. With one node
-running the tasks in succession, the simulation takes roughly six days; with
-multiple nodes, the elapsed time falls according to how many chunks the
-scheduler runs concurrently.
+Each line in `chunks.txt` runs one chunk. The chunks are independent and may be
+run in sequence or concurrently. Chunking splits the fixed total workload; it
+does not duplicate events or reduce the total computation. It provides partial
+output and allows interrupted runs to continue without repeating completed
+chunks. On a larger system, independent chunks can also run on separate nodes.
 
-Submit every line of `chunks.txt` as an array task:
+Run the incomplete chunks sequentially. Completed outputs begin appearing in
+`chunks/` while this command continues with the remaining work:
 
 ```bash
-sbatch --array=1-242 "$ATRIS_ROOT/examples/run-atris.slurm.sh"
+export G4FORCENUMBEROFTHREADS=4
+atris-run
 ```
 
-Chunking does not reduce the total computation. It lets the scheduler spread
-the work across available nodes and makes a long run restartable. The wrapper
-marks each successful chunk as `COMPLETE` and skips it on later submissions,
-so failed, timed-out, or missing chunks can be run again without repeating the
-finished work.
+The command skips chunks already marked `COMPLETE`, so it can be interrupted
+and run again without repeating completed work. Raw AtRIS output is written to
+one log file per chunk. On an Apple M1 using four worker threads, the first
+300-event proton chunk produced its result files after about two and a half
+minutes and completed in about two minutes and 47 seconds.
 
 Gather the completed chunks, then post-process and plot the results:
 
@@ -165,7 +166,7 @@ To run the prepared inputs directly, copy the example to another run directory:
 
 ```bash
 cd <ATRIS_WORK>
-cp -R "$ATRIS_ROOT/examples/earth-nrlmsis-full" runs/earth-full-prepared
-cd runs/earth-full-prepared
+cp -R "$ATRIS_ROOT/examples/earth-nrlmsis-full" runs/earth-nrlmsis-full-prepared
+cd runs/earth-nrlmsis-full-prepared
 atris-stage-phantoms .
 ```

@@ -22,6 +22,8 @@ scatter/gather simulations on an HPC system.
 
 A small set of prepared inputs is included in the
 [reduced Earth atmosphere example](examples/earth-nrlmsis-reduced/README.md).
+The [full Earth atmosphere example](examples/earth-nrlmsis-full/README.md) uses
+a 0.2 km atmosphere grid and the default particle settings.
 
 ## Start a shell session
 
@@ -37,134 +39,35 @@ source atris/setup_atris.sh
 
 If you wish you can source this script from your rc file.
 
-## Prepare a run
+## Prepare the example run
 
-Keep each simulation's inputs and outputs in a separate directory. This example
-uses `runs/my-first-run`:
+Keep each simulation's inputs and outputs in a separate directory. Copy the
+prepared reduced Earth example into `runs/my-first-run`:
 
 ```bash
-mkdir -p runs/my-first-run
+mkdir -p runs
+cp -R "$ATRIS_ROOT/examples/earth-nrlmsis-reduced" runs/my-first-run
 cd runs/my-first-run
 ```
 
-### Fetch the atmosphere model
-
-Download an atmosphere from the
-[NASA CCMC NRLMSIS Instant Run](https://kauai.ccmc.gsfc.nasa.gov/instantrun/nrlmsis/)
-page. Select NRLMSIS 2.0, choose the time, location, and altitude profile, and
-save the text result as `nrlmsis_output.txt` in the run directory.
-
-Convert the downloaded table to `simulation.psf` in the run directory:
-
-```bash
-nrlmsis2psf nrlmsis_output.txt
-```
-
-The Planet Specification Format (PSF) is an editable table describing the
-planet's spherical layers, including their geometry, temperature, density,
-pressure, composition, and detector identifiers.
-
-Convert the PSF into the Geant4 geometry read by AtRIS in the run directory:
-
-```bash
-psf2gdml
-```
-
-This creates `simulation.gdml` beside `simulation.psf`.
-
-### Generate the particle inputs (`.mac` and `.bins`)
-
-Generate a small, reproducible proton and alpha test in the run directory:
-
-```bash
-atrismacrogen \
-  --particles-per-bin 4 \
-  --alpha-factor 0.66 \
-  --random-seed 12345 \
-  --energy-max-power 3 \
-  --energy-points 18
-```
-
-This copies `simulation.gdml` to `protons.gdml` and `alphas.gdml`, then
-creates the matching `.mac` and `.bins` files. The reduced energy grid and
-particle count are intended only to verify that AtRIS runs. The command refuses
-to run if any of those proton or alpha input files already exist.
-
-### Add phantom response files
-
-Each row in `phantoms.txt` defines one phantom. Copy the supplied two-phantom
-example into the run directory:
-
-```bash
-cp "$ATRIS_ROOT/examples/earth-nrlmsis-reduced/phantoms.txt" .
-```
-
-The supplied file contains:
-
-```text
-# Each row defines one phantom.
-# IDs run contiguously from 0 and identify numbered AtRIS input and output.
-# Phantom is the filename stem shared by _response.txt and _counting.txt.
-# Mass is the phantom mass; area is its cross-sectional area.
-# ID  Phantom                          mass [g] area [cm2]
-   0  ramona_zero_0.060MeV_detA          0.5082      6.928
-   1  icru_zero_0.000MeV_detAB       14094.7550    1413.72
-```
-
-Then stage the response files under the numbered names expected by AtRIS:
+Stage the two selected phantom response pairs under the numbered filenames
+expected by AtRIS:
 
 ```bash
 atris-stage-phantoms .
 ```
 
-The command first looks for the files in the run directory, allowing custom
-phantom files to be used directly. Otherwise, it uses the standard files from
-`phantoms`. Relative symbolic links are created by default; pass `--copy` to
-make a self-contained run directory.
-
-A run without phantoms does not need `phantoms.txt` or this staging step. Pass
-`0` as the final AtRIS argument for such a run.
-
-The required proton inputs are now in the run directory:
-
-```text
-protons.gdml
-protons.mac
-protons.bins
-radiation_phantom0.txt
-counting_phantom0.txt
-radiation_phantom1.txt
-counting_phantom1.txt
-phantoms.txt
-```
-
-- `protons.gdml` defines the planet, atmosphere, materials, and sensitive
-  layers.
-- `protons.mac` defines the particle source, energy distribution, and event
-  count. Ordinary single-run macros also contain their random seeds.
-- `protons.bins` contains the energy values used by the AtRIS output.
-- Each phantom pair contains the response tables used for dose,
-  dose-equivalent, and count-rate calculations.
-- `phantoms.txt` selects the response tables and contains the mass and
-  cross-sectional area used during post-processing.
-
-### Clone a prepared run
-
-To reuse the inputs from the current run in a new sibling directory:
-
-```bash
-atris-clone . ../my-second-run
-```
-
-This copies the prepared atmosphere, geometry, particle inputs, and phantom
-inputs. Simulation results, plots, logs, and chunk progress are not copied. The
-command refuses to use an existing destination directory.
+The copied directory contains the fixed atmosphere and geometry, proton and
+alpha inputs, and phantom selection. Its local `README.md` explains how those
+inputs were prepared.
 
 ## Run AtRIS
 
-Run the proton and alpha simulations in the run directory:
+Use four Geant4 worker threads and run the proton and alpha simulations in the
+run directory:
 
 ```bash
+export G4FORCENUMBEROFTHREADS=4
 AtRIS FTFP_BERT_HP protons -1 2
 AtRIS FTFP_BERT_HP alphas -1 2
 ```
@@ -178,12 +81,7 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 2              number of numbered phantom pairs to load
 ```
 
-AtRIS uses all processors detected by Geant4 by default. Set
-`G4FORCENUMBEROFTHREADS` before starting AtRIS to use a specific number:
-
-```bash
-export G4FORCENUMBEROFTHREADS=4
-```
+Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 
 An existing macro containing `/run/numberOfThreads` retains that setting unless
 `G4FORCENUMBEROFTHREADS` is set.
@@ -207,8 +105,8 @@ The run directory then contains CSV output files beginning with `protons_` and
 ### Scatter and gather a larger run
 
 Scatter/gather is suitable for larger simulations whose work should be divided
-into independent, restartable chunks. After generating the ordinary particle
-inputs, create 20 proton and 20 alpha chunks:
+into independent, restartable chunks. From a prepared run directory, create 20
+proton and 20 alpha chunks:
 
 ```bash
 atris-scatter --chunks 20 --random-seed 12345
@@ -254,7 +152,20 @@ atris-gather
 ```
 
 Running `atris-gather` again replaces those files with a new aggregate of all
-chunks complete at that time.
+chunks complete at that time. It also reports the completed chunk count and,
+after two chunks have completed, the average completion interval and a rough
+time remaining based on recent `COMPLETE` marker timestamps. For each species
+with at least two completed chunks, it also reports how much the final group of
+chunks changed the normalized ionization result. This group is 10% of the
+completed chunks, rounded up to at least one whole chunk; the output reports
+the resulting percentage. The comparison uses chunk-plan order.
+
+The gather also writes `protons.convergence.csv` and
+`alphas.convergence.csv` when enough chunks of each species are available.
+Each new completed chunk adds a row. The tables track whole-panel ionization
+change, the median and 90th percentile changes among populated ionization
+cells, and corresponding relative standard-error percentiles estimated from
+the independent chunks.
 
 ### Add samples when a run has not converged
 
@@ -307,7 +218,15 @@ After post-processing, each available species also gets a result image such as
 `protons.png`, containing primary-energy, source-direction, source-position,
 and ionization panels. Each phantom gets its own result image, such as
 `protons.icru_zero_0.000MeV_detAB.png`, containing absorbed-dose,
-dose-equivalent, and count-rate panels.
+dose-equivalent, and count-rate panels. When convergence tables are present,
+`atris-plot` also writes `protons.convergence.png` and
+`alphas.convergence.png`. Each convergence image shows ionization change above
+the estimated Monte Carlo uncertainty. The upper panel's dashed colour-matched
+guides show the inverse-square-root change expected for ordinary Monte Carlo
+convergence. The lower panel's dashed curves fit the observed uncertainty with
+power laws fitted to the most recent half of the completed chunks and
+extrapolated through the planned run. Both axes are logarithmic so their slopes
+can be compared directly.
 
 The previews below come from the reduced test configuration in this guide and
 are not scientific production results.
