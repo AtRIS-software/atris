@@ -50,11 +50,11 @@ def prepare_run(run_directory, *, chunked=False):
     shutil.copyfile(FIXTURE / "simulation.bins", run_directory / "protons.bins")
     shutil.copyfile(FIXTURE / "ordinary.mac", run_directory / "protons.mac")
     shutil.copyfile(
-        PHANTOMS / "radiation_phantom0.txt",
+        PHANTOMS / "ramona_zero_0.060MeV_detA_response.txt",
         run_directory / "radiation_phantom0.txt",
     )
     shutil.copyfile(
-        PHANTOMS / "counting_phantom0.txt",
+        PHANTOMS / "ramona_zero_0.060MeV_detA_counting.txt",
         run_directory / "counting_phantom0.txt",
     )
     if chunked:
