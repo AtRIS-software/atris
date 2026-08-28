@@ -2,6 +2,8 @@ import argparse
 
 import numpy as np
 
+from .interface_output import read_binary, records_to_columns
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -17,16 +19,10 @@ def main():
     docstr += "use:' python binary2asci.py prefix', where prefix corresponds to the name part\n"
     docstr += "that comes before '.binary'\n"
     print(docstr)
-    dt      = np.dtype("i4,u2,u2, (2)f4")
     prefix  = args.prefix
     print("### AtRIS: reading binary data....", end="")
-    d = np.fromfile(prefix+".binary", dtype = dt)
+    d = records_to_columns(read_binary(prefix + ".binary"))
     print(".........done.")
-    pdg = d['f0']
-    det = d['f1']
-    ang = d['f2']
-    flt = d['f3']
-    d = np.column_stack((pdg,det,ang,flt))
     print("### AtRIS: now saving the data....", end="")
     fmt = "%i %i %i %f %f"
     np.savetxt(prefix+".asci", d,fmt=fmt)

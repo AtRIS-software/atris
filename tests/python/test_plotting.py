@@ -204,5 +204,5 @@ def test_main_skips_species_without_processed_output(tmp_path, monkeypatch, caps
     plotting.main()
 
     output = capsys.readouterr().out
-    assert "Skipping protons: processed output not found." in output
-    assert "Skipping alphas: processed output not found." in output
+    assert "Skipping protons response plots: processed output not found." in output
+    assert "Skipping alphas response plots: processed output not found." in output

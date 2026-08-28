@@ -13,6 +13,7 @@ from matplotlib.colors import LogNorm
 import numpy as np
 
 from .input_plotting import plot_inputs, read_macro
+from .interface_plotting import plot_interface_output
 from .phantoms import read_phantoms
 from .postprocess import get_histogram_axes, warn_if_inputs_do_not_match_output
 
@@ -585,7 +586,7 @@ def plot_run(simname):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot AtRIS inputs and processed response files."
+        description="Plot AtRIS inputs, mode-0 output, and processed responses."
     )
     parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
     args = parser.parse_args()
@@ -606,6 +607,16 @@ def main():
         except Exception as error:
             errors.append("inputs: " + str(error))
         for simulation in ("protons", "alphas"):
+            if (
+                Path(simulation + ".binary").is_file()
+                or Path(simulation + ".asci").is_file()
+            ):
+                try:
+                    plotted.append(plot_interface_output(simulation))
+                except Exception as error:
+                    errors.append(
+                        "%s mode-0 output: %s" % (simulation, error)
+                    )
             if Path(simulation + ".convergence.csv").is_file():
                 try:
                     plotted.append(plot_convergence(simulation))
@@ -614,7 +625,10 @@ def main():
                         "%s convergence: %s" % (simulation, error)
                     )
             if not _has_processed_output(simulation):
-                print("Skipping " + simulation + ": processed output not found.")
+                print(
+                    "Skipping " + simulation
+                    + " response plots: processed output not found."
+                )
                 continue
             try:
                 result_plots, result_errors = plot_run(simulation)
