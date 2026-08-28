@@ -76,11 +76,11 @@ Generate a small, reproducible proton and alpha test in the run directory:
 
 ```bash
 atrismacrogen \
-  --particles-per-bin 2 \
+  --particles-per-bin 4 \
   --alpha-factor 0.66 \
   --random-seed 12345 \
   --energy-max-power 3 \
-  --energy-points 7
+  --energy-points 18
 ```
 
 This copies `simulation.gdml` to `protons.gdml` and `alphas.gdml`, then
