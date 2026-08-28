@@ -14,6 +14,29 @@ from .phantoms import read_phantoms
 
 logger = logging.getLogger(__name__)
 
+OUTPUT_MODES = ("response", "interface", "legacy-ascii")
+OUTPUT_MODE_VALUES = {
+    "response": "-1",
+    "interface": "0",
+    "legacy-ascii": "1",
+}
+OUTPUT_MODE_ALIASES = {
+    "-1": "response",
+    "0": "interface",
+    "1": "legacy-ascii",
+}
+
+
+def normalize_output_mode(value):
+    """Return a named AtRIS output mode, accepting old numeric aliases."""
+    value = str(value)
+    value = OUTPUT_MODE_ALIASES.get(value, value)
+    if value not in OUTPUT_MODES:
+        raise ValueError(
+            "output mode must be response, interface, or legacy-ascii"
+        )
+    return value
+
 
 def chunk_name(entry):
     """Return the output-prefix name for one chunk-plan entry."""
@@ -55,7 +78,7 @@ def incomplete_entry_numbers(run_directory):
 def run_chunks(
     run_directory,
     physics_list="FTFP_BERT_HP",
-    mode=-1,
+    mode="response",
     entry=None,
     worker_index=0,
     worker_count=1,
@@ -65,6 +88,7 @@ def run_chunks(
 ):
     """Run incomplete chunks and mark each successful run as complete."""
     run_directory = Path(run_directory).expanduser().resolve()
+    mode = OUTPUT_MODE_VALUES[normalize_output_mode(mode)]
     entries = read_chunk_plan(run_directory)
     selected_entries = select_entries(
         entries,
@@ -175,9 +199,10 @@ def main():
             "Geant4 threads. Launch multiple commands externally and set "
             "G4FORCENUMBEROFTHREADS when needed. A deadline is checked only "
             "before a chunk starts and never interrupts a running chunk. Failed "
-            "chunks are left incomplete. Output modes other than -1 and 0 are "
-            "passed to AtRIS but are not part of the current workflow. This "
-            "command does not gather or post-process results."
+            "chunks are left incomplete. The response mode writes the normal "
+            "histogram workflow; interface additionally writes particle "
+            "crossings, and legacy-ascii retains the historical "
+            "ASCII mode. This command does not gather or post-process results."
         ),
     )
     parser.add_argument(
@@ -196,12 +221,13 @@ def main():
     )
     parser.add_argument(
         "--mode",
-        type=int,
-        default=-1,
-        metavar="MODE",
+        type=normalize_output_mode,
+        choices=OUTPUT_MODES,
+        default="response",
         help=(
-            "AtRIS output mode: -1 for the histogram response workflow; 0 also "
-            "writes binary interface records (default: -1)."
+            "AtRIS output mode: response writes the normal histograms; "
+            "interface also writes binary interface records; legacy-ascii "
+            "selects the historical ASCII mode (default: response)."
         ),
     )
     parser.add_argument(

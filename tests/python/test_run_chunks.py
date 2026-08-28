@@ -6,6 +6,7 @@ import pytest
 from atris_tools.run_chunks import (
     incomplete_entry_numbers,
     main,
+    normalize_output_mode,
     run_chunks,
     select_entries,
 )
@@ -218,7 +219,7 @@ def test_main_defaults_to_one_scheduler_neutral_worker(tmp_path, monkeypatch):
             (tmp_path,),
             {
                 "physics_list": "FTFP_BERT_HP",
-                "mode": -1,
+                "mode": "response",
                 "entry": None,
                 "worker_index": 0,
                 "worker_count": 1,
@@ -234,3 +235,45 @@ def test_incomplete_entry_numbers_uses_completion_markers(tmp_path):
     (tmp_path / "chunks/protons_111111_222222.COMPLETE").touch()
 
     assert incomplete_entry_numbers(tmp_path) == [2]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("response", "response"),
+        ("interface", "interface"),
+        ("legacy-ascii", "legacy-ascii"),
+        (-1, "response"),
+        (0, "interface"),
+        (1, "legacy-ascii"),
+    ],
+)
+def test_output_modes_have_named_numeric_compatibility_aliases(value, expected):
+    assert normalize_output_mode(value) == expected
+
+
+def test_output_mode_rejects_unknown_names():
+    with pytest.raises(ValueError, match="response, interface, or legacy-ascii"):
+        normalize_output_mode("unknown")
+
+
+@pytest.mark.parametrize(
+    ("mode", "value"),
+    [
+        ("response", "-1"),
+        ("interface", "0"),
+        ("legacy-ascii", "1"),
+    ],
+)
+def test_run_chunks_translates_named_modes_for_atris(
+    tmp_path, monkeypatch, mode, value
+):
+    prepare_run(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "atris_tools.run_chunks.subprocess.run",
+        lambda command, **kwargs: calls.append(command),
+    )
+
+    assert run_chunks(tmp_path, mode=mode, entry=1) == 1
+    assert calls[0][3] == value
