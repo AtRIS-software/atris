@@ -1,2 +1,0 @@
-Year Mon Day DOY hour Heit(km) Lat  Lon Oden(cm-3) N2den(cm-3) O2den(cm-3) air(gm/cm3) T(K) exoT(K) Heden(cm-3)Arden(cm-3) Hden(cm-3) Nden(cm-3) F107 F107a apdaily  ap0-3 ap3-6 ap6-9 ap9-12 ap12-33 ap33-59
-2012  5 27 148 12.00  100.0   10.0   10.0  6.156E+11  9.717E+12  2.375E+12 6.012E-10  183.1  1010  1.448E+08  9.960E+10  3.710E+07  3.312E+05  109.9  125.4    2.5    2.0    2.0    3.0    5.0    1.6    5.6

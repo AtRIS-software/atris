@@ -36,19 +36,18 @@ To use a different UTC time or coordinates, open the
 page and select NRLMSIS 2.0. Choose the new time and coordinates, and retain
 the 0 to 100 km range and 0.2 km step for this full-resolution setup.
 
-The service returns at most 150 rows, so download these four overlapping
-altitude ranges and the final 100 km level:
+The service returns at most 150 rows and can produce a malformed final row.
+Use four overlapping quarter-atmosphere ranges:
 
 ```text
-0.0 to 29.8 km
-29.8 to 59.6 km
-59.6 to 89.4 km
-89.4 to 99.8 km
-100.0 to 100.0 km
+0.0 to 25.0 km
+25.0 to 50.0 km
+50.0 to 75.0 km
+75.0 to 100.0 km
 ```
 
-Save the responses as `nrlmsis-0.txt`, `nrlmsis-30.txt`, `nrlmsis-60.txt`, and
-`nrlmsis-90.txt`, with the final level in `nrlmsis-100.txt`.
+Save the responses as `nrlmsis-0.txt`, `nrlmsis-25.txt`, `nrlmsis-50.txt`, and
+`nrlmsis-75.txt`.
 
 ### Convert the atmosphere
 
