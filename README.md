@@ -12,7 +12,7 @@ and count rate. It was developed by Saša Banjac and validated against Earth
 measurements, as described by
 [Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042). This
 repository provides the simulator, preparation and post-processing tools, and
-phantom response matrices; the workflow below focuses on multithreaded Earth
+phantom response files; the workflow below focuses on multithreaded Earth
 atmosphere simulations.
 
 This guide explains how to prepare, run, and inspect an AtRIS simulation. See
@@ -88,14 +88,38 @@ particle count are intended only to verify that AtRIS runs.
 
 ### Add phantom response files
 
-The repository includes 32 numbered radiation/counting response pairs, indexed
-from `0` through `31`. This test uses pair `0`; copy it into the run directory:
+Each row in `phantoms.txt` defines one phantom. Copy the supplied two-phantom
+example into the run directory:
 
 ```bash
-cp "$ATRIS_ROOT/phantoms/radiation_phantom0.txt" .
-cp "$ATRIS_ROOT/phantoms/counting_phantom0.txt" .
-cp "$ATRIS_ROOT/phantoms/phantoms.txt" .
+cp "$ATRIS_ROOT/examples/earth-nrlmsis/phantoms.txt" .
 ```
+
+The supplied file contains:
+
+```text
+# Each row defines one phantom.
+# IDs run contiguously from 0 and identify numbered AtRIS input and output.
+# Phantom is the filename stem shared by _response.txt and _counting.txt.
+# Mass is the phantom mass; area is its cross-sectional area.
+# ID  Phantom                          mass [g] area [cm2]
+   0  ramona_zero_0.060MeV_detA          0.5082      6.928
+   1  icru_zero_0.000MeV_detAB       14094.7550    1413.72
+```
+
+Then stage the response files under the numbered names expected by AtRIS:
+
+```bash
+atris-stage-phantoms .
+```
+
+The command first looks for the files in the run directory, allowing custom
+phantom files to be used directly. Otherwise, it uses the standard files from
+`phantoms`. Relative symbolic links are created by default; pass `--copy` to
+make a self-contained run directory.
+
+A run without phantoms does not need `phantoms.txt` or this staging step. Pass
+`0` as the final AtRIS argument for such a run.
 
 The required proton inputs are now in the run directory:
 
@@ -105,6 +129,9 @@ protons.mac
 protons.bins
 radiation_phantom0.txt
 counting_phantom0.txt
+radiation_phantom1.txt
+counting_phantom1.txt
+phantoms.txt
 ```
 
 - `protons.gdml` defines the planet, atmosphere, materials, and sensitive
@@ -112,18 +139,18 @@ counting_phantom0.txt
 - `protons.mac` defines the particle source, energy distribution, and event
   count. Ordinary single-run macros also contain their random seeds.
 - `protons.bins` contains the energy values used by the AtRIS output.
-- The phantom pair contains the response matrices used for dose,
+- Each phantom pair contains the response tables used for dose,
   dose-equivalent, and count-rate calculations.
-- `phantoms.txt` contains the phantom mass and cross-sectional area used during
-  post-processing.
+- `phantoms.txt` selects the response tables and contains the mass and
+  cross-sectional area used during post-processing.
 
 ## Run AtRIS
 
 Run the proton and alpha simulations in the run directory:
 
 ```bash
-AtRIS FTFP_BERT_HP protons -1 1
-AtRIS FTFP_BERT_HP alphas -1 1
+AtRIS FTFP_BERT_HP protons -1 2
+AtRIS FTFP_BERT_HP alphas -1 2
 ```
 
 The four AtRIS arguments are:
@@ -132,7 +159,7 @@ The four AtRIS arguments are:
 FTFP_BERT_HP   Geant4 physics list
 protons/alphas prefix for the .gdml, .mac, .bins, and output files
 -1             histogram/CSV output mode used by this workflow
-1              number of numbered phantom pairs to load
+2              number of numbered phantom pairs to load
 ```
 
 AtRIS uses all processors detected by Geant4 by default. Set

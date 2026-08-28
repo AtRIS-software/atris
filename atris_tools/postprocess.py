@@ -9,6 +9,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .phantoms import read_phantoms
+
 
 os.environ.setdefault("MPLBACKEND", "Agg")
 
@@ -59,14 +61,19 @@ def get_energy_edges(simname):
 
 
 def process_phantoms(nrphantoms):
-    phantoms = np.loadtxt(
-        "phantoms.txt",
-        delimiter=",",
-        comments="#",
-        usecols=(0, 1),
-        ndmin=2,
+    if nrphantoms == 0:
+        return np.empty((0, 2))
+    phantoms = read_phantoms(Path.cwd())
+    if len(phantoms) < nrphantoms:
+        raise ValueError(
+            "AtRIS produced output for more phantoms than phantoms.txt defines"
+        )
+    return np.array(
+        [
+            [phantom["mass"], phantom["area"]]
+            for phantom in phantoms[:nrphantoms]
+        ]
     )
-    return phantoms[:nrphantoms]
 
 
 def read_data(simname, nphant):

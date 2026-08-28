@@ -1,2 +1,2 @@
-# mass_g,cross_section_cm2,name
-14094.7550,1413.72,icru_zero
+# ID  Phantom   mass [g]  area [cm2]
+0  icru_zero  14094.7550  1413.72

@@ -25,6 +25,26 @@ def test_process_psf_and_phantoms_return_numpy_data(tmp_path, monkeypatch):
     np.testing.assert_allclose(phantoms, [[14094.7550, 1413.72]])
 
 
+def test_process_phantoms_accepts_run_without_phantoms(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    phantoms = postprocess.process_phantoms(0)
+
+    assert phantoms.shape == (0, 2)
+
+
+def test_process_phantoms_uses_ids_independently_of_row_order(tmp_path, monkeypatch):
+    (tmp_path / "phantoms.txt").write_text(
+        "1  second  30.5 40.5\n"
+        "0  first   10.5 20.5\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    phantoms = postprocess.process_phantoms(2)
+
+    np.testing.assert_allclose(phantoms, [[10.5, 20.5], [30.5, 40.5]])
+
+
 def test_process_run_reports_missing_plot_extra(monkeypatch):
     monkeypatch.setitem(sys.modules, "atris_tools.plotting", None)
 
