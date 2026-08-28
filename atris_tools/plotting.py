@@ -43,6 +43,173 @@ def _read_response(filename):
     return data[:, 1], data[:, 2:]
 
 
+def _convergence_ymax(series):
+    """Set plot scale from the lowest 90% of finite convergence values."""
+    values = np.concatenate([np.ravel(values) for values in series])
+    values = values[np.isfinite(values)]
+    return 1.05 * np.percentile(values, 90)
+
+
+def _log_125_ticks(limits):
+    """Return labelled 1-2-5 ticks and the remaining log subdivisions."""
+    lower, upper = limits
+    powers = 10.0 ** np.arange(
+        np.floor(np.log10(lower)),
+        np.ceil(np.log10(upper)) + 1,
+    )
+    major = np.ravel(np.outer(powers, (1, 2, 5)))
+    minor = np.ravel(np.outer(powers, (3, 4, 6, 7, 8, 9)))
+    return (
+        major[(major >= lower) & (major <= upper)],
+        minor[(minor >= lower) & (minor <= upper)],
+    )
+
+
+def _inverse_sqrt_reference(completed_chunks, values, reference_chunks=None):
+    """Return a robustly scaled inverse-square-root reference curve."""
+    completed_chunks = np.asarray(completed_chunks)
+    values = np.asarray(values)
+    finite = np.isfinite(values) & (values >= 0)
+    amplitude = np.median(
+        values[finite] * np.sqrt(completed_chunks[finite])
+    )
+    if reference_chunks is None:
+        reference_chunks = completed_chunks
+    return amplitude / np.sqrt(reference_chunks)
+
+
+def _plot_striped_guide(axis, chunks, values, color, label):
+    """Plot an alternating black and coloured guide above the data."""
+    axis.plot(
+        chunks,
+        values,
+        color="black",
+        linewidth=1.6,
+        zorder=5,
+        label="_nolegend_",
+    )
+    axis.plot(
+        chunks,
+        values,
+        color=color,
+        linestyle=(0, (5, 5)),
+        linewidth=1.6,
+        dash_capstyle="butt",
+        zorder=6,
+        label="_nolegend_",
+    )
+    if label != "_nolegend_":
+        axis.plot(
+            [],
+            [],
+            color="black",
+            linestyle="--",
+            linewidth=1.6,
+            label=label,
+        )
+
+
+def _add_inverse_sqrt_guides(
+    axis, completed_chunks, planned_chunks, lines, series
+):
+    """Add colour-matched inverse-square-root guides to convergence curves."""
+    reference_chunks = np.geomspace(
+        completed_chunks[0], planned_chunks, 300
+    )
+    for index, (line, values) in enumerate(zip(lines, series)):
+        _plot_striped_guide(
+            axis,
+            reference_chunks,
+            _inverse_sqrt_reference(
+                completed_chunks, values, reference_chunks
+            ),
+            line.get_color(),
+            r"$1/\sqrt{N}$ guides" if index == 0 else "_nolegend_",
+        )
+
+
+def _asymptotic_uncertainty_fit(
+    completed_chunks, values, reference_chunks=None
+):
+    """Fit A/sqrt(N) times an exponentially decaying correction."""
+    completed_chunks = np.asarray(completed_chunks, dtype=float)
+    values = np.asarray(values, dtype=float)
+    finite = (
+        np.isfinite(completed_chunks)
+        & np.isfinite(values)
+        & (completed_chunks > 0)
+        & (values >= 0)
+    )
+    chunks = completed_chunks[finite]
+    observed = values[finite]
+    if chunks.size < 3:
+        return None
+
+    inverse_sqrt = 1.0 / np.sqrt(chunks)
+    time_scales = np.geomspace(0.1, 100.0 * np.max(chunks), 2000)
+    best = None
+    for time_scale in time_scales:
+        transient = inverse_sqrt * np.exp(-chunks / time_scale)
+        design = np.column_stack((inverse_sqrt, -transient))
+        amplitude, correction = np.linalg.lstsq(
+            design, observed, rcond=None
+        )[0]
+        if amplitude <= 0 or correction < 0 or correction > amplitude:
+            continue
+        residual = np.sum((design @ (amplitude, correction) - observed) ** 2)
+        if best is None or residual < best[0]:
+            best = residual, amplitude, correction, time_scale
+
+    if best is None:
+        return None
+    _, amplitude, correction, time_scale = best
+    if reference_chunks is None:
+        reference_chunks = completed_chunks
+    reference_chunks = np.asarray(reference_chunks, dtype=float)
+    return amplitude / np.sqrt(reference_chunks) * (
+        1.0 - correction / amplitude * np.exp(-reference_chunks / time_scale)
+    )
+
+
+def _add_uncertainty_fits(
+    axis, completed_chunks, planned_chunks, lines, series
+):
+    """Add fitted uncertainty curves with inverse-root asymptotes."""
+    reference_chunks = np.geomspace(
+        completed_chunks[0], planned_chunks, 300
+    )
+    labelled = False
+    for line, values in zip(lines, series):
+        fitted = _asymptotic_uncertainty_fit(
+            completed_chunks, values, reference_chunks
+        )
+        if fitted is None:
+            continue
+        _plot_striped_guide(
+            axis,
+            reference_chunks,
+            fitted,
+            line.get_color(),
+            (
+                r"Asymptotic $1/\sqrt{N}$ fits"
+                if not labelled
+                else "_nolegend_"
+            ),
+        )
+        labelled = True
+
+
+def _planned_chunks(simname):
+    """Return the number of planned chunks for one particle species."""
+    count = 0
+    with open("chunks.txt") as plan:
+        for line in plan:
+            fields = line.split()
+            if fields and fields[0] == simname:
+                count += 1
+    return count
+
+
 def _add_response_plot(
     figure,
     axis,
@@ -188,6 +355,106 @@ def _save_phantom_plot(
     figure.tight_layout()
     figure.savefig(filename)
     plt.close(figure)
+
+
+def plot_convergence(simname):
+    """Plot the ionization convergence table produced by atris-gather."""
+    data = np.atleast_1d(
+        np.genfromtxt(
+            simname + ".convergence.csv",
+            delimiter=",",
+            names=True,
+        )
+    )
+    species = {"protons": "Proton", "alphas": "Alpha"}[simname]
+    planned_chunks = _planned_chunks(simname)
+    figure, axes = plt.subplots(nrows=2, figsize=(8, 8), sharex=True)
+    change_series = (
+        data["ionization_change_percent"],
+        data["cell_change_p50_percent"],
+        data["cell_change_p90_percent"],
+    )
+    change_lines = [
+        axes[0].plot(
+            data["completed_chunks"],
+            change_series[0],
+            marker="o",
+            label="Whole panel",
+        )[0],
+        axes[0].plot(
+            data["completed_chunks"],
+            change_series[1],
+            marker="o",
+            label="Median cell",
+        )[0],
+        axes[0].plot(
+            data["completed_chunks"],
+            change_series[2],
+            marker="o",
+            label="90th percentile cell",
+        )[0],
+    ]
+    _add_inverse_sqrt_guides(
+        axes[0],
+        data["completed_chunks"],
+        planned_chunks,
+        change_lines,
+        change_series,
+    )
+    axes[0].set_title("Change after latest chunk group")
+    axes[0].set_ylabel("Ionization change [%]")
+    axes[0].legend()
+
+    uncertainty_series = (
+        data["cell_relative_se_p50_percent"],
+        data["cell_relative_se_p90_percent"],
+    )
+    uncertainty_lines = [
+        axes[1].plot(
+            data["completed_chunks"],
+            uncertainty_series[0],
+            marker="o",
+            label="Median cell",
+        )[0],
+        axes[1].plot(
+            data["completed_chunks"],
+            uncertainty_series[1],
+            marker="o",
+            label="90th percentile cell",
+        )[0],
+    ]
+    _add_uncertainty_fits(
+        axes[1],
+        data["completed_chunks"],
+        planned_chunks,
+        uncertainty_lines,
+        uncertainty_series,
+    )
+    axes[1].set_title("Estimated Monte Carlo uncertainty")
+    axes[1].set_xlabel("Completed chunks")
+    axes[1].set_ylabel("Relative standard error [%]")
+    axes[1].legend()
+
+    for axis in axes:
+        axis.set_yscale("log")
+        axis.grid(alpha=0.25)
+    axes[0].set_ylim(top=_convergence_ymax(change_series))
+    axes[1].set_ylim(top=_convergence_ymax(uncertainty_series))
+    for axis in axes:
+        major_ticks, minor_ticks = _log_125_ticks(axis.get_ylim())
+        axis.set_yticks(major_ticks)
+        axis.set_yticklabels(["%g" % value for value in major_ticks])
+        axis.set_yticks(minor_ticks, minor=True)
+    axes[1].set_xscale("log")
+    axes[1].set_xlim(data["completed_chunks"][0], planned_chunks)
+    for axis in axes:
+        axis.tick_params(axis="x", which="minor", length=4, width=0.8)
+    figure.suptitle(species + " ionization convergence")
+    figure.tight_layout()
+    filename = simname + ".convergence.png"
+    figure.savefig(filename)
+    plt.close(figure)
+    return filename
 
 
 def _get_processed_phantom_ids(simname):
@@ -339,6 +606,13 @@ def main():
         except Exception as error:
             errors.append("inputs: " + str(error))
         for simulation in ("protons", "alphas"):
+            if Path(simulation + ".convergence.csv").is_file():
+                try:
+                    plotted.append(plot_convergence(simulation))
+                except Exception as error:
+                    errors.append(
+                        "%s convergence: %s" % (simulation, error)
+                    )
             if not _has_processed_output(simulation):
                 print("Skipping " + simulation + ": processed output not found.")
                 continue

@@ -1,14 +1,24 @@
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from atris_tools.gather import (
+    change_reference_count,
+    chunk_progress,
+    combine_ionization_histograms,
     completed_prefixes,
+    fractional_change,
+    format_duration,
     gather_histogram,
     gather_simulation,
+    ionization_response,
+    log_ionization_change,
+    log_chunk_progress,
     read_chunk_plan,
     read_histogram,
+    write_convergence,
 )
 
 
@@ -52,6 +62,164 @@ def test_completed_prefixes_require_marker_and_matching_species(tmp_path):
     assert completed_prefixes(tmp_path, entries, "protons") == [
         chunks / "protons_111111_222222"
     ]
+
+
+def test_chunk_progress_estimates_from_completion_marker_times(tmp_path):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [
+        ("protons", "%06i" % seed, "%06i" % (seed + 1))
+        for seed in range(100, 105)
+    ]
+    for entry, timestamp in zip(entries[:3], (100, 110, 120)):
+        simulation, seed1, seed2 = entry
+        marker = chunks / ("%s_%s_%s.COMPLETE" % (simulation, seed1, seed2))
+        marker.touch()
+        os.utime(marker, (timestamp, timestamp))
+
+    assert chunk_progress(tmp_path, entries, ("protons",)) == (3, 5, 10, 20)
+
+
+def test_chunk_progress_filters_species_and_logs_estimate(tmp_path, capsys):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [
+        ("protons", "111111", "222222"),
+        ("protons", "333333", "444444"),
+        ("protons", "555555", "666666"),
+        ("alphas", "777777", "888888"),
+    ]
+    for index, (_, seed1, seed2) in enumerate(entries[:2]):
+        marker = chunks / ("protons_%s_%s.COMPLETE" % (seed1, seed2))
+        marker.touch()
+        os.utime(marker, (100 + index * 65, 100 + index * 65))
+
+    log_chunk_progress(tmp_path, entries, ("protons",))
+
+    assert capsys.readouterr().out == (
+        "Chunk progress: 2/3 complete; average completion interval 1m 5s; "
+        "estimated time remaining 1m 5s.\n"
+    )
+
+
+def test_chunk_progress_reports_complete_and_formats_long_durations(
+    tmp_path, capsys
+):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [("alphas", "111111", "222222")]
+    (chunks / "alphas_111111_222222.COMPLETE").touch()
+
+    log_chunk_progress(tmp_path, entries, ("alphas",))
+
+    assert capsys.readouterr().out == "Chunk progress: 1/1 complete.\n"
+    assert format_duration(2 * 24 * 60 * 60 + 3 * 60 * 60) == "2d 3h"
+
+
+def test_chunk_progress_does_not_treat_zero_second_estimate_as_complete(
+    tmp_path, capsys
+):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [
+        ("protons", "111111", "222222"),
+        ("protons", "333333", "444444"),
+        ("protons", "555555", "666666"),
+    ]
+    for _, seed1, seed2 in entries[:2]:
+        marker = chunks / ("protons_%s_%s.COMPLETE" % (seed1, seed2))
+        marker.touch()
+        os.utime(marker, (100, 100))
+
+    log_chunk_progress(tmp_path, entries, ("protons",))
+
+    assert capsys.readouterr().out == (
+        "Chunk progress: 2/3 complete; average completion interval 0s; "
+        "estimated time remaining 0s.\n"
+    )
+
+
+def test_change_reference_uses_final_ten_percent_from_two_chunks():
+    assert change_reference_count(1) is None
+    assert change_reference_count(2) == 1
+    assert change_reference_count(10) == 9
+    assert change_reference_count(11) == 9
+    assert change_reference_count(26) == 23
+    assert change_reference_count(32) == 28
+
+
+def test_fractional_change_treats_unsampled_cells_as_zero():
+    previous = np.array([1.0, np.nan, 3.0])
+    current = np.array([1.0, 2.0, 1.0])
+
+    assert fractional_change(previous, current) == pytest.approx(4.0 / 8.0)
+
+
+def test_ionization_response_matches_postprocess_scaling():
+    primary_energy = np.array([[0.0], [2.0], [4.0], [0.0]])
+    ionization = np.zeros((20, 2))
+    ionization[:, 1] = np.arange(20).reshape(5, 4).ravel()
+    geometry = {"volume/cm3": np.array([2.0, 4.0, 8.0])}
+
+    response = ionization_response(
+        primary_energy, ionization, geometry, detector_count=3
+    )
+
+    np.testing.assert_allclose(response, [[9.0 / 8.0, 10.0 / 16.0]])
+
+
+def test_convergence_has_one_row_per_chunk_from_two_onward(
+    tmp_path, monkeypatch
+):
+    geometry = {"volume/cm3": np.ones(3)}
+    monkeypatch.setattr(
+        "atris_tools.gather.process_psf", lambda path: (geometry, 3)
+    )
+    primary = np.array([[0.0], [1.0], [1.0], [0.0]])
+    primary_snapshots = {count: count * primary for count in (1, 2, 3)}
+    ionization_paths = []
+    for count, value in enumerate((1.0, 3.0, 2.0), start=1):
+        path = tmp_path / ("ionization-%i.csv" % count)
+        write_histogram(path, [[0, value, 0, 0, 0]] * 20)
+        ionization_paths.append(path)
+
+    _, _, _, _, rows = combine_ionization_histograms(
+        tmp_path,
+        ionization_paths,
+        primary_snapshots,
+    )
+
+    assert [row[0] for row in rows] == [2, 3]
+    np.testing.assert_allclose(
+        rows[0],
+        [2, 4, 1, 50.0, 100.0 / 3, 100.0 / 3, 100.0 / 3, 50.0, 50.0],
+    )
+    np.testing.assert_allclose(
+        rows[1],
+        [3, 6, 1, 100.0 / 3, 0.0, 0.0, 0.0, 100 / np.sqrt(12), 100 / np.sqrt(12)],
+    )
+
+    output = tmp_path / "protons.convergence.csv"
+    write_convergence(output, rows)
+    lines = output.read_text().splitlines()
+    assert lines[0] == (
+        "completed_chunks,primary_events,comparison_chunks,"
+        "comparison_percent,ionization_change_percent,"
+        "cell_change_p50_percent,cell_change_p90_percent,"
+        "cell_relative_se_p50_percent,cell_relative_se_p90_percent"
+    )
+    assert len(lines) == 3
+
+
+def test_ionization_change_reports_actual_comparison_fraction(capsys):
+    row = (21, 6300, 3, 100.0 * 3 / 21, 1.802)
+
+    log_ionization_change("alphas", row)
+
+    assert capsys.readouterr().out == (
+        "Alpha ionization change after final 3 of 21 completed chunks "
+        "(14.3%): 1.80%\n"
+    )
 
 
 def test_gather_histogram_sums_all_columns_and_plane_values(tmp_path):
