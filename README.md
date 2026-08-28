@@ -21,7 +21,7 @@ This guide explains how to prepare, run, and inspect an AtRIS simulation. See
 scatter/gather simulations on an HPC system.
 
 A small set of prepared inputs is included in the
-[reduced Earth atmosphere example](examples/earth-nrlmsis/README.md).
+[reduced Earth atmosphere example](examples/earth-nrlmsis-reduced/README.md).
 
 ## Start a shell session
 
@@ -96,7 +96,7 @@ Each row in `phantoms.txt` defines one phantom. Copy the supplied two-phantom
 example into the run directory:
 
 ```bash
-cp "$ATRIS_ROOT/examples/earth-nrlmsis/phantoms.txt" .
+cp "$ATRIS_ROOT/examples/earth-nrlmsis-reduced/phantoms.txt" .
 ```
 
 The supplied file contains:
