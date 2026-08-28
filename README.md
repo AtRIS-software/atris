@@ -18,6 +18,9 @@ atmosphere simulations.
 This guide explains how to prepare, run, and inspect an AtRIS simulation. See
 [INSTALL.md](INSTALL.md) for installation and build instructions.
 
+A small set of prepared inputs is included in the
+[reduced Earth atmosphere example](examples/earth-nrlmsis/README.md).
+
 ## Start a shell session
 
 These instructions use the [directory layout](INSTALL.md#directory-layout)

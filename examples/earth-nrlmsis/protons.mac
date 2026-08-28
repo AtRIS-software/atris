@@ -1,0 +1,28 @@
+/run/numberOfThreads 4
+/run/initialize
+/run/verbose 2
+/gps/particle proton
+/gps/ene/type User
+/gps/hist/type energy
+/gps/hist/point 1.000000000 0.000000000
+/gps/hist/point 2.154434690 1.000000000
+/gps/hist/point 4.641588834 1.000000000
+/gps/hist/point 10.000000000 1.000000000
+/gps/hist/point 21.544346900 1.000000000
+/gps/hist/point 46.415888336 1.000000000
+/gps/hist/point 100.000000000 1.000000000
+/gps/hist/point 215.443469003 1.000000000
+/gps/hist/point 464.158883361 1.000000000
+/gps/hist/point 1000.000000000 1.000000000
+/gps/pos/type Surface
+/gps/pos/shape Sphere
+/gps/pos/centre 0 0 0 m
+/gps/pos/radius 7421.001 km
+/gps/ang/type cos
+/gps/ang/mintheta 0 deg
+/gps/ang/maxtheta 90 deg
+/gps/number 1
+/run/setCut 100. m
+/run/particle/dumpCutValues
+/random/setSeeds 436888 768307
+/run/beamOn 20
