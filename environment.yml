@@ -1,6 +1,0 @@
-name: atris
-dependencies:
-  - python
-  - pip
-  - numpy
-  - matplotlib
