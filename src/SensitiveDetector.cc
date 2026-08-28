@@ -7,6 +7,7 @@
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4HCofThisEvent.hh"
+#include "G4Event.hh"
 #include "G4Step.hh"
 #include "G4ThreeVector.hh"
 #include "G4SDManager.hh"
@@ -20,6 +21,7 @@
 #include "G4AutoLock.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
+#include "G4VProcess.hh"
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -27,6 +29,7 @@
 extern G4int mode;                      // from src/main.cc
 extern G4int nrofdetectors;             // from src/main.cc
 extern FILE * tuples1;                  // 
+extern FILE * stepTrace;
 extern std::vector<G4int> useornot;     // 
 extern std::vector<std::vector<G4double>> abso;      //
 extern std::vector<std::vector<G4double>> rate;      //
@@ -35,6 +38,7 @@ extern std::map<G4int, G4int> heavy;    //
 
 namespace {
 G4Mutex binaryOutputMutex;
+G4Mutex stepTraceMutex;
 }
 
 namespace atris {
@@ -87,6 +91,51 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	G4CsvAnalysisManager* analysis = G4CsvAnalysisManager::Instance();
 
 	G4int    detid = std::stoi(this->GetName());
+	G4double nioni = step->GetNonIonizingEnergyDeposit();
+	if (mode == 1) {
+		const G4Event* event = G4RunManager::GetRunManager()->GetCurrentEvent();
+		const G4StepPoint* prePoint = step->GetPreStepPoint();
+		const G4StepPoint* postPoint = step->GetPostStepPoint();
+		const G4ThreeVector& prePosition = prePoint->GetPosition();
+		const G4ThreeVector& postPosition = postPoint->GetPosition();
+		const G4VProcess* creatorProcess = trk->GetCreatorProcess();
+		const G4VProcess* stepProcess = postPoint->GetProcessDefinedStep();
+		const G4String creatorName = creatorProcess
+			? creatorProcess->GetProcessName()
+			: "primary";
+		const G4String stepProcessName = stepProcess
+			? stepProcess->GetProcessName()
+			: "none";
+
+		G4AutoLock lock(&stepTraceMutex);
+		std::fprintf(
+			stepTrace,
+			"%d,%d,%d,%d,%d,%d,"
+			"%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
+			"%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%s,%s\n",
+			event ? event->GetEventID() : -1,
+			trk->GetTrackID(),
+			trk->GetParentID(),
+			trk->GetCurrentStepNumber(),
+			trk->GetParticleDefinition()->GetPDGEncoding(),
+			detid,
+			prePosition.x()/km,
+			prePosition.y()/km,
+			prePosition.z()/km,
+			postPosition.x()/km,
+			postPosition.y()/km,
+			postPosition.z()/km,
+			prePoint->GetKineticEnergy()/MeV,
+			postPoint->GetKineticEnergy()/MeV,
+			edep/MeV,
+			nioni/MeV,
+			step->GetStepLength()/m,
+			postPoint->GetGlobalTime()/ns,
+			einp/MeV,
+			creatorName.c_str(),
+			stepProcessName.c_str()
+		);
+	}
 	if (detid == 0){
 		trk->SetTrackStatus(fStopAndKill);
 		return false;
@@ -95,7 +144,6 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		trk->SetTrackStatus(fStopAndKill);
 		return false;
 	}
-	G4double nioni = step->GetNonIonizingEnergyDeposit();
 	G4double ioni  = edep - nioni;
 	analysis->FillH2(2,einp,detid,ioni/MeV);
 	// mode -1:      dose rate determination

@@ -108,15 +108,15 @@ def histogram_entries(path):
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    ("mode", "creates_binary"),
+    ("mode", "creates_binary", "creates_ascii"),
     [
-        pytest.param("-1", False, id="csv-response-mode"),
-        pytest.param("0", True, id="binary-interface-mode"),
-        pytest.param("1", False, id="legacy-ascii-mode"),
+        pytest.param("-1", False, False, id="csv-response-mode"),
+        pytest.param("0", True, False, id="binary-interface-mode"),
+        pytest.param("1", False, True, id="ascii-step-mode"),
     ],
 )
 def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
-    tmp_path, atris_command, mode, creates_binary
+    tmp_path, atris_command, mode, creates_binary, creates_ascii
 ):
     prepare_run(tmp_path)
 
@@ -135,6 +135,26 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
     assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
     assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
     assert (tmp_path / "protons.binary").exists() is creates_binary
+    assert (tmp_path / "protons.asci").exists() is creates_ascii
+
+
+@pytest.mark.regression
+def test_ascii_mode_writes_step_trace_with_track_genealogy(tmp_path, atris_command):
+    prepare_run(tmp_path)
+
+    result = run_atris(atris_command, tmp_path, "protons", mode="1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    trace = (tmp_path / "protons.asci").read_text().splitlines()
+    assert trace[0] == "# AtRIS step trace version 1"
+    columns = trace[1].split(",")
+    rows = [dict(zip(columns, line.split(","))) for line in trace[2:]]
+    assert rows
+    assert {int(row["event_id"]) for row in rows} == {0, 1}
+    assert all(int(row["track_id"]) > 0 for row in rows)
+    assert all(int(row["step_id"]) > 0 for row in rows)
+    assert all(row["creator_process"] for row in rows)
+    assert all(row["step_process"] for row in rows)
 
 
 @pytest.mark.regression

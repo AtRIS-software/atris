@@ -24,6 +24,7 @@ G4String outputFileName;
 G4int    mode = -1;
 G4int    nrofdetectors=0;
 FILE*    tuples1;
+FILE*    stepTrace;
 
 // For holding phantom responses
 G4int nrphantoms;
@@ -173,6 +174,27 @@ int main(int argc,char** argv){
 		tuples1 = std::fopen(bFN,"wb");
 
 	}
+	if (mode == 1){
+		G4String traceFileName = outputFileName + (G4String) ".asci";
+		G4cout << "### AtRIS: opening step trace: " << traceFileName << G4endl;
+		G4cout << "### AtRIS: mode 1 writes one ASCII row per transport step; output may be very large" << G4endl;
+		stepTrace = std::fopen(traceFileName, "w");
+		if (stepTrace == nullptr) {
+			G4cerr << "### AtRIS: unable to open step trace: " << traceFileName << G4endl;
+			delete runManager;
+			return 1;
+		}
+		std::fputs("# AtRIS step trace version 1\n", stepTrace);
+		std::fputs(
+			"event_id,track_id,parent_id,step_id,pdg,detector_id,"
+			"pre_x_km,pre_y_km,pre_z_km,post_x_km,post_y_km,post_z_km,"
+			"pre_kinetic_energy_MeV,post_kinetic_energy_MeV,"
+			"energy_deposit_MeV,nonionizing_energy_deposit_MeV,"
+			"step_length_m,global_time_ns,primary_energy_MeV,"
+			"creator_process,step_process\n",
+			stepTrace
+		);
+	}
 
 	// DEACT atris::PrimaryGeneratorAction *pga = new atris::PrimaryGeneratorAction;
 	// DEACT runManager->SetUserAction(pga);
@@ -202,6 +224,7 @@ int main(int argc,char** argv){
 		G4cerr << "### AtRIS: macro execution failed with Geant4 status " << commandStatus << G4endl;
 	}
 	if (mode == 0) {std::fclose(tuples1);}
+	if (mode == 1) {std::fclose(stepTrace);}
 	delete runManager;
 	G4cout << "### AtRIS: The logfile has been sucessfully closed... " << G4endl;
 	return commandStatus == 0 ? 0 : 1;
