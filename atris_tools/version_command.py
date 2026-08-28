@@ -48,15 +48,16 @@ def versions_match(tools_version, executable_version):
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Show the AtRIS and atris-tools versions in PEP 440 format and "
-            "compare their source revisions."
+            "Report the installed atris-tools version and, when available, the "
+            "AtRIS executable version, then compare their source revisions."
         ),
         epilog=(
-            "Note that atris-version uses PEP 440 format for the AtRIS version "
-            "string, while the underlying string reported by AtRIS --version "
-            "is in git describe format. For example, v3.1.0-5-gabcdef0 means "
-            "five commits after tag v3.1.0 and is rendered as the PEP 440 version "
-            "3.1.1.dev5+gabcdef0."
+            "The executable is found on PATH and queried with AtRIS --version; "
+            "no simulation is run and the Geant4 runtime is not validated. Git "
+            "describe versions are displayed in PEP 440 form: for example, "
+            "v3.1.0-5-gabcdef0 becomes 3.1.1.dev5+gabcdef0. If AtRIS cannot be "
+            "queried, the Python package version is still reported and the "
+            "executable version is shown as unavailable."
         ),
     )
     parser.parse_args()

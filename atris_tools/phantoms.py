@@ -1,7 +1,13 @@
 import argparse
+import logging
 import os
 import shutil
 from pathlib import Path
+
+from .cli import add_logging_arguments, configure_logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def read_phantoms(run_directory):
@@ -109,8 +115,10 @@ def stage_phantoms(run_directory, archive=None, copy=False):
             created.append(destination)
             if copy:
                 shutil.copy2(source, destination)
+                logger.debug("Copied %s to %s", source, destination)
             else:
                 destination.symlink_to(os.path.relpath(source, run_directory))
+                logger.debug("Linked %s to %s", destination, source)
     except Exception:
         for path in reversed(created):
             path.unlink(missing_ok=True)
@@ -121,16 +129,44 @@ def stage_phantoms(run_directory, archive=None, copy=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Stage the phantom response files listed in phantoms.txt."
+        description=(
+            "Stage the phantom response and counting tables selected by "
+            "phantoms.txt under the numbered filenames expected by AtRIS."
+        ),
+        epilog=(
+            "Each phantoms.txt row must contain ID, file stem, mass, and area; "
+            "IDs must be contiguous from zero. The command does not create "
+            "phantom responses or change phantoms.txt. Existing matching links "
+            "are accepted, while conflicting destination files are not "
+            "overwritten."
+        ),
     )
-    parser.add_argument("run_directory")
-    parser.add_argument("--archive")
+    parser.add_argument(
+        "run_directory",
+        metavar="RUN_DIRECTORY",
+        help="Run directory containing phantoms.txt.",
+    )
+    parser.add_argument(
+        "--archive",
+        metavar="DIRECTORY",
+        help=(
+            "Directory containing the named phantom tables. Files in the run "
+            "directory are checked first; the default archive is "
+            "$ATRIS_ROOT/phantoms when ATRIS_ROOT is set. Without either, only "
+            "the run directory is searched."
+        ),
+    )
     parser.add_argument(
         "--copy",
         action="store_true",
-        help="Copy response files instead of creating relative symbolic links.",
+        help=(
+            "Copy response files into the run directory instead of creating "
+            "relative symbolic links."
+        ),
     )
+    add_logging_arguments(parser)
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     archive = args.archive
     if archive is None:
@@ -144,10 +180,10 @@ def main():
         copy=args.copy,
     )
     if count == 0:
-        print("No phantoms to stage.")
+        logger.info("No phantoms to stage")
     else:
         method = "copied files" if args.copy else "relative symbolic links"
-        print("Staged " + str(count) + " phantoms using " + method + ".")
+        logger.info("Staged %i phantoms using %s", count, method)
 
 
 if __name__ == "__main__":

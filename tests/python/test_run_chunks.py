@@ -1,3 +1,4 @@
+import logging
 import subprocess
 
 import pytest
@@ -155,7 +156,32 @@ def test_run_chunks_executes_only_the_workers_shard(tmp_path, monkeypatch):
     ]
 
 
-def test_run_chunks_stops_before_the_job_deadline(tmp_path, monkeypatch, capsys):
+def test_run_chunks_keeps_default_progress_under_ten_lines(
+    tmp_path, monkeypatch, caplog
+):
+    plan = [
+        ("protons", "%06i" % number, "%06i" % (number + 1000))
+        for number in range(70)
+    ]
+    prepare_run(tmp_path, plan)
+    monkeypatch.setattr(
+        "atris_tools.run_chunks.subprocess.run",
+        lambda *args, **kwargs: None,
+    )
+
+    with caplog.at_level(logging.INFO, logger="atris_tools.run_chunks"):
+        assert run_chunks(tmp_path) == 70
+
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "atris_tools.run_chunks"
+        and record.levelno == logging.INFO
+    ]
+    assert len(records) == 8
+
+
+def test_run_chunks_stops_before_the_job_deadline(tmp_path, monkeypatch, caplog):
     prepare_run(tmp_path)
     calls = []
     monkeypatch.setattr(
@@ -163,15 +189,16 @@ def test_run_chunks_stops_before_the_job_deadline(tmp_path, monkeypatch, capsys)
         lambda command, **kwargs: calls.append(command),
     )
 
-    assert run_chunks(
-        tmp_path,
-        deadline=1000,
-        stop_before_end=100,
-        clock=lambda: 900,
-    ) == 0
+    with caplog.at_level(logging.INFO, logger="atris_tools.run_chunks"):
+        assert run_chunks(
+            tmp_path,
+            deadline=1000,
+            stop_before_end=100,
+            clock=lambda: 900,
+        ) == 0
 
     assert calls == []
-    assert "wall-time safety window has begun" in capsys.readouterr().out
+    assert "wall-time safety window has begun" in caplog.text
 
 
 def test_main_defaults_to_one_scheduler_neutral_worker(tmp_path, monkeypatch):

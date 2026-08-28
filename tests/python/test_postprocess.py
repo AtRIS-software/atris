@@ -1,3 +1,4 @@
+import logging
 import shutil
 import sys
 from pathlib import Path
@@ -127,30 +128,31 @@ def test_process_phantoms_uses_ids_independently_of_row_order(tmp_path, monkeypa
     np.testing.assert_allclose(phantoms, [[10.5, 20.5], [30.5, 40.5]])
 
 
-def test_main_skips_missing_species(tmp_path, monkeypatch, capsys):
+def test_main_skips_missing_species(tmp_path, monkeypatch, caplog):
     (tmp_path / "protons_h1_h1.1.csv").write_text("present\n")
     processed = []
     monkeypatch.setattr(postprocess, "process_run", processed.append)
     monkeypatch.setattr(sys, "argv", ["atris-postprocess", str(tmp_path)])
 
-    postprocess.main()
+    with caplog.at_level(logging.INFO, logger="atris_tools.postprocess"):
+        postprocess.main()
 
     assert processed == ["protons"]
-    output = capsys.readouterr().out
-    assert "Skipping alphas: output not found." in output
+    assert "Skipping alphas: output not found" in caplog.messages
 
 
 def test_main_accepts_directory_without_simulation_output(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, caplog
 ):
     processed = []
     monkeypatch.setattr(postprocess, "process_run", processed.append)
     monkeypatch.setattr(sys, "argv", ["atris-postprocess", str(tmp_path)])
 
-    postprocess.main()
+    with caplog.at_level(logging.INFO, logger="atris_tools.postprocess"):
+        postprocess.main()
 
     assert processed == []
-    assert "No requested simulation output found" in capsys.readouterr().out
+    assert "No requested simulation output found" in caplog.text
 
 
 def test_main_rejects_species_argument(tmp_path, monkeypatch):

@@ -2,14 +2,18 @@
 
 import argparse
 from collections import Counter
+import logging
 import os
 from pathlib import Path
 import random
 import stat
 import tempfile
 
+from .cli import add_logging_arguments, configure_logging
+
 
 SPECIES = ("protons", "alphas")
+logger = logging.getLogger(__name__)
 
 
 def macro_lines_and_events(source):
@@ -186,11 +190,16 @@ def scatter(run_directory, chunks, random_seed=None):
         destination.write_text(contents)
     with plan_path.open("x") as plan:
         plan.writelines(plan_lines)
+    logger.debug("Wrote %i entries to %s", len(plan_lines), plan_path)
     for species, requested, actual, per_chunk in rounded_totals:
-        print(
-            "INFO: Rounded %s from %i requested events to %i across %i chunks "
-            "(%i events per chunk)."
-            % (species, requested, actual, chunks, per_chunk)
+        logger.warning(
+            "Rounded %s from %i requested events to %i across %i chunks "
+            "(%i events per chunk)",
+            species,
+            requested,
+            actual,
+            chunks,
+            per_chunk,
         )
 
     return run_directory
@@ -225,22 +234,21 @@ def extend_plan(run_directory, chunks, random_seed=None):
 
     new_lines = chunk_plan(chunks, random.Random(random_seed), used_pairs)
     replace_plan(plan_path, original, new_lines)
+    logger.debug("Appended %i entries to %s", len(new_lines), plan_path)
 
     for species in SPECIES:
         old_count = existing_counts[species]
         new_count = old_count + chunks
         per_chunk = events_per_chunk[species]
-        print(
-            "INFO: Extended %s from %i to %i chunks: added %i events; "
-            "cumulative plan %i events (%i per chunk)."
-            % (
-                species,
-                old_count,
-                new_count,
-                chunks * per_chunk,
-                new_count * per_chunk,
-                per_chunk,
-            )
+        logger.info(
+            "Extended %s from %i to %i chunks: added %i events; "
+            "cumulative plan %i events (%i per chunk)",
+            species,
+            old_count,
+            new_count,
+            chunks * per_chunk,
+            new_count * per_chunk,
+            per_chunk,
         )
 
     return run_directory
@@ -248,33 +256,69 @@ def extend_plan(run_directory, chunks, random_seed=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Prepare independently seeded chunks from ordinary AtRIS macros."
+        description=(
+            "Split the proton and alpha event totals in ordinary AtRIS macros "
+            "into independently seeded, restartable chunks."
+        ),
+        epilog=(
+            "The initial operation reads protons.mac and alphas.mac, leaves "
+            "them unchanged, and writes chunks.txt, protons.chunk.mac, "
+            "alphas.chunk.mac, and an empty chunks directory. Each species is "
+            "split separately; --chunks N therefore creates 2N plan entries. "
+            "If an event total is not divisible by N, each chunk receives the "
+            "rounded-up count and the resulting small increase is reported. "
+            "--extend adds new events using the established per-chunk size; it "
+            "does not repartition existing work. This command does not run or "
+            "gather any chunks."
+        ),
     )
-    parser.add_argument("run_directory", nargs="?", default=".")
+    parser.add_argument(
+        "run_directory",
+        nargs="?",
+        default=".",
+        metavar="RUN_DIRECTORY",
+        help="Prepared run directory (default: current directory).",
+    )
     operation = parser.add_mutually_exclusive_group(required=True)
     operation.add_argument(
         "--chunks",
         type=int,
-        help="Number of chunks to create for each particle species.",
+        metavar="COUNT",
+        help=(
+            "Create a new plan with COUNT proton chunks and COUNT alpha "
+            "chunks."
+        ),
     )
     operation.add_argument(
         "--extend",
         type=int,
-        metavar="CHUNKS",
-        help="Number of new chunks to append for each particle species.",
+        metavar="COUNT",
+        help=(
+            "Append COUNT new chunks for each species to an existing plan, "
+            "increasing the total simulated events."
+        ),
     )
     parser.add_argument(
         "--random-seed",
         type=int,
-        help="Seed used to generate reproducible chunk seed pairs.",
+        metavar="SEED",
+        help=(
+            "Seed used to generate reproducible, unique Geant4 seed pairs "
+            "for the plan (default: random)."
+        ),
     )
+    add_logging_arguments(parser)
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     if args.chunks is not None:
         run_directory = scatter(args.run_directory, args.chunks, args.random_seed)
-        print(
-            "Created %i proton chunks and %i alpha chunks (%i total) in %s"
-            % (args.chunks, args.chunks, args.chunks * 2, run_directory)
+        logger.info(
+            "Created %i proton chunks and %i alpha chunks (%i total) in %s",
+            args.chunks,
+            args.chunks,
+            args.chunks * 2,
+            run_directory,
         )
     else:
         run_directory = extend_plan(
@@ -282,9 +326,12 @@ def main():
             args.extend,
             args.random_seed,
         )
-        print(
-            "Added %i proton chunks and %i alpha chunks (%i total) to %s"
-            % (args.extend, args.extend, args.extend * 2, run_directory)
+        logger.info(
+            "Added %i proton chunks and %i alpha chunks (%i total) to %s",
+            args.extend,
+            args.extend,
+            args.extend * 2,
+            run_directory,
         )
 
 

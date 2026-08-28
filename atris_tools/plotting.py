@@ -1,9 +1,9 @@
 """Create quick-look PNG plots from processed AtRIS response files."""
 
 import argparse
+import logging
 import os
 import re
-import sys
 from pathlib import Path
 
 os.environ.setdefault("MPLBACKEND", "Agg")
@@ -12,10 +12,14 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
 
+from .cli import add_logging_arguments, configure_logging
 from .input_plotting import plot_inputs, read_macro
 from .interface_plotting import plot_interface_output
 from .phantoms import read_phantoms
 from .postprocess import get_histogram_axes, warn_if_inputs_do_not_match_output
+
+
+logger = logging.getLogger(__name__)
 
 
 def _log_norm(data):
@@ -569,10 +573,30 @@ def plot_run(simname):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot AtRIS inputs, mode-0 output, and processed responses."
+        description=(
+            "Create quick-look PNG plots from the AtRIS inputs and result "
+            "products already present in a run directory."
+        ),
+        epilog=(
+            "Recognized products include prepared macros and geometry, binary "
+            "or ASCII mode-0 interface records, convergence tables, and "
+            "post-processed proton and alpha responses. Missing product groups "
+            "are skipped so partial runs can still be inspected. Existing PNG "
+            "files with the generated names are replaced. This command does "
+            "not run AtRIS, gather chunks, or post-process raw histograms."
+        ),
     )
-    parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "run_directory",
+        nargs="?",
+        type=Path,
+        default=Path.cwd(),
+        metavar="RUN_DIRECTORY",
+        help="Run directory to inspect (default: current directory).",
+    )
+    add_logging_arguments(parser)
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     run_directory = args.run_directory.expanduser().resolve()
     if not run_directory.is_dir():
@@ -582,6 +606,7 @@ def main():
     input_plots = []
     plotted = []
     errors = []
+    logger.info("Starting plotting in %s", run_directory)
     try:
         os.chdir(run_directory)
         try:
@@ -608,9 +633,9 @@ def main():
                         "%s convergence: %s" % (simulation, error)
                     )
             if not _has_processed_output(simulation):
-                print(
-                    "Skipping " + simulation
-                    + " response plots: processed output not found."
+                logger.info(
+                    "Skipping %s response plots: processed output not found",
+                    simulation,
                 )
                 continue
             try:
@@ -623,13 +648,15 @@ def main():
         os.chdir(previous_directory)
 
     for error in errors:
-        print("Could not plot " + error, file=sys.stderr)
+        logger.warning("Could not plot %s", error)
     if input_plots:
-        print("Wrote input PNG plots to " + str(run_directory))
+        logger.info("Wrote input PNG plots to %s", run_directory)
+        logger.debug("Input plots: %s", ", ".join(input_plots))
     if plotted:
-        print("Wrote PNG plots to " + str(run_directory))
+        logger.info("Wrote PNG plots to %s", run_directory)
+        logger.debug("Result plots: %s", ", ".join(plotted))
     elif not input_plots:
-        print("No processed simulation output found in " + str(run_directory))
+        logger.info("No processed simulation output found in %s", run_directory)
 
 
 if __name__ == "__main__":

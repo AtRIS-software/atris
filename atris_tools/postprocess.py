@@ -2,14 +2,18 @@
 """Convert raw AtRIS CSV histograms into scaled numerical response files."""
 
 import argparse
+import logging
 import os
 import re
-import sys
 from pathlib import Path
 
 import numpy as np
 
+from .cli import add_logging_arguments, configure_logging
 from .phantoms import read_phantoms
+
+
+logger = logging.getLogger(__name__)
 
 
 def process_psf(filename="simulation.psf"):
@@ -39,8 +43,7 @@ def get_nr_phantoms(simname):
     nrphantoms = sum(
         pattern.match(filename) is not None for filename in os.listdir(".")
     )
-    label = "phantom" if nrphantoms == 1 else "phantoms"
-    print("This run included %i %s" % (nrphantoms, label))
+    logger.debug("%s output includes %i phantoms", simname, nrphantoms)
     return nrphantoms
 
 
@@ -70,7 +73,7 @@ def get_histogram_axes(filename):
 
 def get_energy_edges(simname):
     edges = get_histogram_axes(simname + "_h1_h1.1.csv")[0]
-    print("This simulation had %i energy bins" % (edges.shape[0] - 1))
+    logger.debug("%s output includes %i energy bins", simname, edges.shape[0] - 1)
     return edges
 
 
@@ -178,7 +181,7 @@ def input_output_warnings(simname):
 
 def warn_if_inputs_do_not_match_output(simname):
     for warning in input_output_warnings(simname):
-        print("WARNING: " + warning, file=sys.stderr)
+        logger.warning("%s", warning)
 
 
 def process_phantoms(nrphantoms):
@@ -215,7 +218,6 @@ def read_data(simname, nphant):
 def scale_data(data, nphant, ndet, nenergyedges, phantom_data, geometry):
     nrparticles = data[0][:, 0]
     nrparticles = nrparticles[1:-1]
-    # print(nrparticles)
     limit = 1 + nphant * 3
     shapex = ndet + 2
     shapey = nenergyedges + 1
@@ -271,9 +273,15 @@ def process_run(simname):
     phantom_count = get_nr_phantoms(simname)
     energy_edges = get_energy_edges(simname)
     phantom_data = process_phantoms(phantom_count)
-    print("Processing phantoms")
+    logger.info(
+        "Post-processing %s with %i energy bins and %i phantoms",
+        simname,
+        energy_edges.shape[0] - 1,
+        phantom_count,
+    )
+    logger.debug("Reading %s histogram data", simname)
     data = read_data(simname, phantom_count)
-    print("Reading data complete.")
+    logger.debug("Scaling %s response data", simname)
     scaled_data = scale_data(
         data,
         phantom_count,
@@ -282,17 +290,37 @@ def process_run(simname):
         phantom_data,
         geometry,
     )
-    print("Making output files.")
+    logger.debug("Writing %s response files", simname)
     make_output(scaled_data, geometry, simname, phantom_count)
-    print("Response files have been created.")
+    logger.info("Wrote processed %s response files", simname)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Post-process raw AtRIS CSV output."
+        description=(
+            "Scale canonical AtRIS histogram CSV files into altitude- and "
+            "energy-dependent ionization and phantom response tables."
+        ),
+        epilog=(
+            "The command processes the protons and alphas prefixes when their "
+            "primary histogram files are present. It reads simulation.psf and, "
+            "for phantom responses, phantoms.txt; it writes .ioni, .doseN, "
+            ".equiN, and .ratesN files, replacing existing processed files. "
+            "Missing species are skipped. This command does not gather chunk "
+            "histograms, run simulations, or make plots."
+        ),
     )
-    parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "run_directory",
+        nargs="?",
+        type=Path,
+        default=Path.cwd(),
+        metavar="RUN_DIRECTORY",
+        help="Run directory containing canonical CSV output (default: current directory).",
+    )
+    add_logging_arguments(parser)
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     run_directory = args.run_directory.expanduser().resolve()
     if not run_directory.is_dir():
@@ -300,11 +328,12 @@ def main():
 
     previous_directory = Path.cwd()
     processed = []
+    logger.info("Starting post-processing in %s", run_directory)
     try:
         os.chdir(run_directory)
         for simulation in ("protons", "alphas"):
             if not Path(simulation + "_h1_h1.1.csv").is_file():
-                print("Skipping " + simulation + ": output not found.")
+                logger.info("Skipping %s: output not found", simulation)
                 continue
             process_run(simulation)
             processed.append(simulation)
@@ -312,9 +341,9 @@ def main():
         os.chdir(previous_directory)
 
     if processed:
-        print("Wrote processed result files to " + str(run_directory))
+        logger.info("Wrote processed result files to %s", run_directory)
     else:
-        print("No requested simulation output found in " + str(run_directory))
+        logger.info("No requested simulation output found in %s", run_directory)
 
 
 if __name__ == "__main__":

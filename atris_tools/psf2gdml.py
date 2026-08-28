@@ -230,7 +230,16 @@ def psf2gdml():
 def main():
     """Convert simulation.psf in the current directory to simulation.gdml."""
     parser = argparse.ArgumentParser(
-        description="Convert simulation.psf to simulation.gdml in the current directory."
+        description=(
+            "Convert an AtRIS Planet Specification Format model into the GDML "
+            "geometry and material description read by Geant4."
+        ),
+        epilog=(
+            "This converter uses fixed filenames: it reads simulation.psf and "
+            "writes simulation.gdml in the current directory. It does not "
+            "download or generate an atmosphere and does not run AtRIS. An "
+            "existing simulation.gdml is replaced."
+        ),
     )
     parser.parse_args()
     psf2gdml()

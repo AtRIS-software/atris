@@ -7,9 +7,23 @@ from .interface_output import read_binary, records_to_columns
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert AtRIS binary output to ASCII."
+        description=(
+            "Convert native AtRIS mode-0 particle-interface records from "
+            "binary to the historical five-column ASCII format."
+        ),
+        epilog=(
+            "PREFIX.binary is read and PREFIX.asci is written, replacing an "
+            "existing ASCII file. The binary input is retained. This command "
+            "does not gather chunks, post-process response histograms, or make "
+            "plots; the binary representation remains faster and smaller for "
+            "normal analysis."
+        ),
     )
-    parser.add_argument("prefix", help="File path without the .binary suffix.")
+    parser.add_argument(
+        "prefix",
+        metavar="PREFIX",
+        help="Input and output path without the .binary or .asci suffix.",
+    )
     args = parser.parse_args()
 
     docstr  = "Welcome to bin2ascii, a script which converts your 1.binary and 2.binary data\n"

@@ -2,17 +2,19 @@
 """Convert a downloaded NASA NRLMSIS table to AtRIS PSF."""
 
 import argparse
-import sys
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from . import nrlmsis
+from .cli import add_logging_arguments, configure_logging
 
 
 HEADER_MARKER = "Year Mon Day"
 METADATA_COLUMNS = (0, 1, 2, 3, 4, 6, 7)
 DUPLICATE_RELATIVE_TOLERANCE = 5.0e-4
+logger = logging.getLogger(__name__)
 
 
 def _read_table(path):
@@ -104,20 +106,20 @@ def merge_nrlmsis(input_paths):
             )
         for altitude in malformed_altitudes:
             rejected_rows.setdefault(altitude, []).append(path)
-            print(
-                "WARNING: Discarding malformed NRLMSIS row at %.3f km from %s"
-                % (altitude, path),
-                file=sys.stderr,
+            logger.warning(
+                "Discarding malformed NRLMSIS row at %.3f km from %s",
+                altitude,
+                path,
             )
         suspicious = _suspicious_rows(atmosphere)
         for row, reject in zip(atmosphere, suspicious):
             altitude = _altitude_key(row[5])
             if reject:
                 rejected_rows.setdefault(altitude, []).append(path)
-                print(
-                    "WARNING: Discarding suspicious NRLMSIS row at %.3f km "
-                    "from %s" % (altitude, path),
-                    file=sys.stderr,
+                logger.warning(
+                    "Discarding suspicious NRLMSIS row at %.3f km from %s",
+                    altitude,
+                    path,
                 )
                 continue
             if altitude in valid_rows:
@@ -174,10 +176,14 @@ def merge_nrlmsis(input_paths):
             "Merged NRLMSIS altitudes are not a complete, uniformly spaced grid"
         )
 
-    print(
+    logger.info(
         "Merged %i NRLMSIS file(s) into %i rows from %.3f to %.3f km "
-        "with a %.3f km step."
-        % (len(tables), len(merged), merged[0, 5], merged[-1, 5], step)
+        "with a %.3f km step.",
+        len(tables),
+        len(merged),
+        merged[0, 5],
+        merged[-1, 5],
+        step,
     )
     return merged
 
@@ -206,21 +212,40 @@ def convert_nrlmsis(input_paths):
     nrlmsis.nrml2psf(nrlmsis.nrlm_reformer(atmosphere))
     output_path = Path.cwd() / "simulation.psf"
     _validate_psf(output_path, len(atmosphere))
+    logger.info("Wrote %s", output_path)
     return output_path
 
 
 def main():
     """Run the NRLMSIS-to-PSF command."""
     parser = argparse.ArgumentParser(
-        description="Merge downloaded NASA NRLMSIS tables into simulation.psf."
+        description=(
+            "Convert one or more NASA CCMC NRLMSIS text tables into the "
+            "Planet Specification Format (PSF) used by AtRIS."
+        ),
+        epilog=(
+            "This command does not download atmosphere data. Input tables may "
+            "overlap and may be supplied in any altitude order, but they must "
+            "describe the same location and time and combine into a complete, "
+            "uniformly spaced altitude grid. The result is written as "
+            "simulation.psf in the current directory, replacing that file if "
+            "it already exists."
+        ),
     )
     parser.add_argument(
         "nrlmsis_output",
         nargs="+",
         type=Path,
-        help="Downloaded NRLMSIS text table(s), in any altitude order.",
+        metavar="TABLE",
+        help=(
+            "Downloaded NRLMSIS text table. Supply multiple tables when the "
+            "altitude profile was downloaded in chunks."
+        ),
     )
-    convert_nrlmsis(parser.parse_args().nrlmsis_output)
+    add_logging_arguments(parser)
+    args = parser.parse_args()
+    configure_logging(args.log_level)
+    convert_nrlmsis(args.nrlmsis_output)
 
 
 if __name__ == "__main__":

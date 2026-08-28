@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 
@@ -53,12 +54,13 @@ def test_chunk_plan_skips_seed_pairs_already_in_an_existing_plan():
 
 
 def test_scatter_preserves_ordinary_macros_and_rounds_chunk_event_count(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
     originals = write_ordinary_macros(tmp_path)
     (tmp_path / "chunks").mkdir()
 
-    result = scatter(tmp_path, chunks=2, random_seed=17)
+    with caplog.at_level(logging.WARNING, logger="atris_tools.scatter"):
+        result = scatter(tmp_path, chunks=2, random_seed=17)
 
     assert result == tmp_path.resolve()
     assert (tmp_path / "chunks").is_dir()
@@ -71,22 +73,22 @@ def test_scatter_preserves_ordinary_macros_and_rounds_chunk_event_count(
         assert "/random/setSeeds" not in chunk
         assert "/run/beamOn 4" in chunk
 
-    assert capsys.readouterr().out.splitlines() == [
-        "INFO: Rounded protons from 7 requested events to 8 across 2 chunks "
-        "(4 events per chunk).",
-        "INFO: Rounded alphas from 7 requested events to 8 across 2 chunks "
-        "(4 events per chunk).",
+    assert caplog.messages == [
+        "Rounded protons from 7 requested events to 8 across 2 chunks "
+        "(4 events per chunk)",
+        "Rounded alphas from 7 requested events to 8 across 2 chunks "
+        "(4 events per chunk)",
     ]
 
 
-def test_scatter_logs_nothing_when_event_count_divides_evenly(tmp_path, capsys):
+def test_scatter_logs_nothing_when_event_count_divides_evenly(tmp_path, caplog):
     write_ordinary_macros(tmp_path)
     for macro in tmp_path.glob("*.mac"):
         macro.write_text(macro.read_text().replace("/run/beamOn 7", "/run/beamOn 8"))
 
     scatter(tmp_path, chunks=2, random_seed=17)
 
-    assert capsys.readouterr().out == ""
+    assert caplog.messages == []
     for species in ("protons", "alphas"):
         chunk = (tmp_path / f"{species}.chunk.mac").read_text()
         assert "/run/beamOn 4" in chunk
@@ -139,11 +141,11 @@ def test_scatter_rejects_zero_chunks(tmp_path):
 
 
 def test_extend_plan_preserves_existing_work_and_adds_unique_chunks(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
     write_ordinary_macros(tmp_path)
     scatter(tmp_path, chunks=2, random_seed=17)
-    capsys.readouterr()
+    caplog.clear()
     original_plan = (tmp_path / "chunks.txt").read_text()
     original_macros = {
         species: (tmp_path / f"{species}.chunk.mac").read_text()
@@ -152,7 +154,8 @@ def test_extend_plan_preserves_existing_work_and_adds_unique_chunks(
     marker = tmp_path / "chunks" / "existing.COMPLETE"
     marker.write_text("keep\n")
 
-    result = extend_plan(tmp_path, chunks=1, random_seed=17)
+    with caplog.at_level(logging.INFO, logger="atris_tools.scatter"):
+        result = extend_plan(tmp_path, chunks=1, random_seed=17)
 
     assert result == tmp_path.resolve()
     extended_lines = (tmp_path / "chunks.txt").read_text().splitlines()
@@ -172,11 +175,11 @@ def test_extend_plan_preserves_existing_work_and_adds_unique_chunks(
         assert (tmp_path / f"{species}.chunk.mac").read_text() == original_macros[
             species
         ]
-    assert capsys.readouterr().out.splitlines() == [
-        "INFO: Extended protons from 2 to 3 chunks: added 4 events; "
-        "cumulative plan 12 events (4 per chunk).",
-        "INFO: Extended alphas from 2 to 3 chunks: added 4 events; "
-        "cumulative plan 12 events (4 per chunk).",
+    assert caplog.messages == [
+        "Extended protons from 2 to 3 chunks: added 4 events; "
+        "cumulative plan 12 events (4 per chunk)",
+        "Extended alphas from 2 to 3 chunks: added 4 events; "
+        "cumulative plan 12 events (4 per chunk)",
     ]
 
 

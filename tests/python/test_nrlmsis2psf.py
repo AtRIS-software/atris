@@ -1,3 +1,4 @@
+import logging
 import sys
 
 import numpy as np
@@ -20,7 +21,7 @@ def write_table(path, rows):
 
 
 def test_convert_merges_files_and_replaces_suspicious_duplicate(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, caplog
 ):
     first = tmp_path / "first.txt"
     second = tmp_path / "second.txt"
@@ -30,14 +31,14 @@ def test_convert_merges_files_and_replaces_suspicious_duplicate(
     write_table(second, [nrlmsis_row(2), nrlmsis_row(3)])
     monkeypatch.chdir(tmp_path)
 
-    output = nrlmsis2psf.convert_nrlmsis([second, first])
+    with caplog.at_level(logging.WARNING, logger="atris_tools.nrlmsis2psf"):
+        output = nrlmsis2psf.convert_nrlmsis([second, first])
 
     assert output == tmp_path / "simulation.psf"
     psf = np.loadtxt(output)
     assert psf.shape == (7, 16)
     np.testing.assert_allclose(psf[2:-1, 0], [6371, 6372, 6373, 6374])
-    error = capsys.readouterr().err
-    assert "Discarding suspicious NRLMSIS row at 2.000 km" in error
+    assert "Discarding suspicious NRLMSIS row at 2.000 km" in caplog.text
 
 
 def test_merge_rejects_suspicious_row_without_valid_replacement(tmp_path):
@@ -50,7 +51,7 @@ def test_merge_rejects_suspicious_row_without_valid_replacement(tmp_path):
         nrlmsis2psf.merge_nrlmsis([table])
 
 
-def test_merge_replaces_malformed_boundary_row(tmp_path, capsys):
+def test_merge_replaces_malformed_boundary_row(tmp_path, caplog):
     first = tmp_path / "first.txt"
     second = tmp_path / "second.txt"
     write_table(first, [nrlmsis_row(0), nrlmsis_row(1)])
@@ -61,10 +62,11 @@ def test_merge_replaces_malformed_boundary_row(tmp_path, capsys):
         table.write(" ".join(fields) + "\n")
     write_table(second, [nrlmsis_row(2), nrlmsis_row(3)])
 
-    merged = nrlmsis2psf.merge_nrlmsis([first, second])
+    with caplog.at_level(logging.WARNING, logger="atris_tools.nrlmsis2psf"):
+        merged = nrlmsis2psf.merge_nrlmsis([first, second])
 
     np.testing.assert_allclose(merged[:, 5], [0, 1, 2, 3])
-    assert "Discarding malformed NRLMSIS row at 2.000 km" in capsys.readouterr().err
+    assert "Discarding malformed NRLMSIS row at 2.000 km" in caplog.text
 
 
 def test_merge_rejects_missing_altitude_level(tmp_path):

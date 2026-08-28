@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import io
 import json
+import logging
 import os
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -19,6 +20,7 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/104.0.0.0 Safari/537.36"
 )
+logger = logging.getLogger(__name__)
 
 
 def _to_utc_datetime_string(year, month, day, hour):
@@ -147,14 +149,14 @@ def _fetch_nrlmsis_output(payload):
 def _load_nrlmsis_content(payload):
     cache_path = _nrlmsis_cache_path(payload)
     if os.path.exists(cache_path):
-        print("Using cached NRLMSIS response from", cache_path)
+        logger.debug("Using cached NRLMSIS response from %s", cache_path)
         with open(cache_path, "r", encoding="utf-8") as cache_file:
             return cache_file.read()
 
     content = _fetch_nrlmsis_output(payload)
     with open(cache_path, "w", encoding="utf-8") as cache_file:
         cache_file.write(content)
-    print("Cached NRLMSIS response to", cache_path)
+    logger.debug("Cached NRLMSIS response to %s", cache_path)
     return content
 
 
@@ -185,15 +187,17 @@ def get_atmosphere(
         hmax,
         deltah,
     )
-    print(
-        "we will request an atmosphere from nasa using the new nrlmsise model "
-        "using the following parameters:"
+    logger.info(
+        "Requesting NRLMSIS atmosphere from %.3f to %.3f km at %.3f km steps",
+        hmin,
+        hmax,
+        deltah,
     )
-    print(parameters)
+    logger.debug("NRLMSIS request parameters: %s", parameters)
     if len(chunk_ranges) > 1:
-        print(
-            "Splitting NRLMSIS request into %i chunks to stay under the CCMC "
-            "row limit." % len(chunk_ranges)
+        logger.info(
+            "Splitting NRLMSIS request into %i chunks for the CCMC row limit",
+            len(chunk_ranges),
         )
 
     chunks = []
@@ -209,7 +213,11 @@ def get_atmosphere(
             chunk_stop,
             deltah,
         )
-        print("Requesting chunk %.3f km -> %.3f km" % (chunk_start, chunk_stop))
+        logger.debug(
+            "Requesting NRLMSIS chunk %.3f to %.3f km",
+            chunk_start,
+            chunk_stop,
+        )
         content = _load_nrlmsis_content(payload)
         chunk_data = _parse_nrlmsis_output(content)
         expected_rows = _expected_nrlmsis_rows(chunk_start, chunk_stop, deltah)
@@ -304,7 +312,7 @@ def nrml2psf(data):
     output[:, 14] = helium_mass / total_mass
     output[:, 15] = hydrogen_mass / total_mass
 
-    print("COMPLETE: writing out the psf lines.")
+    logger.debug("Writing simulation.psf")
     number_format = "%e %e %e %e %e %e %i %e %e %e %e %e %e %e %e %e"
     np.savetxt("simulation.psf", output, fmt=number_format)
     with open("simulation.psf", "r") as psf_file:
@@ -412,9 +420,10 @@ def find_phi(year, month, day, hour):
     phi_values = load_array(PHI_URL)
     index = np.absolute(phi_values[:, 0] - event_year).argmin()
     converted_phi = convert_phi(phi_values[index, 1])
-    print(
-        "converted phi obtained: %.2f MV for the GCR spectrum "
-        "(Herbst conversion of Usoskin values)" % converted_phi
+    logger.info(
+        "Solar modulation parameter: %.2f MV "
+        "(Herbst conversion of Usoskin values)",
+        converted_phi,
     )
     with open("sim_phi", "w") as phi_file:
         phi_file.write(

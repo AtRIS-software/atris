@@ -39,6 +39,10 @@ source atris/setup_atris.sh
 
 If you wish you can source this script from your rc file.
 
+The `atris-*` workflow commands normally log a short progress summary. Pass
+`--quiet` to show only warnings and errors, or `--verbose` to include detailed
+progress such as individual files and chunks.
+
 ## Prepare the example run
 
 Keep each simulation's inputs and outputs in a separate directory. Copy the

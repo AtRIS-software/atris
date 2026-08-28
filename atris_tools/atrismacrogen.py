@@ -62,13 +62,14 @@ How to use:
 """
 # Energy is constant
 import argparse
+import logging
 import os
 import random
 import shutil
-import subprocess
-import sys
 
 import numpy as np
+
+from .cli import add_logging_arguments, configure_logging
 
 
 GENERATED_INPUTS = (
@@ -79,6 +80,7 @@ GENERATED_INPUTS = (
     "alphas.bins",
     "alphas.gdml",
 )
+logger = logging.getLogger(__name__)
 
 
 def refuse_existing_inputs(output_dir):
@@ -138,10 +140,6 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
     filehandle = open(os.path.join(output_dir, name + '.mac'), 'w')
     filehandle.writelines(lines)
     filehandle.close()
-    # we are not starting the sim here.
-    #command      = './AtRIS FTFP_BERT_HP '+name+' -1 32 > ' + name + ".log"
-    #print(command)
-    #subprocess.Popen(command,shell=True)
     
 
 def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
@@ -159,15 +157,91 @@ def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",rand
 
 def main():
     """Run the AtRIS macro-generation command."""
-    parser = argparse.ArgumentParser(description="Generate proton and alpha input files for AtRIS.")
-    parser.add_argument("run_directory", nargs="?", default=".")
-    parser.add_argument("--particles-per-bin", type=int, default=3000)
-    parser.add_argument("--alpha-factor", type=float, default=0.66)
-    parser.add_argument("--random-seed", type=int)
-    parser.add_argument("--energy-min-power", type=float, default=0.0, help="Base-10 power of the minimum energy in MeV.")
-    parser.add_argument("--energy-max-power", type=float, default=6.0, help="Base-10 power of the maximum energy in MeV.")
-    parser.add_argument("--energy-points", type=int, default=121)
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate the proton and alpha macros, energy grids, and geometry "
+            "copies needed to run AtRIS."
+        ),
+        epilog=(
+            "RUN_DIRECTORY must already contain simulation.psf and "
+            "simulation.gdml. This command does not run AtRIS or stage phantom "
+            "responses. It writes protons/alphas .mac, .bins, and .gdml files "
+            "and refuses to overwrite any of them. The proton event count is "
+            "PARTICLES_PER_BIN multiplied by ENERGY_POINTS; the alpha count "
+            "uses ALPHA_FACTOR per energy point. Alpha energies are four times "
+            "the corresponding proton grid values."
+        ),
+    )
+    parser.add_argument(
+        "run_directory",
+        nargs="?",
+        default=".",
+        metavar="RUN_DIRECTORY",
+        help="Prepared run directory (default: current directory).",
+    )
+    parser.add_argument(
+        "--particles-per-bin",
+        type=int,
+        default=3000,
+        metavar="COUNT",
+        help="Number of proton histories per energy point (default: 3000).",
+    )
+    parser.add_argument(
+        "--alpha-factor",
+        type=float,
+        default=0.66,
+        metavar="FACTOR",
+        help=(
+            "Alpha histories per energy point as a fraction of the proton "
+            "count; the result is truncated to an integer (default: 0.66)."
+        ),
+    )
+    parser.add_argument(
+        "--random-seed",
+        type=int,
+        metavar="SEED",
+        help="Seed for reproducible Geant4 seed pairs (default: random).",
+    )
+    parser.add_argument(
+        "--energy-min-power",
+        type=float,
+        default=0.0,
+        metavar="POWER",
+        help=(
+            "Base-10 exponent of the minimum proton energy in MeV "
+            "(default: 0, or 1 MeV)."
+        ),
+    )
+    parser.add_argument(
+        "--energy-max-power",
+        type=float,
+        default=6.0,
+        metavar="POWER",
+        help=(
+            "Base-10 exponent of the maximum proton energy in MeV "
+            "(default: 6, or 1 TeV)."
+        ),
+    )
+    parser.add_argument(
+        "--energy-points",
+        type=int,
+        default=121,
+        metavar="COUNT",
+        help=(
+            "Number of logarithmically spaced energy points, including both "
+            "endpoints (default: 121)."
+        ),
+    )
+    add_logging_arguments(parser)
     args = parser.parse_args()
+    configure_logging(args.log_level)
+    logger.debug(
+        "Generating inputs with %i particles per bin, %i energy points, "
+        "and alpha factor %.3g",
+        args.particles_per_bin,
+        args.energy_points,
+        args.alpha_factor,
+    )
     macroGenManager(
         args.particles_per_bin,
         args.alpha_factor,
@@ -177,7 +251,10 @@ def main():
         args.energy_max_power,
         args.energy_points,
     )
-    print("Generated proton and alpha input files in " + os.path.abspath(args.run_directory))
+    logger.info(
+        "Generated proton and alpha input files in %s",
+        os.path.abspath(args.run_directory),
+    )
 
 
 if __name__ == "__main__":

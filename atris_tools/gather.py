@@ -10,6 +10,7 @@ import tempfile
 
 import numpy as np
 
+from .cli import add_logging_arguments, configure_logging
 from .postprocess import process_psf
 
 
@@ -444,11 +445,17 @@ def gather_simulation(run_directory, entries, simulation):
             if not source_path.is_file():
                 raise FileNotFoundError("Missing histogram from completed run: " + str(source_path))
         paths_by_suffix[suffix] = source_paths
+    logger.debug(
+        "Found %i histogram groups for %s",
+        len(paths_by_suffix),
+        simulation,
+    )
 
     primary_events = 0
     primary_snapshots = None
     primary_suffix = "_h1_h1.1.csv"
     if primary_suffix in paths_by_suffix:
+        logger.debug("Combining %s primary histogram", simulation)
         header, columns, total, total_plane_sum, primary_snapshots = (
             combine_histograms(
                 paths_by_suffix.pop(primary_suffix),
@@ -467,6 +474,7 @@ def gather_simulation(run_directory, entries, simulation):
     convergence = []
     ionization_suffix = "_h2_h2.ion.csv"
     if ionization_suffix in paths_by_suffix and primary_snapshots is not None:
+        logger.debug("Combining %s ionization histogram", simulation)
         header, columns, total, total_plane_sum, convergence = (
             combine_ionization_histograms(
                 run_directory,
@@ -483,6 +491,7 @@ def gather_simulation(run_directory, entries, simulation):
         )
 
     for suffix, source_paths in paths_by_suffix.items():
+        logger.debug("Combining %s%s", simulation, suffix)
         gather_histogram(
             source_paths, run_directory / (simulation + suffix)
         )
@@ -503,17 +512,41 @@ def gather_simulation(run_directory, entries, simulation):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Gather completed AtRIS repetitions into canonical histogram files."
+        description=(
+            "Combine completed AtRIS chunk histograms into canonical aggregate "
+            "CSV files and update ionization-convergence histories."
+        ),
+        epilog=(
+            "Only chunks with .COMPLETE markers are included; partial files "
+            "from failed or running chunks are ignored. Each invocation "
+            "rebuilds and replaces the selected aggregate files from all "
+            "currently completed chunks rather than adding to an old "
+            "aggregate. Do not run gather concurrently with chunk writers. "
+            "This command does not run missing chunks, scale physical response "
+            "files, or make plots. To select one species in the current "
+            "directory, use an explicit dot, for example: atris-gather . "
+            "protons."
+        ),
     )
-    parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
-    parser.add_argument("simulations", nargs="*", default=("protons", "alphas"))
+    parser.add_argument(
+        "run_directory",
+        nargs="?",
+        type=Path,
+        default=Path.cwd(),
+        metavar="RUN_DIRECTORY",
+        help="Scattered run directory (default: current directory).",
+    )
+    parser.add_argument(
+        "simulations",
+        nargs="*",
+        default=("protons", "alphas"),
+        metavar="SIMULATION",
+        help="Simulation prefixes to gather (default: protons alphas).",
+    )
+    add_logging_arguments(parser)
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    configure_logging(args.log_level)
     run_directory = args.run_directory.expanduser().resolve()
     logger.info("Starting gather in %s", run_directory)
     entries = read_chunk_plan(run_directory)

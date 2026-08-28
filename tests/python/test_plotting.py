@@ -1,3 +1,4 @@
+import logging
 import sys
 
 import numpy as np
@@ -179,28 +180,28 @@ def test_plot_run_reports_missing_quantity_and_plots_the_rest(
 
 
 def test_plot_run_warns_when_current_bins_do_not_match_output(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, caplog
 ):
     prepare_processed_run(tmp_path, 0)
     np.savetxt(tmp_path / "protons.bins", [1, 2, 4])
     monkeypatch.chdir(tmp_path)
 
-    filenames, errors = plotting.plot_run("protons")
+    with caplog.at_level(logging.WARNING, logger="atris_tools.postprocess"):
+        filenames, errors = plotting.plot_run("protons")
 
     assert filenames == ["protons.png"]
     assert errors == []
     assert (
-        "WARNING: protons: protons.bins does not match the energy edges "
-        "recorded in protons_h1_h1.1.csv"
-        in capsys.readouterr().err
+        "protons: protons.bins does not match the energy edges "
+        "recorded in protons_h1_h1.1.csv" in caplog.messages
     )
 
 
-def test_main_skips_species_without_processed_output(tmp_path, monkeypatch, capsys):
+def test_main_skips_species_without_processed_output(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(sys, "argv", ["atris-plot", str(tmp_path)])
 
-    plotting.main()
+    with caplog.at_level(logging.INFO, logger="atris_tools.plotting"):
+        plotting.main()
 
-    output = capsys.readouterr().out
-    assert "Skipping protons response plots: processed output not found." in output
-    assert "Skipping alphas response plots: processed output not found." in output
+    assert "Skipping protons response plots: processed output not found" in caplog.messages
+    assert "Skipping alphas response plots: processed output not found" in caplog.messages

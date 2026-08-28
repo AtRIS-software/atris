@@ -1,12 +1,18 @@
 """Run incomplete entries from an AtRIS chunk plan."""
 
 import argparse
+import logging
+import math
 from pathlib import Path
 import subprocess
 import time
 
+from .cli import add_logging_arguments, configure_logging
 from .gather import read_chunk_plan
 from .phantoms import read_phantoms
+
+
+logger = logging.getLogger(__name__)
 
 
 def chunk_name(entry):
@@ -71,12 +77,22 @@ def run_chunks(
     if stop_before_end and deadline is None:
         raise ValueError("Stop-before-end interval requires a job deadline")
 
-    if worker_count > 1:
-        print(
-            "Worker %i/%i assigned %i chunk(s)."
-            % (worker_index + 1, worker_count, len(selected_entries)),
-            flush=True,
-        )
+    pending_count = sum(
+        not (
+            run_directory
+            / "chunks"
+            / (chunk_name(plan_entry) + ".COMPLETE")
+        ).is_file()
+        for _, plan_entry in selected_entries
+    )
+    logger.info(
+        "Worker %i/%i has %i incomplete chunks among %i assigned",
+        worker_index + 1,
+        worker_count,
+        pending_count,
+        len(selected_entries),
+    )
+    milestone = max(1, math.ceil(pending_count / 7))
 
     phantom_count = len(read_phantoms(run_directory))
     completed = 0
@@ -84,26 +100,32 @@ def run_chunks(
         run_name = chunk_name(plan_entry)
         complete = run_directory / "chunks" / (run_name + ".COMPLETE")
         if complete.is_file():
-            print(
-                "Chunk %i/%i already complete: %s"
-                % (line_number, len(entries), run_name)
+            logger.debug(
+                "Chunk %i/%i already complete: %s",
+                line_number,
+                len(entries),
+                run_name,
             )
             continue
 
         if deadline is not None and clock() >= deadline - stop_before_end:
-            print(
+            logger.info(
                 "Worker %i/%i stopped before starting chunk %i/%i because "
-                "the wall-time safety window has begun."
-                % (worker_index + 1, worker_count, line_number, len(entries)),
-                flush=True,
+                "the wall-time safety window has begun",
+                worker_index + 1,
+                worker_count,
+                line_number,
+                len(entries),
             )
             break
 
         log_path = run_directory / "chunks" / (run_name + ".log")
-        print(
-            "Starting chunk %i/%i: %s (log: %s)"
-            % (line_number, len(entries), run_name, log_path),
-            flush=True,
+        logger.debug(
+            "Starting chunk %i/%i: %s (log: %s)",
+            line_number,
+            len(entries),
+            run_name,
+            log_path,
         )
         with log_path.open("w") as log:
             subprocess.run(
@@ -121,44 +143,93 @@ def run_chunks(
             )
         complete.touch()
         completed += 1
-        print(
-            "Completed chunk %i/%i: %s" % (line_number, len(entries), run_name),
-            flush=True,
+        logger.debug(
+            "Completed chunk %i/%i: %s",
+            line_number,
+            len(entries),
+            run_name,
         )
+        if completed % milestone == 0 or completed == pending_count:
+            logger.info(
+                "Worker %i/%i completed %i/%i pending chunks",
+                worker_index + 1,
+                worker_count,
+                completed,
+                pending_count,
+            )
 
     return completed
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run incomplete entries from an AtRIS chunk plan."
+        description=(
+            "Run the incomplete entries assigned to one worker from an AtRIS "
+            "chunk plan, marking each successful chunk complete."
+        ),
+        epilog=(
+            "The command reads chunks.txt and phantoms.txt, skips entries with "
+            "an existing .COMPLETE marker, and runs the selected entries "
+            "sequentially. --worker-index and --worker-count select a "
+            "collision-free shard; they do not launch workers or control "
+            "Geant4 threads. Launch multiple commands externally and set "
+            "G4FORCENUMBEROFTHREADS when needed. A deadline is checked only "
+            "before a chunk starts and never interrupts a running chunk. Failed "
+            "chunks are left incomplete. Output modes other than -1 and 0 are "
+            "passed to AtRIS but are not part of the current workflow. This "
+            "command does not gather or post-process results."
+        ),
     )
-    parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "run_directory",
+        nargs="?",
+        type=Path,
+        default=Path.cwd(),
+        metavar="RUN_DIRECTORY",
+        help="Scattered run directory (default: current directory).",
+    )
     parser.add_argument(
         "--physics-list",
         default="FTFP_BERT_HP",
-        help="Geant4 physics list (default: FTFP_BERT_HP).",
+        metavar="NAME",
+        help="Geant4 reference physics list passed to AtRIS (default: FTFP_BERT_HP).",
     )
     parser.add_argument(
         "--mode",
         type=int,
         default=-1,
-        help="AtRIS output mode (default: -1).",
+        metavar="MODE",
+        help=(
+            "AtRIS output mode: -1 for the histogram response workflow; 0 also "
+            "writes binary interface records (default: -1)."
+        ),
     )
     parser.add_argument(
         "--entry",
         type=int,
-        help="Run only this one-based chunks.txt entry.",
+        metavar="NUMBER",
+        help=(
+            "Run only this one-based chunks.txt entry instead of a worker "
+            "shard. A completed entry is still skipped."
+        ),
     )
     parser.add_argument(
         "--worker-index",
         type=int,
-        help="Zero-based worker rank (default: 0).",
+        metavar="INDEX",
+        help=(
+            "Zero-based rank used to select this worker's round-robin shard; "
+            "must be supplied with --worker-count (default: 0)."
+        ),
     )
     parser.add_argument(
         "--worker-count",
         type=int,
-        help="Total workers (default: 1).",
+        metavar="COUNT",
+        help=(
+            "Number of externally launched workers sharing the plan; must be "
+            "supplied with --worker-index (default: 1)."
+        ),
     )
     parser.add_argument(
         "--stop-before-end",
@@ -166,22 +237,30 @@ def main():
         default=0,
         metavar="SECONDS",
         help=(
-            "Do not start another chunk within this many seconds of the "
-            "configured job deadline."
+            "Do not start another chunk within SECONDS of --deadline "
+            "(default: 0)."
         ),
     )
     parser.add_argument(
         "--deadline",
         type=float,
         metavar="UNIX_TIME",
-        help="Optional absolute job deadline.",
+        help=(
+            "Absolute Unix timestamp at which the external allocation ends; "
+            "used only with --stop-before-end."
+        ),
     )
     parser.add_argument(
         "--check-complete",
         action="store_true",
-        help="Exit successfully only when every chunks.txt entry is complete.",
+        help=(
+            "Do not run anything; return success only when every chunks.txt "
+            "entry has a completion marker."
+        ),
     )
+    add_logging_arguments(parser)
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     if args.check_complete:
         incomplete = incomplete_entry_numbers(args.run_directory)
@@ -189,12 +268,13 @@ def main():
             preview = ", ".join(str(number) for number in incomplete[:20])
             if len(incomplete) > 20:
                 preview += ", ..."
-            print(
-                "Chunk plan is incomplete: %i entry or entries remain (%s)."
-                % (len(incomplete), preview)
+            logger.warning(
+                "Chunk plan is incomplete: %i entries remain (%s)",
+                len(incomplete),
+                preview,
             )
             return 1
-        print("Chunk plan is complete.")
+        logger.info("Chunk plan is complete")
         return 0
 
     if args.worker_index is None and args.worker_count is None:
@@ -214,7 +294,7 @@ def main():
         deadline=args.deadline,
         stop_before_end=args.stop_before_end,
     )
-    print("Completed %i new chunk(s)." % completed)
+    logger.info("Completed %i new chunks", completed)
     return 0
 
 
