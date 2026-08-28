@@ -1,18 +1,9 @@
 """Shared command-line behavior for the AtRIS Python tools."""
 
 import logging
+import sys
 
-from colorlog import ColoredFormatter
-
-
-LOG_FORMAT = "[%(asctime)s] %(log_color)s%(levelname)s%(reset)s %(message)s"
-LOG_COLORS = {
-    "DEBUG": "cyan",
-    "INFO": "green",
-    "WARNING": "yellow",
-    "ERROR": "red",
-    "CRITICAL": "bold_red",
-}
+import colorlog
 
 
 def add_logging_arguments(parser):
@@ -38,18 +29,5 @@ def add_logging_arguments(parser):
 
 
 def configure_logging(level):
-    """Configure concise colored logging for interactive terminals."""
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        ColoredFormatter(
-            LOG_FORMAT,
-            datefmt="%Y-%m-%d %H:%M:%S",
-            log_colors=LOG_COLORS,
-            reset=False,
-            stream=handler.stream,
-        )
-    )
-    logging.basicConfig(
-        level=level,
-        handlers=[handler],
-    )
+    """Configure colored command-line logging at the requested level."""
+    colorlog.basicConfig(level=level, stream=sys.stderr)
