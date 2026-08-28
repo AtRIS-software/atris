@@ -2,6 +2,18 @@
 
 import logging
 
+from colorlog import ColoredFormatter
+
+
+LOG_FORMAT = "[%(asctime)s] %(log_color)s%(levelname)s%(reset)s %(message)s"
+LOG_COLORS = {
+    "DEBUG": "cyan",
+    "INFO": "green",
+    "WARNING": "yellow",
+    "ERROR": "red",
+    "CRITICAL": "bold_red",
+}
+
 
 def add_logging_arguments(parser):
     """Add the standard quiet and verbose options to a command parser."""
@@ -26,9 +38,18 @@ def add_logging_arguments(parser):
 
 
 def configure_logging(level):
-    """Configure timestamped command-line logging at the requested level."""
+    """Configure concise colored logging for interactive terminals."""
+    handler = logging.StreamHandler()
+    handler.setFormatter(
+        ColoredFormatter(
+            LOG_FORMAT,
+            datefmt="%Y-%m-%d %H:%M:%S",
+            log_colors=LOG_COLORS,
+            reset=False,
+            stream=handler.stream,
+        )
+    )
     logging.basicConfig(
         level=level,
-        format="[%(asctime)s] %(levelname)s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[handler],
     )
