@@ -193,6 +193,7 @@ def read_atmosphere(filename):
     for volume in root.findall("./structure/volume"):
         material_reference = volume.find("materialref")
         solid_reference = volume.find("solidref")
+        sensitive_detector = volume.find("auxiliary[@auxtype='SensDet']")
         if material_reference is None or solid_reference is None:
             continue
         material = materials.get(material_reference.get("ref"))
@@ -203,6 +204,11 @@ def read_atmosphere(filename):
             {
                 "rmin": radii[0],
                 "rmax": radii[1],
+                "detector_id": (
+                    int(sensitive_detector.get("auxvalue"))
+                    if sensitive_detector is not None
+                    else None
+                ),
                 **material,
             }
         )
@@ -216,6 +222,19 @@ def read_atmosphere(filename):
             (layer["rmin"] + layer["rmax"]) / 2.0 - surface_radius
         )
     return layers
+
+
+def read_interface_altitudes(filename):
+    layers = read_atmosphere(filename)
+    if any(layer["detector_id"] is None for layer in layers):
+        raise ValueError("Atmospheric layers have no detector IDs in " + str(filename))
+
+    surface_radius = layers[0]["rmin"]
+    first_detector = layers[0]["detector_id"]
+    altitudes = {first_detector - 1: 0.0}
+    for layer in layers:
+        altitudes[layer["detector_id"]] = layer["rmax"] - surface_radius
+    return altitudes
 
 
 def _setting(settings, command, default="not set"):

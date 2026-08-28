@@ -29,10 +29,12 @@ GDML = """\
     <volume name="layer0">
       <materialref ref="air0"/>
       <solidref ref="shell0"/>
+      <auxiliary auxtype="SensDet" auxvalue="2"/>
     </volume>
     <volume name="layer1">
       <materialref ref="air1"/>
       <solidref ref="shell1"/>
+      <auxiliary auxtype="SensDet" auxvalue="3"/>
     </volume>
   </structure>
 </gdml>
@@ -91,6 +93,19 @@ def test_read_macro_and_atmosphere(tmp_path):
     np.testing.assert_allclose(energy_points, [[1, 0], [10, 1], [100, 1]])
     assert [layer["altitude"] for layer in layers] == [0.5, 2.0]
     assert layers[0]["fractions"] == {"G4_N": 0.75, "G4_O": 0.25}
+
+
+def test_read_interface_altitudes_maps_detector_ids_to_layer_boundaries(
+    tmp_path,
+):
+    geometry = tmp_path / "protons.gdml"
+    geometry.write_text(GDML)
+
+    assert input_plotting.read_interface_altitudes(geometry) == {
+        1: 0.0,
+        2: 1.0,
+        3: 3.0,
+    }
 
 
 def test_particle_name_translates_standard_particles_and_nuclei():
