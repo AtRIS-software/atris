@@ -2,6 +2,7 @@
 """Gather completed AtRIS repetitions into canonical histogram files."""
 
 import argparse
+import logging
 import math
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ CONVERGENCE_COLUMNS = (
     "cell_change_p50_percent,cell_change_p90_percent,"
     "cell_relative_se_p50_percent,cell_relative_se_p90_percent"
 )
+logger = logging.getLogger(__name__)
 
 
 def read_chunk_plan(run_directory):
@@ -98,33 +100,34 @@ def format_duration(seconds):
 
 
 def log_chunk_progress(run_directory, entries, simulations):
-    """Print chunk completion progress and an ETA when one is available."""
+    """Log chunk completion progress and an ETA when one is available."""
     completed, total, completion_interval, remaining_seconds = chunk_progress(
         run_directory, entries, simulations
     )
     if completed == total:
         if completion_interval is None:
-            print("Chunk progress: %i/%i complete." % (completed, total))
+            logger.info("Chunk progress: %i/%i complete.", completed, total)
         else:
-            print(
-                "Chunk progress: %i/%i complete; average completion interval %s."
-                % (completed, total, format_duration(completion_interval))
-            )
-    elif remaining_seconds is None:
-        print(
-            "Chunk progress: %i/%i complete; ETA available after two completions."
-            % (completed, total)
-        )
-    else:
-        print(
-            "Chunk progress: %i/%i complete; average completion interval %s; "
-            "estimated time remaining %s."
-            % (
+            logger.info(
+                "Chunk progress: %i/%i complete; average completion interval %s.",
                 completed,
                 total,
                 format_duration(completion_interval),
-                format_duration(remaining_seconds),
             )
+    elif remaining_seconds is None:
+        logger.info(
+            "Chunk progress: %i/%i complete; ETA available after two completions.",
+            completed,
+            total,
+        )
+    else:
+        logger.info(
+            "Chunk progress: %i/%i complete; average completion interval %s; "
+            "estimated time remaining %s.",
+            completed,
+            total,
+            format_duration(completion_interval),
+            format_duration(remaining_seconds),
         )
 
 
@@ -405,24 +408,28 @@ def log_ionization_change(simulation, row):
     """Report the final ionization convergence row."""
     completed_count, _, comparison_chunks, comparison_percent, change = row[:5]
     species = {"protons": "Proton", "alphas": "Alpha"}[simulation]
-    print(
+    logger.info(
         "%s ionization change after final %i of %i completed chunks "
-        "(%.1f%%): %.2f%%"
-        % (
-            species,
-            comparison_chunks,
-            completed_count,
-            comparison_percent,
-            change,
-        )
+        "(%.1f%%): %.2f%%",
+        species,
+        comparison_chunks,
+        completed_count,
+        comparison_percent,
+        change,
     )
 
 
 def gather_simulation(run_directory, entries, simulation):
     prefixes = completed_prefixes(run_directory, entries, simulation)
     if not prefixes:
-        print("No completed %s runs to gather" % simulation)
+        logger.info("No completed %s runs to gather", simulation)
         return 0
+    logger.info(
+        "Gathering %s from %i completed %s...",
+        simulation,
+        len(prefixes),
+        "chunk" if len(prefixes) == 1 else "chunks",
+    )
 
     first_prefix = prefixes[0]
     histogram_paths = sorted(first_prefix.parent.glob(first_prefix.name + "_*.csv"))
@@ -480,9 +487,11 @@ def gather_simulation(run_directory, entries, simulation):
             source_paths, run_directory / (simulation + suffix)
         )
 
-    print(
-        "Gathered %i completed %s runs containing %i primary events"
-        % (len(prefixes), simulation, primary_events)
+    logger.info(
+        "Gathered %i completed %s runs containing %i primary events",
+        len(prefixes),
+        simulation,
+        primary_events,
     )
     if convergence:
         write_convergence(
@@ -500,7 +509,13 @@ def main():
     parser.add_argument("simulations", nargs="*", default=("protons", "alphas"))
     args = parser.parse_args()
 
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     run_directory = args.run_directory.expanduser().resolve()
+    logger.info("Starting gather in %s", run_directory)
     entries = read_chunk_plan(run_directory)
     for simulation in args.simulations:
         gather_simulation(run_directory, entries, simulation)

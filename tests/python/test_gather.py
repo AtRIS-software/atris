@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -80,7 +81,7 @@ def test_chunk_progress_estimates_from_completion_marker_times(tmp_path):
     assert chunk_progress(tmp_path, entries, ("protons",)) == (3, 5, 10, 20)
 
 
-def test_chunk_progress_filters_species_and_logs_estimate(tmp_path, capsys):
+def test_chunk_progress_filters_species_and_logs_estimate(tmp_path, caplog):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
     entries = [
@@ -94,30 +95,32 @@ def test_chunk_progress_filters_species_and_logs_estimate(tmp_path, capsys):
         marker.touch()
         os.utime(marker, (100 + index * 65, 100 + index * 65))
 
-    log_chunk_progress(tmp_path, entries, ("protons",))
+    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+        log_chunk_progress(tmp_path, entries, ("protons",))
 
-    assert capsys.readouterr().out == (
+    assert caplog.messages == [
         "Chunk progress: 2/3 complete; average completion interval 1m 5s; "
-        "estimated time remaining 1m 5s.\n"
-    )
+        "estimated time remaining 1m 5s."
+    ]
 
 
 def test_chunk_progress_reports_complete_and_formats_long_durations(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
     entries = [("alphas", "111111", "222222")]
     (chunks / "alphas_111111_222222.COMPLETE").touch()
 
-    log_chunk_progress(tmp_path, entries, ("alphas",))
+    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+        log_chunk_progress(tmp_path, entries, ("alphas",))
 
-    assert capsys.readouterr().out == "Chunk progress: 1/1 complete.\n"
+    assert caplog.messages == ["Chunk progress: 1/1 complete."]
     assert format_duration(2 * 24 * 60 * 60 + 3 * 60 * 60) == "2d 3h"
 
 
 def test_chunk_progress_does_not_treat_zero_second_estimate_as_complete(
-    tmp_path, capsys
+    tmp_path, caplog
 ):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
@@ -131,12 +134,13 @@ def test_chunk_progress_does_not_treat_zero_second_estimate_as_complete(
         marker.touch()
         os.utime(marker, (100, 100))
 
-    log_chunk_progress(tmp_path, entries, ("protons",))
+    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+        log_chunk_progress(tmp_path, entries, ("protons",))
 
-    assert capsys.readouterr().out == (
+    assert caplog.messages == [
         "Chunk progress: 2/3 complete; average completion interval 0s; "
-        "estimated time remaining 0s.\n"
-    )
+        "estimated time remaining 0s."
+    ]
 
 
 def test_change_reference_uses_final_ten_percent_from_two_chunks():
@@ -211,15 +215,16 @@ def test_convergence_has_one_row_per_chunk_from_two_onward(
     assert len(lines) == 3
 
 
-def test_ionization_change_reports_actual_comparison_fraction(capsys):
+def test_ionization_change_reports_actual_comparison_fraction(caplog):
     row = (21, 6300, 3, 100.0 * 3 / 21, 1.802)
 
-    log_ionization_change("alphas", row)
+    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+        log_ionization_change("alphas", row)
 
-    assert capsys.readouterr().out == (
+    assert caplog.messages == [
         "Alpha ionization change after final 3 of 21 completed chunks "
-        "(14.3%): 1.80%\n"
-    )
+        "(14.3%): 1.80%"
+    ]
 
 
 def test_gather_histogram_sums_all_columns_and_plane_values(tmp_path):
@@ -269,7 +274,7 @@ def test_gather_histogram_rejects_incompatible_input_without_replacing_destinati
     assert destination.read_text() == "existing canonical output\n"
 
 
-def test_gather_simulation_uses_only_completed_chunks(tmp_path):
+def test_gather_simulation_uses_only_completed_chunks(tmp_path, caplog):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
     entries = [
@@ -288,7 +293,9 @@ def test_gather_simulation_uses_only_completed_chunks(tmp_path):
         [[99, 99, 99, 99, 99]],
     )
 
-    assert gather_simulation(tmp_path, entries, "protons") == 1
+    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+        assert gather_simulation(tmp_path, entries, "protons") == 1
+    assert "Gathering protons from 1 completed chunk..." in caplog.messages
 
     _, _, data = read_histogram(tmp_path / "protons_h1_h1.1.csv")
     np.testing.assert_array_equal(
