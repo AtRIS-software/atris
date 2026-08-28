@@ -16,7 +16,9 @@ phantom response files; the workflow below focuses on multithreaded Earth
 atmosphere simulations.
 
 This guide explains how to prepare, run, and inspect an AtRIS simulation. See
-[INSTALL.md](INSTALL.md) for installation and build instructions.
+[INSTALL.md](INSTALL.md) for installation and build instructions, and
+[docs/hpc.md](docs/hpc.md) for architecture and sizing guidance for larger
+scatter/gather simulations on an HPC system.
 
 A small set of prepared inputs is included in the
 [reduced Earth atmosphere example](examples/earth-nrlmsis/README.md).
@@ -215,8 +217,8 @@ atris-scatter --chunks 20 --random-seed 12345
 This creates seed-free `protons.chunk.mac` and `alphas.chunk.mac` variants, an
 empty `chunks/` output directory, and `chunks.txt`. The ordinary macros are not
 changed and remain available for single runs. Each line of `chunks.txt` gives a
-particle species and two random seeds. `atris-scatter` will not overwrite an
-existing plan, chunk macro, or nonempty `chunks/` directory.
+particle species and two random seeds. Initial `--chunks` creation will not
+overwrite an existing plan, chunk macro, or nonempty `chunks/` directory.
 
 The `/run/beamOn` total from each ordinary macro is divided among its chunks.
 All chunks share one macro, so the per-chunk count is rounded up when the total
@@ -228,6 +230,22 @@ The chunks can be executed independently. Each successful repetition writes
 its outputs beneath `chunks/` and adds a `COMPLETE` marker. Incomplete chunks
 can be run again without repeating completed work.
 
+For worker-pool architecture, sizing, chunk safety, and recovery guidance, see
+[Running AtRIS on an HPC system](docs/hpc.md). For a copy/paste workflow, use
+the [full Earth Slurm example](examples/earth-nrlmsis-full-slurm/README.md),
+which provides concrete five-node simulation and gather scripts.
+
+Run the incomplete chunks sequentially in the current shell:
+
+```bash
+atris-run
+```
+
+Completed chunk outputs begin appearing beneath `chunks/` while the command is
+still running. Raw AtRIS output is written to one log file per chunk. If the
+command is interrupted, running it again skips chunks already marked
+`COMPLETE`.
+
 Gather whichever chunks have completed so far into ordinary proton and alpha
 CSV outputs in the run directory:
 
@@ -237,6 +255,31 @@ atris-gather
 
 Running `atris-gather` again replaces those files with a new aggregate of all
 chunks complete at that time.
+
+### Add samples when a run has not converged
+
+After stopping all workers, append another independent batch without changing
+or repeating any completed chunks:
+
+```bash
+atris-scatter --extend 20
+atris-run
+atris-gather
+atris-postprocess
+atris-plot
+```
+
+`--extend 20` adds 20 proton and 20 alpha entries using the existing per-chunk
+event counts. It reports the added and cumulative events for each species. All
+existing plan entries, outputs, and `COMPLETE` markers remain unchanged, so
+`atris-run` processes only the new entries and the next gather incorporates
+them into the convergence history.
+
+The random seed pairs actually passed to AtRIS are stored in `chunks.txt`.
+`--random-seed` is optional during extension; provide it only when reproducible
+generation of the additional pairs is required. New pairs are checked against
+the entire existing plan. Do not extend a plan while a worker allocation or
+gather operation is active.
 
 ## Inspect the results
 

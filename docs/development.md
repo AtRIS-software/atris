@@ -44,6 +44,22 @@ Some modules still retain names and implementation details from the original
 standalone scripts. Further cleanup should favor clear importable functions and
 small command-line entry points without changing the supported workflow.
 
+## Thread scaling
+
+Do not assume that AtRIS becomes faster whenever more worker threads are added.
+The imported README (commit `112e4dc`) says that scaling eventually stops
+because of CPU cache topology. It does not give the limiting core count. The
+accompanying `simstarter.ipynb` uses 16 worker threads, so use 16 as the
+provisional historical setting until current hardware has been benchmarked.
+
+The thread count applies to each AtRIS process. Therefore, an HPC chunk using
+16 worker threads requires 16 cores, and concurrent chunks require separate
+sets of cores. Benchmark representative chunks at several thread counts before
+deciding how many cores to allocate to each chunk. Do not describe 16 as a
+measured optimum. User-facing guidance for chunk sizing, scheduler worker
+pools, and resource measurement is in
+[Running AtRIS on an HPC system](hpc.md).
+
 ## Remaining tests
 
 Temporary end-to-end harnesses are not part of the supported Python interface.

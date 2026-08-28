@@ -4,6 +4,9 @@ This example prepares a full Earth run from an NRLMSIS 2.0 atmosphere. The
 profile is for 18 August 2026 at 00:00 UTC, 55 degrees north and 45 degrees
 east, covering 0 to 100 km in 0.2 km steps.
 
+For a concrete five-node worker-pool setup, see the
+[Slurm version of this example](../earth-nrlmsis-full-slurm/README.md).
+
 The particle inputs use the `atrismacrogen` defaults: 121 logarithmically
 spaced energy points, 3000 protons per point, and 1980 alpha particles per
 point. This produces 363,000 proton events and 239,580 alpha events.
@@ -136,6 +139,21 @@ atris-gather
 postprocess
 atris-plot
 ```
+
+If the convergence plots show that more independent samples are required, stop
+all runners and append another batch without repeating completed work:
+
+```bash
+atris-scatter --extend 20
+atris-run
+atris-gather
+atris-postprocess
+atris-plot
+```
+
+The extension reuses the existing per-chunk event counts and reports the added
+and cumulative event totals. Its seed-generator argument is optional because
+the actual AtRIS seed pairs are recorded in `chunks.txt`.
 
 ## Prepared reference files
 

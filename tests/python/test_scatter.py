@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from atris_tools.scatter import chunk_plan, scatter
+from atris_tools.scatter import chunk_plan, extend_plan, scatter
 
 
 ORDINARY_MACRO = """/run/initialize
@@ -33,6 +33,23 @@ def test_chunk_plan_is_reproducible_unique_and_six_digit():
 
     pairs = [tuple(line.split()[1:]) for line in first]
     assert len(set(pairs)) == len(pairs)
+
+
+def test_chunk_plan_skips_seed_pairs_already_in_an_existing_plan():
+    original = chunk_plan(2, random.Random(17))
+    used_pairs = {
+        tuple(int(seed) for seed in line.split()[1:])
+        for line in original
+    }
+
+    extension = chunk_plan(1, random.Random(17), used_pairs)
+    extension_pairs = {
+        tuple(int(seed) for seed in line.split()[1:])
+        for line in extension
+    }
+
+    assert len(extension) == 2
+    assert used_pairs.isdisjoint(extension_pairs)
 
 
 def test_scatter_preserves_ordinary_macros_and_rounds_chunk_event_count(
@@ -119,3 +136,79 @@ def test_scatter_rejects_nonempty_chunks_directory(tmp_path):
 def test_scatter_rejects_zero_chunks(tmp_path):
     with pytest.raises(ValueError, match="at least 1"):
         scatter(tmp_path, chunks=0)
+
+
+def test_extend_plan_preserves_existing_work_and_adds_unique_chunks(
+    tmp_path, capsys
+):
+    write_ordinary_macros(tmp_path)
+    scatter(tmp_path, chunks=2, random_seed=17)
+    capsys.readouterr()
+    original_plan = (tmp_path / "chunks.txt").read_text()
+    original_macros = {
+        species: (tmp_path / f"{species}.chunk.mac").read_text()
+        for species in ("protons", "alphas")
+    }
+    marker = tmp_path / "chunks" / "existing.COMPLETE"
+    marker.write_text("keep\n")
+
+    result = extend_plan(tmp_path, chunks=1, random_seed=17)
+
+    assert result == tmp_path.resolve()
+    extended_lines = (tmp_path / "chunks.txt").read_text().splitlines()
+    assert extended_lines[:4] == original_plan.splitlines()
+    assert [line.split()[0] for line in extended_lines] == [
+        "protons",
+        "protons",
+        "alphas",
+        "alphas",
+        "protons",
+        "alphas",
+    ]
+    seed_pairs = [tuple(line.split()[1:]) for line in extended_lines]
+    assert len(set(seed_pairs)) == 6
+    assert marker.read_text() == "keep\n"
+    for species in ("protons", "alphas"):
+        assert (tmp_path / f"{species}.chunk.mac").read_text() == original_macros[
+            species
+        ]
+    assert capsys.readouterr().out.splitlines() == [
+        "INFO: Extended protons from 2 to 3 chunks: added 4 events; "
+        "cumulative plan 12 events (4 per chunk).",
+        "INFO: Extended alphas from 2 to 3 chunks: added 4 events; "
+        "cumulative plan 12 events (4 per chunk).",
+    ]
+
+
+def test_extend_plan_validates_every_input_before_replacing_plan(tmp_path):
+    write_ordinary_macros(tmp_path)
+    scatter(tmp_path, chunks=2, random_seed=17)
+    plan = tmp_path / "chunks.txt"
+    original_plan = plan.read_text()
+    (tmp_path / "alphas.chunk.mac").unlink()
+
+    with pytest.raises(FileNotFoundError, match="alphas.chunk.mac"):
+        extend_plan(tmp_path, chunks=1)
+
+    assert plan.read_text() == original_plan
+
+
+def test_extend_plan_rejects_duplicate_existing_seed_pairs(tmp_path):
+    write_ordinary_macros(tmp_path)
+    scatter(tmp_path, chunks=1, random_seed=17)
+    plan = tmp_path / "chunks.txt"
+    lines = plan.read_text().splitlines()
+    fields = lines[0].split()
+    lines[1] = "alphas %s %s" % (fields[1], fields[2])
+    plan.write_text("\n".join(lines) + "\n")
+    invalid_plan = plan.read_text()
+
+    with pytest.raises(ValueError, match="Duplicate random seed pair"):
+        extend_plan(tmp_path, chunks=1)
+
+    assert plan.read_text() == invalid_plan
+
+
+def test_extend_plan_rejects_zero_chunks(tmp_path):
+    with pytest.raises(ValueError, match="at least 1"):
+        extend_plan(tmp_path, chunks=0)

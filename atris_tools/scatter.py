@@ -1,14 +1,19 @@
 """Prepare independently seeded AtRIS chunks from ordinary macros."""
 
 import argparse
+from collections import Counter
+import os
 from pathlib import Path
 import random
+import stat
+import tempfile
 
 
 SPECIES = ("protons", "alphas")
 
 
-def chunk_macro(source, chunks):
+def macro_lines_and_events(source):
+    """Return macro lines, the beam command index, and its event count."""
     lines = source.read_text().splitlines(keepends=True)
     beam_lines = [
         index
@@ -33,6 +38,12 @@ def chunk_macro(source, chunks):
             "/run/beamOn must request at least one event in %s" % source
         )
 
+    return lines, beam_index, total_events
+
+
+def chunk_macro(source, chunks):
+    lines, beam_index, total_events = macro_lines_and_events(source)
+
     events_per_chunk = (total_events + chunks - 1) // chunks
     newline = "\n" if lines[beam_index].endswith("\n") else ""
     stripped_line = lines[beam_index].lstrip()
@@ -51,8 +62,9 @@ def chunk_macro(source, chunks):
     return contents, total_events, events_per_chunk
 
 
-def chunk_plan(chunks, rng):
-    used_pairs = set()
+def chunk_plan(chunks, rng, used_pairs=()):
+    """Return new plan lines whose seed pairs do not occur in used_pairs."""
+    used_pairs = set(used_pairs)
     lines = []
     for species in SPECIES:
         for _ in range(chunks):
@@ -63,6 +75,69 @@ def chunk_plan(chunks, rng):
             used_pairs.add(seeds)
             lines.append("%s %06i %06i\n" % (species, seeds[0], seeds[1]))
     return lines
+
+
+def existing_plan(plan_path):
+    """Return validated plan entries, existing seed pairs, and original text."""
+    original = plan_path.read_text()
+    entries = []
+    used_pairs = set()
+    for line_number, line in enumerate(original.splitlines(), start=1):
+        fields = line.split()
+        if len(fields) != 3:
+            raise ValueError("Invalid chunks.txt line %i" % line_number)
+        species, seed1_text, seed2_text = fields
+        if species not in SPECIES:
+            raise ValueError(
+                "Invalid particle species on chunks.txt line %i" % line_number
+            )
+        try:
+            seeds = (int(seed1_text), int(seed2_text))
+        except ValueError as error:
+            raise ValueError(
+                "Invalid random seeds on chunks.txt line %i" % line_number
+            ) from error
+        if not all(31 <= seed <= 999999 for seed in seeds):
+            raise ValueError(
+                "Random seeds out of range on chunks.txt line %i" % line_number
+            )
+        if seeds in used_pairs:
+            raise ValueError(
+                "Duplicate random seed pair on chunks.txt line %i" % line_number
+            )
+        used_pairs.add(seeds)
+        entries.append((species, seed1_text, seed2_text))
+
+    if not entries:
+        raise ValueError("Chunk plan is empty: " + str(plan_path))
+    counts = Counter(species for species, _, _ in entries)
+    missing = [species for species in SPECIES if not counts[species]]
+    if missing:
+        raise ValueError("Chunk plan has no %s entries" % " or ".join(missing))
+    return entries, used_pairs, original
+
+
+def replace_plan(plan_path, original, new_lines):
+    """Atomically replace a plan with its original text plus new lines."""
+    temporary_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=plan_path.parent,
+            prefix=plan_path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as output:
+            temporary_name = output.name
+            output.write(original)
+            if original and not original.endswith("\n"):
+                output.write("\n")
+            output.writelines(new_lines)
+        os.chmod(temporary_name, stat.S_IMODE(plan_path.stat().st_mode))
+        os.replace(temporary_name, plan_path)
+    finally:
+        if temporary_name is not None and os.path.exists(temporary_name):
+            os.unlink(temporary_name)
 
 
 def scatter(run_directory, chunks, random_seed=None):
@@ -121,16 +196,72 @@ def scatter(run_directory, chunks, random_seed=None):
     return run_directory
 
 
+def extend_plan(run_directory, chunks, random_seed=None):
+    """Append independently seeded chunks using the existing chunk macros."""
+    if chunks < 1:
+        raise ValueError("chunks must be at least 1")
+
+    run_directory = Path(run_directory).expanduser().resolve()
+    if not run_directory.is_dir():
+        raise FileNotFoundError("Run directory does not exist: " + str(run_directory))
+
+    plan_path = run_directory / "chunks.txt"
+    chunks_directory = run_directory / "chunks"
+    if not plan_path.is_file():
+        raise FileNotFoundError("Chunk plan does not exist: " + str(plan_path))
+    if not chunks_directory.is_dir():
+        raise FileNotFoundError(
+            "Chunk output directory does not exist: " + str(chunks_directory)
+        )
+
+    entries, used_pairs, original = existing_plan(plan_path)
+    existing_counts = Counter(species for species, _, _ in entries)
+    events_per_chunk = {}
+    for species in SPECIES:
+        macro = run_directory / (species + ".chunk.mac")
+        if not macro.is_file():
+            raise FileNotFoundError("Chunk macro does not exist: " + str(macro))
+        _, _, events_per_chunk[species] = macro_lines_and_events(macro)
+
+    new_lines = chunk_plan(chunks, random.Random(random_seed), used_pairs)
+    replace_plan(plan_path, original, new_lines)
+
+    for species in SPECIES:
+        old_count = existing_counts[species]
+        new_count = old_count + chunks
+        per_chunk = events_per_chunk[species]
+        print(
+            "INFO: Extended %s from %i to %i chunks: added %i events; "
+            "cumulative plan %i events (%i per chunk)."
+            % (
+                species,
+                old_count,
+                new_count,
+                chunks * per_chunk,
+                new_count * per_chunk,
+                per_chunk,
+            )
+        )
+
+    return run_directory
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Prepare independently seeded chunks from ordinary AtRIS macros."
     )
     parser.add_argument("run_directory", nargs="?", default=".")
-    parser.add_argument(
+    operation = parser.add_mutually_exclusive_group(required=True)
+    operation.add_argument(
         "--chunks",
         type=int,
-        required=True,
         help="Number of chunks to create for each particle species.",
+    )
+    operation.add_argument(
+        "--extend",
+        type=int,
+        metavar="CHUNKS",
+        help="Number of new chunks to append for each particle species.",
     )
     parser.add_argument(
         "--random-seed",
@@ -139,11 +270,22 @@ def main():
     )
     args = parser.parse_args()
 
-    run_directory = scatter(args.run_directory, args.chunks, args.random_seed)
-    print(
-        "Created %i proton chunks and %i alpha chunks (%i total) in %s"
-        % (args.chunks, args.chunks, args.chunks * 2, run_directory)
-    )
+    if args.chunks is not None:
+        run_directory = scatter(args.run_directory, args.chunks, args.random_seed)
+        print(
+            "Created %i proton chunks and %i alpha chunks (%i total) in %s"
+            % (args.chunks, args.chunks, args.chunks * 2, run_directory)
+        )
+    else:
+        run_directory = extend_plan(
+            args.run_directory,
+            args.extend,
+            args.random_seed,
+        )
+        print(
+            "Added %i proton chunks and %i alpha chunks (%i total) to %s"
+            % (args.extend, args.extend, args.extend * 2, run_directory)
+        )
 
 
 if __name__ == "__main__":
