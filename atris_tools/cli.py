@@ -1,6 +1,7 @@
 """Shared command-line behavior for the AtRIS Python tools."""
 
 import logging
+import os
 import sys
 
 import colorlog
@@ -30,4 +31,11 @@ def add_logging_arguments(parser):
 
 def configure_logging(level):
     """Configure colored command-line logging at the requested level."""
-    colorlog.basicConfig(level=level, stream=sys.stderr)
+    color = "FORCE_COLOR" in os.environ or (
+        "NO_COLOR" not in os.environ and sys.stderr.isatty()
+    )
+    if color:
+        log_format = "%(log_color)s%(module)s%(reset)s: %(message)s"
+    else:
+        log_format = "%(levelname)s %(module)s: %(message)s"
+    colorlog.basicConfig(level=level, stream=sys.stderr, format=log_format)

@@ -1,5 +1,6 @@
 import argparse
 import importlib
+import io
 import logging
 import sys
 
@@ -38,7 +39,10 @@ def test_logging_arguments_select_quiet_or_verbose():
 
 
 def test_configure_logging_uses_requested_level(monkeypatch):
+    stream = io.StringIO()
     options = {}
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setattr(sys, "stderr", stream)
     monkeypatch.setattr(
         colorlog,
         "basicConfig",
@@ -47,7 +51,29 @@ def test_configure_logging_uses_requested_level(monkeypatch):
 
     configure_logging(logging.DEBUG)
 
-    assert options == {"level": logging.DEBUG, "stream": sys.stderr}
+    assert options == {
+        "level": logging.DEBUG,
+        "stream": stream,
+        "format": "%(levelname)s %(module)s: %(message)s",
+    }
+
+
+def test_configure_logging_uses_color_for_a_terminal(monkeypatch):
+    stream = io.StringIO()
+    stream.isatty = lambda: True
+    options = {}
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setattr(sys, "stderr", stream)
+    monkeypatch.setattr(
+        colorlog,
+        "basicConfig",
+        lambda **values: options.update(values),
+    )
+
+    configure_logging(logging.INFO)
+
+    assert options["format"] == "%(log_color)s%(module)s%(reset)s: %(message)s"
 
 
 @pytest.mark.parametrize("module_name", MODERN_COMMAND_MODULES)
