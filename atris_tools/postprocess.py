@@ -215,7 +215,7 @@ def read_data(simname, nphant):
 def scale_data(data, nphant, ndet, nenergyedges, phantom_data, geometry):
     nrparticles = data[0][:, 0]
     nrparticles = nrparticles[1:-1]
-    print(nrparticles)
+    # print(nrparticles)
     limit = 1 + nphant * 3
     shapex = ndet + 2
     shapey = nenergyedges + 1
