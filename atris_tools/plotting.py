@@ -129,59 +129,41 @@ def _add_inverse_sqrt_guides(
         )
 
 
-def _asymptotic_uncertainty_fit(
-    completed_chunks, values, reference_chunks=None
-):
-    """Fit A/sqrt(N) times an exponentially decaying correction."""
+def _recent_power_law_fit(completed_chunks, values, reference_chunks=None):
+    """Fit a power law to the most recent half of the observations."""
     completed_chunks = np.asarray(completed_chunks, dtype=float)
     values = np.asarray(values, dtype=float)
     finite = (
         np.isfinite(completed_chunks)
         & np.isfinite(values)
         & (completed_chunks > 0)
-        & (values >= 0)
+        & (values > 0)
     )
     chunks = completed_chunks[finite]
     observed = values[finite]
-    if chunks.size < 3:
+    if chunks.size < 2:
         return None
 
-    inverse_sqrt = 1.0 / np.sqrt(chunks)
-    time_scales = np.geomspace(0.1, 100.0 * np.max(chunks), 2000)
-    best = None
-    for time_scale in time_scales:
-        transient = inverse_sqrt * np.exp(-chunks / time_scale)
-        design = np.column_stack((inverse_sqrt, -transient))
-        amplitude, correction = np.linalg.lstsq(
-            design, observed, rcond=None
-        )[0]
-        if amplitude <= 0 or correction < 0 or correction > amplitude:
-            continue
-        residual = np.sum((design @ (amplitude, correction) - observed) ** 2)
-        if best is None or residual < best[0]:
-            best = residual, amplitude, correction, time_scale
-
-    if best is None:
-        return None
-    _, amplitude, correction, time_scale = best
+    recent = chunks >= chunks[-1] / 2.0
+    exponent, log_amplitude = np.polyfit(
+        np.log(chunks[recent]), np.log(observed[recent]), 1
+    )
     if reference_chunks is None:
         reference_chunks = completed_chunks
     reference_chunks = np.asarray(reference_chunks, dtype=float)
-    return amplitude / np.sqrt(reference_chunks) * (
-        1.0 - correction / amplitude * np.exp(-reference_chunks / time_scale)
-    )
+    return np.exp(log_amplitude) * reference_chunks ** exponent
 
 
 def _add_uncertainty_fits(
     axis, completed_chunks, planned_chunks, lines, series
 ):
-    """Add fitted uncertainty curves with inverse-root asymptotes."""
+    """Add recent empirical power-law fits to the uncertainty curves."""
     reference_chunks = np.geomspace(
         completed_chunks[0], planned_chunks, 300
     )
     labelled = False
     for line, values in zip(lines, series):
-        fitted = _asymptotic_uncertainty_fit(
+        fitted = _recent_power_law_fit(
             completed_chunks, values, reference_chunks
         )
         if fitted is None:
@@ -192,7 +174,7 @@ def _add_uncertainty_fits(
             fitted,
             line.get_color(),
             (
-                r"Asymptotic $1/\sqrt{N}$ fits"
+                "Recent power-law fits"
                 if not labelled
                 else "_nolegend_"
             ),
@@ -446,6 +428,7 @@ def plot_convergence(simname):
         axis.set_yticks(major_ticks)
         axis.set_yticklabels(["%g" % value for value in major_ticks])
         axis.set_yticks(minor_ticks, minor=True)
+        axis.set_yticklabels([], minor=True)
     axes[1].set_xscale("log")
     axes[1].set_xlim(data["completed_chunks"][0], planned_chunks)
     for axis in axes:

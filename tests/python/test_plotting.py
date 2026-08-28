@@ -143,15 +143,13 @@ def test_inverse_sqrt_reference_recovers_expected_curve():
     )
 
 
-def test_asymptotic_uncertainty_fit_recovers_transient_curve():
+def test_recent_power_law_fit_recovers_recent_trend():
     chunks = np.arange(2.0, 80.0)
-    expected = 120.0 / np.sqrt(chunks) * (
-        1.0 - 0.65 * np.exp(-chunks / 15.0)
-    )
+    expected = 120.0 * chunks ** -0.3
 
-    fitted = plotting._asymptotic_uncertainty_fit(chunks, expected)
+    fitted = plotting._recent_power_law_fit(chunks, expected)
 
-    np.testing.assert_allclose(fitted, expected, rtol=0.002)
+    np.testing.assert_allclose(fitted, expected)
 
 
 def test_plot_run_uses_numbered_name_without_phantom_metadata(
