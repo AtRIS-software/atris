@@ -17,6 +17,7 @@
 #include "G4Run.hh"
 #include "G4CsvAnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
+#include "G4AutoLock.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
 #include <cmath>
@@ -31,6 +32,10 @@ extern std::vector<std::vector<G4double>> abso;      //
 extern std::vector<std::vector<G4double>> rate;      //
 extern G4int nrphantoms;
 extern std::map<G4int, G4int> heavy;    //
+
+namespace {
+G4Mutex binaryOutputMutex;
+}
 
 namespace atris {
 
@@ -177,6 +182,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			// For rescaling we will also include input energy. Because of the variability of input
 			// energy, and the sequential nature of the simulation, this is enough info to discriminate 
 			// between daughters of different parent particles. 
+			G4AutoLock lock(&binaryOutputMutex);
 			std::fwrite(&partPDG,intsize,1,tuples1);
 			std::fwrite(&entering,ushortsize,1,tuples1);
 			std::fwrite(&sangle,ushortsize,1,tuples1);
