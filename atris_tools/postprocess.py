@@ -4,6 +4,7 @@
 import argparse
 import os
 import re
+import sys
 import warnings
 from pathlib import Path
 
@@ -50,14 +51,141 @@ def get_nr_phantoms(simname):
     return nrphantoms
 
 
+def get_histogram_axes(filename):
+    axes = []
+    with open(filename, "r") as histogram:
+        for line in histogram:
+            if line.startswith("#axis edges "):
+                axes.append(
+                    np.fromstring(line[len("#axis edges ") :], sep=" ")
+                )
+            elif line.startswith("#axis fixed "):
+                fields = line.split()
+                axes.append(
+                    np.linspace(
+                        float(fields[3]),
+                        float(fields[4]),
+                        int(fields[2]) + 1,
+                    )
+                )
+            elif line.startswith("entries,"):
+                break
+    if not axes:
+        raise ValueError("No histogram axes found in " + str(filename))
+    return axes
+
+
 def get_energy_edges(simname):
-    with open(simname + "_h1_h1.1.csv", "r") as histogram:
-        axis_line = next(
-            line for line in histogram if line.startswith("#axis edges ")
-        )
-    edges = np.fromstring(axis_line[len("#axis edges ") :], sep=" ")
+    edges = get_histogram_axes(simname + "_h1_h1.1.csv")[0]
     print("This simulation had %i energy bins" % (edges.shape[0] - 1))
     return edges
+
+
+def _read_macro_configuration(filename):
+    energy_edges = []
+    event_count = None
+    with open(filename) as macro:
+        for line in macro:
+            fields = line.split()
+            if not fields or fields[0].startswith("#"):
+                continue
+            if fields[0] == "/gps/hist/point":
+                energy_edges.append(float(fields[1]))
+            elif fields[0] == "/run/beamOn":
+                event_count = int(fields[1])
+    return np.asarray(energy_edges), event_count
+
+
+def input_output_warnings(simname):
+    warnings = []
+    histogram_path = Path(simname + "_h1_h1.1.csv")
+    bins_path = Path(simname + ".bins")
+    macro_path = Path(simname + ".mac")
+
+    output_edges = get_histogram_axes(histogram_path)[0]
+    input_edges = None
+    if bins_path.is_file():
+        input_edges = np.atleast_1d(np.loadtxt(bins_path))
+        if (
+            input_edges.shape != output_edges.shape
+            or not np.allclose(input_edges, output_edges)
+        ):
+            warnings.append(
+                "%s: %s does not match the energy edges recorded in %s"
+                % (simname, bins_path.name, histogram_path.name)
+            )
+
+    if macro_path.is_file():
+        macro_edges, event_count = _read_macro_configuration(macro_path)
+        if input_edges is not None and (
+            macro_edges.shape != input_edges.shape
+            or not np.allclose(macro_edges, input_edges)
+        ):
+            warnings.append(
+                "%s: %s energy edges do not match %s"
+                % (simname, macro_path.name, bins_path.name)
+            )
+        if event_count is not None and not Path("chunks.txt").is_file():
+            primary_energy = np.atleast_2d(
+                np.loadtxt(histogram_path, delimiter=",", skiprows=7)
+            )
+            recorded_events = int(np.sum(primary_energy[1:-1, 0]))
+            if recorded_events != event_count:
+                warnings.append(
+                    "%s: %s requests %i events, but %s records %i"
+                    % (
+                        simname,
+                        macro_path.name,
+                        event_count,
+                        histogram_path.name,
+                        recorded_events,
+                    )
+                )
+
+    psf_path = Path("simulation.psf")
+    ionization_path = Path(simname + "_h2_h2.ion.csv")
+    if psf_path.is_file() and ionization_path.is_file():
+        detector_count = np.atleast_2d(np.loadtxt(psf_path)).shape[0]
+        output_detector_count = len(get_histogram_axes(ionization_path)[1]) - 1
+        if output_detector_count != detector_count:
+            warnings.append(
+                "%s: %s defines %i detector layers, but %s records %i"
+                % (
+                    simname,
+                    psf_path.name,
+                    detector_count,
+                    ionization_path.name,
+                    output_detector_count,
+                )
+            )
+
+    phantom_path = Path("phantoms.txt")
+    if phantom_path.is_file():
+        configured_phantoms = len(read_phantoms(Path.cwd()))
+        output_phantoms = sum(
+            re.match(
+                "^" + re.escape(simname) + r"_h2_h2\.dos\d+\.csv$",
+                filename,
+            )
+            is not None
+            for filename in os.listdir(".")
+        )
+        if output_phantoms != configured_phantoms:
+            warnings.append(
+                "%s: %s defines %i phantoms, but raw output contains %i"
+                % (
+                    simname,
+                    phantom_path.name,
+                    configured_phantoms,
+                    output_phantoms,
+                )
+            )
+    return warnings
+
+
+def warn_if_inputs_do_not_match_output(simname):
+    for warning in input_output_warnings(simname):
+        print("WARNING: " + warning, file=sys.stderr)
 
 
 def process_phantoms(nrphantoms):
@@ -152,6 +280,7 @@ def process_run(simname):
             "PDF plotting requires the atris-tools 'plot' extra."
         ) from exc
 
+    warn_if_inputs_do_not_match_output(simname)
     geometry, detector_count = process_psf()
     phantom_count = get_nr_phantoms(simname)
     energy_edges = get_energy_edges(simname)
