@@ -277,3 +277,28 @@ def test_run_chunks_translates_named_modes_for_atris(
 
     assert run_chunks(tmp_path, mode=mode, entry=1) == 1
     assert calls[0][3] == value
+
+
+def test_help_separates_atris_chunk_and_logging_options(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["atris-run", "--help"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+
+    assert exit_info.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "AtRIS execution options:" in help_text
+    assert "Chunk plan and worker options:" in help_text
+    assert "Logging options:" in help_text
+    assert help_text.index("--physics-list") < help_text.index("--entry")
+    assert help_text.index("--check-complete") < help_text.index("--quiet")
+    assert "Examples:" in help_text
+    normalized_help = " ".join(help_text.split())
+    assert "atris-run runs/earth" in normalized_help
+    assert "G4FORCENUMBEROFTHREADS=7" in normalized_help
+    assert "--worker-index 2" in normalized_help
+    assert "--worker-count 11" in normalized_help
+    assert '"$JOB_END_TIME"' in normalized_help
+    assert "--stop-before-end 1800" in normalized_help
+    assert "--entry 17" in normalized_help
+    assert "--check-complete" in normalized_help

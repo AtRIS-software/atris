@@ -5,6 +5,7 @@ import logging
 import math
 from pathlib import Path
 import subprocess
+import textwrap
 import time
 
 from .cli import add_logging_arguments, configure_logging
@@ -25,6 +26,40 @@ OUTPUT_MODE_ALIASES = {
     "0": "interface",
     "1": "legacy-ascii",
 }
+
+
+class HelpFormatter(argparse.HelpFormatter):
+    """Use argparse wrapping without splitting words or option names."""
+
+    def _split_lines(self, text, width):
+        text = self._whitespace_matcher.sub(" ", text).strip()
+        return textwrap.wrap(
+            text,
+            width,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+
+    def _fill_text(self, text, width, indent):
+        rendered = []
+        for line in text.splitlines():
+            if not line.strip():
+                rendered.append("")
+                continue
+            leading_space = line[: len(line) - len(line.lstrip())]
+            line_indent = indent + leading_space
+            line = self._whitespace_matcher.sub(" ", line).strip()
+            rendered.append(
+                textwrap.fill(
+                    line,
+                    width,
+                    initial_indent=line_indent,
+                    subsequent_indent=line_indent,
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
+            )
+        return "\n".join(rendered)
 
 
 def normalize_output_mode(value):
@@ -191,15 +226,15 @@ def main():
             "Run the incomplete entries assigned to one worker from an AtRIS "
             "chunk plan, marking each successful chunk complete."
         ),
+        formatter_class=HelpFormatter,
         epilog=(
             "The command reads chunks.txt and phantoms.txt, skips entries with "
-            "an existing .COMPLETE marker, and runs the selected entries "
-            "sequentially. --worker-index and --worker-count select a "
-            "collision-free shard; they do not launch workers or control "
-            "Geant4 threads. Launch multiple commands externally and set "
-            "G4FORCENUMBEROFTHREADS when needed. A deadline is checked only "
-            "before a chunk starts and never interrupts a running chunk. Failed "
-            "chunks are left incomplete. The response mode writes the normal "
+            "an existing .COMPLETE marker, and runs selected entries "
+            "sequentially. Worker coordinates select a collision-free shard; "
+            "they do not launch workers or control Geant4 threads. A deadline "
+            "is checked only before a chunk starts and never interrupts a "
+            "running chunk. Failed chunks are left incomplete. The response mode "
+            "writes the normal "
             "histogram workflow; interface additionally writes particle "
             "crossings, and legacy-ascii retains the historical "
             "ASCII mode. This command does not gather or post-process results."
@@ -213,13 +248,14 @@ def main():
         metavar="RUN_DIRECTORY",
         help="Scattered run directory (default: current directory).",
     )
-    parser.add_argument(
+    atris_options = parser.add_argument_group("AtRIS execution options")
+    atris_options.add_argument(
         "--physics-list",
         default="FTFP_BERT_HP",
         metavar="NAME",
         help="Geant4 reference physics list passed to AtRIS (default: FTFP_BERT_HP).",
     )
-    parser.add_argument(
+    atris_options.add_argument(
         "--mode",
         type=normalize_output_mode,
         choices=OUTPUT_MODES,
@@ -230,7 +266,8 @@ def main():
             "selects the historical ASCII mode (default: response)."
         ),
     )
-    parser.add_argument(
+    chunk_options = parser.add_argument_group("Chunk plan and worker options")
+    chunk_options.add_argument(
         "--entry",
         type=int,
         metavar="NUMBER",
@@ -239,7 +276,7 @@ def main():
             "shard. A completed entry is still skipped."
         ),
     )
-    parser.add_argument(
+    chunk_options.add_argument(
         "--worker-index",
         type=int,
         metavar="INDEX",
@@ -248,7 +285,7 @@ def main():
             "must be supplied with --worker-count (default: 0)."
         ),
     )
-    parser.add_argument(
+    chunk_options.add_argument(
         "--worker-count",
         type=int,
         metavar="COUNT",
@@ -257,7 +294,7 @@ def main():
             "supplied with --worker-index (default: 1)."
         ),
     )
-    parser.add_argument(
+    chunk_options.add_argument(
         "--stop-before-end",
         type=int,
         default=0,
@@ -267,7 +304,7 @@ def main():
             "(default: 0)."
         ),
     )
-    parser.add_argument(
+    chunk_options.add_argument(
         "--deadline",
         type=float,
         metavar="UNIX_TIME",
@@ -276,7 +313,7 @@ def main():
             "used only with --stop-before-end."
         ),
     )
-    parser.add_argument(
+    chunk_options.add_argument(
         "--check-complete",
         action="store_true",
         help=(
@@ -284,7 +321,30 @@ def main():
             "entry has a completion marker."
         ),
     )
-    add_logging_arguments(parser)
+    logging_options = parser.add_argument_group("Logging options")
+    add_logging_arguments(logging_options)
+
+    parser.add_argument_group(
+        "Examples",
+        description=(
+            "atris-run runs/earth\n"
+            "  Run every incomplete chunk sequentially.\n"
+            "\n"
+            "G4FORCENUMBEROFTHREADS=7 atris-run runs/earth \\\n"
+            "  --worker-index 2 --worker-count 11 \\\n"
+            "  --deadline \"$JOB_END_TIME\" --stop-before-end 1800\n"
+            "  Run worker index 2's round-robin shard of an 11-worker pool with "
+            "seven Geant4 threads. It does not start a new chunk during the "
+            "allocation's final 30 minutes. Launch the other worker indices "
+            "externally.\n"
+            "\n"
+            "atris-run runs/earth --entry 17\n"
+            "  Run only plan entry 17 unless it is already complete.\n"
+            "\n"
+            "atris-run runs/earth --check-complete\n"
+            "  Check whether every planned chunk has a completion marker."
+        ),
+    )
     args = parser.parse_args()
     configure_logging(args.log_level)
 
