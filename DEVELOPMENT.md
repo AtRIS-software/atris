@@ -1,99 +1,56 @@
-# Development Towards Version 3.0
+# Development
 
-Version 3.0 should simplify the repository and make AtRIS easier to build,
-understand, test, and run. Structural work should not change scientific or
-numerical behaviour unless that change is explicitly documented and validated.
+Version 3.0 added scatter-gather support and placed the existing Python scripts
+in a small package. Structural work should not change scientific or numerical
+behaviour unless that change is explicitly documented and validated.
 
-## Goals
+## Remaining goals
 
-The goals for version 3.0 are:
+The remaining goals are:
 
-- Make the repository root the clear entry point for building and using AtRIS.
-- Remove the confusing nested `atris/atris` naming.
-- Give source code, runtime data, development data, tools, examples, tests, and
-  documentation clear locations.
-- Keep one authoritative set of user documentation.
 - Reduce duplicated files and make the role of each retained dataset explicit.
-- Replace monolithic workflow scripts with a small companion Python package
-  containing focused, independently runnable tools.
-- Keep generated build files and simulation output separate from source files.
-- Provide small, reproducible smoke and system tests for installation and
-  complete workflows.
+- Provide small, reproducible system tests for installation and complete
+  workflows.
 - Protect existing scientific behaviour with numerical regression tests.
-- Make workstation and HPC use follow the same documented input workflow.
 
-The proposed test coverage and test tiers are listed in [TESTS.md](TESTS.md).
+## Phantom data
 
-## Current Duplication
+The repository now has one `phantoms/` library. Its named response and counting
+tables are source data. Run preparation selects entries from that library and
+stages them under the numbered filenames required by the AtRIS executable; the
+run's `phantoms.txt` records the mapping back to the source names.
 
-The current layout contains duplication and overlapping responsibilities:
+The same directory still contains old response tables, variance tables, plots,
+and a development notebook. Their provenance and continuing role should be
+established before removing them.
 
-- Root `phantoms/` contains 64 numbered runtime response matrices.
-- `phantoms-archive/` contains named response matrices, old response
-  matrices, variance tables, plots, and a notebook.
-- Byte-level comparison shows that 60 of the 64 numbered runtime matrices are
-  copies of named files in `phantoms-archive/`.
-
-## Target Structure
-
-A version 3.0 repository should have one obvious build root and directories
-named by their role:
-
-```text
-atris/
-├── CMakeLists.txt
-├── main.cc
-├── include/
-├── src/
-├── data/
-│   ├── materials/
-│   └── phantoms/
-├── python/
-│   └── atris/
-│       ├── __init__.py
-│       ├── atmosphere.py
-│       ├── psf.py
-│       ├── gdml.py
-│       ├── macros.py
-│       └── run.py
-├── examples/
-│   └── minimal/
-├── tests/
-│   ├── fixtures/
-│   ├── regression/
-│   └── system/
-├── docs/
-├── pyproject.toml
-├── README.md
-├── INSTALL.md
-├── DEVELOPMENT.md
-├── TESTS.md
-└── LICENSE
-```
-
-This structure is a goal for the 3.0 cleanup. It does not by itself decide
-which historical or development files should be retained.
-
-## Companion Python Package
+## Companion Python package
 
 The repository now contains an initial `atris_tools` package. It provides
 command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
 macro generation, chunk scattering and gathering, post-processing, and binary
-conversion.
-These commands are also importable as Python modules.
+conversion. These commands are also importable as Python modules.
 
 The package uses `atris-*` command names for these operations. Existing
-standalone commands remain available for compatibility and to preserve the
+standalone command names remain available for compatibility and to preserve the
 current user documentation. New commands should use the `atris-` prefix.
 
 The package now separates atmosphere preparation, PSF-to-GDML conversion,
 macro generation, chunk management, numerical post-processing, and plotting.
-For version 3.0, it may be renamed `atris` as shown in the target structure.
 The C++ executable remains the scientific simulation core; the Python package
 prepares its inputs and manages the surrounding workflow.
 
+Some modules still retain names and implementation details from the original
+standalone scripts. Further cleanup should favor clear importable functions and
+small command-line entry points without changing the supported workflow.
+
+## Remaining tests
+
 Temporary end-to-end harnesses are not part of the supported Python interface.
 Useful harnesses should be converted into reproducible smoke or system tests;
-those that do not provide lasting test coverage should be removed. The
-repository can contain several focused tests covering installation, input
-preparation, short simulation runs, and complete workflows.
+those that do not provide lasting test coverage should be removed.
+
+The current tests cover the Python tools and short runs of the compiled AtRIS
+executable. The main remaining gaps are a complete preparation-to-post-processing
+system test, behavioral tests for the Slurm wrappers, and reviewed numerical
+regression baselines for scientific output.
