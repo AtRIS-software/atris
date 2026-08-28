@@ -238,16 +238,6 @@ atris-gather
 Running `atris-gather` again replaces those files with a new aggregate of all
 chunks complete at that time.
 
-For a single non-array Slurm job, submit the singleton wrapper instead:
-
-```bash
-sbatch "$ATRIS_ROOT/examples/run-atris-singleton.slurm.sh"
-```
-
-The singleton job runs protons and alphas sequentially and writes their
-ordinary outputs directly. It does not use `chunks.txt` or `atris-gather`.
-It can also be run with Bash for convenience.
-
 ## Inspect the results
 
 Post-process the proton and alpha CSV files in the run directory:
