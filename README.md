@@ -250,17 +250,34 @@ It can also be run with Bash for convenience.
 
 ## Inspect the results
 
-Post-process the proton and alpha CSV files in the run directory and create the
-PDF plots:
+Post-process the proton and alpha CSV files in the run directory:
 
 ```bash
 postprocess
 ```
 
-This writes `protons.pdf` and `alphas.pdf` in the run directory, together with
-the processed ionization, dose, dose-equivalent, and count-rate files. The
-previews below come from the reduced test configuration in this guide and are
-not scientific production results.
+This writes the scaled numerical ionization, absorbed-dose, dose-equivalent,
+and count-rate files. Create quick-look PNG plots of the run inputs and those
+processed files separately:
+
+```bash
+atris-plot
+```
+
+The input plots can also be created before running AtRIS. Each configured
+species gets an image such as `protons.inputs.png`, showing its primary-energy
+configuration, atmospheric profiles, composition, and source settings. Each
+staged phantom gets an input image showing its radiation and counting response
+tables.
+
+After post-processing, each available species also gets a result image such as
+`protons.png`, containing primary-energy, source-direction, source-position,
+and ionization panels. Each phantom gets its own result image, such as
+`protons.icru_zero_0.000MeV_detAB.png`, containing absorbed-dose,
+dose-equivalent, and count-rate panels.
+
+The previews below come from the reduced test configuration in this guide and
+are not scientific production results.
 
 **Protons**
 

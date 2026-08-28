@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
-"""Post-process AtRIS CSV output and create response plots."""
+"""Convert raw AtRIS CSV histograms into scaled numerical response files."""
 
 import argparse
 import os
 import re
 import sys
-import warnings
 from pathlib import Path
 
 import numpy as np
 
 from .phantoms import read_phantoms
-
-
-os.environ.setdefault("MPLBACKEND", "Agg")
-
-
-warnings.filterwarnings("ignore")
 
 
 def process_psf(filename="simulation.psf"):
@@ -273,13 +266,6 @@ def make_output(data, geometry, simname, nphant):
 
 
 def process_run(simname):
-    try:
-        from .plotting import make_allplots
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "PDF plotting requires the atris-tools 'plot' extra."
-        ) from exc
-
     warn_if_inputs_do_not_match_output(simname)
     geometry, detector_count = process_psf()
     phantom_count = get_nr_phantoms(simname)
@@ -296,13 +282,6 @@ def process_run(simname):
         phantom_data,
         geometry,
     )
-    make_allplots(
-        scaled_data,
-        energy_edges,
-        geometry,
-        simname,
-        phantom_count,
-    )
     print("Making output files.")
     make_output(scaled_data, geometry, simname, phantom_count)
     print("Response files have been created.")
@@ -310,15 +289,9 @@ def process_run(simname):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Post-process AtRIS output and create PDF plots."
+        description="Post-process raw AtRIS CSV output."
     )
     parser.add_argument("run_directory", nargs="?", type=Path, default=Path.cwd())
-    parser.add_argument(
-        "simulations",
-        nargs="*",
-        default=("protons", "alphas"),
-        help="Simulation prefixes to process.",
-    )
     args = parser.parse_args()
 
     run_directory = args.run_directory.expanduser().resolve()
@@ -326,14 +299,22 @@ def main():
         raise SystemExit("Run directory does not exist: " + str(run_directory))
 
     previous_directory = Path.cwd()
+    processed = []
     try:
         os.chdir(run_directory)
-        for simulation in args.simulations:
+        for simulation in ("protons", "alphas"):
+            if not Path(simulation + "_h1_h1.1.csv").is_file():
+                print("Skipping " + simulation + ": output not found.")
+                continue
             process_run(simulation)
+            processed.append(simulation)
     finally:
         os.chdir(previous_directory)
 
-    print("Wrote result files and PDF plots to " + str(run_directory))
+    if processed:
+        print("Wrote processed result files to " + str(run_directory))
+    else:
+        print("No requested simulation output found in " + str(run_directory))
 
 
 if __name__ == "__main__":

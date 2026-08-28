@@ -24,6 +24,7 @@ atris-clone = "atris_tools.clone_run:main"
 atris-scatter = "atris_tools.scatter:main"
 atris-gather = "atris_tools.gather:main"
 atris-postprocess = "atris_tools.postprocess:main"
+atris-plot = "atris_tools.plotting:main"
 atris-bin-to-ascii = "atris_tools.bin2asci:main"
 
 # Legacy command names.

@@ -127,8 +127,38 @@ def test_process_phantoms_uses_ids_independently_of_row_order(tmp_path, monkeypa
     np.testing.assert_allclose(phantoms, [[10.5, 20.5], [30.5, 40.5]])
 
 
-def test_process_run_reports_missing_plot_extra(monkeypatch):
-    monkeypatch.setitem(sys.modules, "atris_tools.plotting", None)
+def test_main_skips_missing_species(tmp_path, monkeypatch, capsys):
+    (tmp_path / "protons_h1_h1.1.csv").write_text("present\n")
+    processed = []
+    monkeypatch.setattr(postprocess, "process_run", processed.append)
+    monkeypatch.setattr(sys, "argv", ["atris-postprocess", str(tmp_path)])
 
-    with pytest.raises(RuntimeError, match="plot.*extra"):
-        postprocess.process_run("protons")
+    postprocess.main()
+
+    assert processed == ["protons"]
+    output = capsys.readouterr().out
+    assert "Skipping alphas: output not found." in output
+
+
+def test_main_accepts_directory_without_simulation_output(
+    tmp_path, monkeypatch, capsys
+):
+    processed = []
+    monkeypatch.setattr(postprocess, "process_run", processed.append)
+    monkeypatch.setattr(sys, "argv", ["atris-postprocess", str(tmp_path)])
+
+    postprocess.main()
+
+    assert processed == []
+    assert "No requested simulation output found" in capsys.readouterr().out
+
+
+def test_main_rejects_species_argument(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["atris-postprocess", str(tmp_path), "protons"],
+    )
+
+    with pytest.raises(SystemExit):
+        postprocess.main()
