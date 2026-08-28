@@ -46,8 +46,8 @@ Use four overlapping quarter-atmosphere ranges:
 75.0 to 100.0 km
 ```
 
-Save the responses as `nrlmsis-0.txt`, `nrlmsis-25.txt`, `nrlmsis-50.txt`, and
-`nrlmsis-75.txt`.
+Save the responses as `nrlmsis-000.txt`, `nrlmsis-025.txt`,
+`nrlmsis-050.txt`, and `nrlmsis-075.txt`.
 
 ### Convert the atmosphere
 
