@@ -143,6 +143,18 @@ phantoms.txt
 - `phantoms.txt` selects the response tables and contains the mass and
   cross-sectional area used during post-processing.
 
+### Clone a prepared run
+
+To reuse the inputs from the current run in a new sibling directory:
+
+```bash
+atris-clone . ../my-second-run
+```
+
+This copies the prepared atmosphere, geometry, particle inputs, and phantom
+inputs. Simulation results, plots, logs, and chunk progress are not copied. The
+command refuses to use an existing destination directory.
+
 ## Run AtRIS
 
 Run the proton and alpha simulations in the run directory:
