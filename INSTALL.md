@@ -18,6 +18,7 @@ AtRIS requires:
 - [Geant4](https://geant4.web.cern.ch/) with GDML, multithreading, and runtime
   datasets;
 - [Xerces-C++](https://xerces.apache.org/xerces-c/) for GDML support;
+- [Expat](https://libexpat.github.io/) for Geant4's XML support;
 - [CMake](https://cmake.org/) 3.22 or newer;
 - a C++17 compiler, used consistently to build both Geant4 and AtRIS;
 - [Git](https://git-scm.com/) to obtain the AtRIS source;
@@ -43,9 +44,10 @@ AppleClang the default compiler on macOS.
 
 On an HPC system, use its
 [environment-module system](https://modules.readthedocs.io/en/latest/) to load
-one compiler, a compatible Xerces-C++, and the required CMake, Git, and Python
-modules before running the build commands. When reusing an existing Geant4
-installation, use the compiler with which that installation was built.
+one compiler, compatible Expat and Xerces-C++ libraries, and the required
+CMake, Git, and Python modules before running the build commands. When reusing
+an existing Geant4 installation, use the compiler with which that installation
+was built.
 
 ## Directory layout
 
@@ -214,6 +216,15 @@ brew install cmake
 
 On an HPC system, load the available CMake module. If CMake was available in a
 previous shell, its module may simply need to be loaded again.
+
+### CMake cannot find Expat while configuring Geant4
+
+Geant4 uses the system Expat library by default on Unix-like systems. Make the
+Expat development files available through the system package manager or
+environment-module system, then repeat the [Geant4 configure and install
+commands](#configure-and-install). On a system using environment modules, the
+Expat module must be loaded in each new shell used to configure or build
+Geant4.
 
 ### CMake says `No CMAKE_CXX_COMPILER could be found`
 
