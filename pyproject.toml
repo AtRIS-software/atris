@@ -12,7 +12,7 @@ dependencies = [
 
 [project.optional-dependencies]
 plot = ["matplotlib"]
-test = ["pytest"]
+test = ["pytest", "matplotlib"]
 
 [project.scripts]
 atris-version = "atris_tools.version_command:main"
