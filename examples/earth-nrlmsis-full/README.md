@@ -1,8 +1,8 @@
 # Full Earth atmosphere example
 
 This example prepares a full Earth run from an NRLMSIS 2.0 atmosphere. The
-profile is for 27 May 2012 at 12:00 UTC, 10 degrees north and 10 degrees east,
-covering 0 to 100 km in 0.2 km steps.
+profile is for 18 August 2026 at 00:00 UTC, 55 degrees north and 45 degrees
+east, covering 0 to 100 km in 0.2 km steps.
 
 The particle inputs use the `atrismacrogen` defaults: 121 logarithmically
 spaced energy points, 3000 protons per point, and 1980 alpha particles per
@@ -21,9 +21,9 @@ cd runs/earth-nrlmsis-full
 ## Prepare the atmosphere
 
 Each example keeps its downloaded atmosphere tables in its own directory. The
-files in `examples/earth-nrlmsis-full` contain NRLMSIS 2.0 data for 27 May 2012
-at 12:00 UTC, 10 degrees north and 10 degrees east, covering 0 to 100 km in
-0.2 km steps. Use these files unless you need a different time or location:
+files in `examples/earth-nrlmsis-full` contain NRLMSIS 2.0 data for 18 August
+2026 at 00:00 UTC, 55 degrees north and 45 degrees east, covering 0 to 100 km
+in 0.2 km steps. Use these files unless you need a different time or location:
 
 ```bash
 cp "$ATRIS_ROOT"/examples/earth-nrlmsis-full/nrlmsis-*.txt .
