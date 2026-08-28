@@ -35,6 +35,16 @@ if [[ -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
     export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
 fi
 
+# Count the configured phantoms. Runs without phantoms.txt pass zero to AtRIS.
+phantom_count=0
+if [[ -f phantoms.txt ]]; then
+    while read -r phantom _; do
+        if [[ -n "$phantom" && "$phantom" != \#* ]]; then
+            let "phantom_count += 1"
+        fi
+    done < phantoms.txt
+fi
+
 # Slurm array indices and optional Bash arguments are one-based chunks.txt line
 # numbers. Without either, pass every plan entry to the sequential loop.
 task_id="${SLURM_ARRAY_TASK_ID:-${1:-}}"
@@ -57,7 +67,7 @@ while read -r simulation seed1 seed2; do
         continue
     fi
 
-    AtRIS FTFP_BERT_HP "chunks/$run_name" -1 1
+    AtRIS FTFP_BERT_HP "chunks/$run_name" -1 "$phantom_count"
 
     # set -e reaches this line only after AtRIS exits successfully. Failed or
     # timed-out chunks therefore remain unmarked and are retried on resubmission.

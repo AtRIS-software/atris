@@ -36,8 +36,18 @@ if [[ -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
     export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
 fi
 
+# Count the configured phantoms. Runs without phantoms.txt pass zero to AtRIS.
+phantom_count=0
+if [[ -f phantoms.txt ]]; then
+    while read -r phantom _; do
+        if [[ -n "$phantom" && "$phantom" != \#* ]]; then
+            let "phantom_count += 1"
+        fi
+    done < phantoms.txt
+fi
+
 # These runs execute sequentially and write the ordinary protons_* and alphas_*
 # outputs directly. A resubmission starts them again and replaces files with the
 # same names; there are no completion markers or partial-run recovery.
-AtRIS FTFP_BERT_HP protons -1 1
-AtRIS FTFP_BERT_HP alphas -1 1
+AtRIS FTFP_BERT_HP protons -1 "$phantom_count"
+AtRIS FTFP_BERT_HP alphas -1 "$phantom_count"
