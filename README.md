@@ -202,10 +202,11 @@ A completed simulation later reports:
 The run directory then contains CSV output files beginning with `protons_` and
 `alphas_`.
 
-### Run with SLURM
+### Scatter and gather a larger run
 
-Chunked execution is the normal way to run AtRIS with Slurm. After generating
-the ordinary particle inputs, scatter them into 20 proton and 20 alpha chunks:
+Scatter/gather is suitable for larger simulations whose work should be divided
+into independent, restartable chunks. After generating the ordinary particle
+inputs, create 20 proton and 20 alpha chunks:
 
 ```bash
 atris-scatter --chunks 20 --random-seed 12345
@@ -217,20 +218,15 @@ changed and remain available for single runs. Each line of `chunks.txt` gives a
 particle species and two random seeds. `atris-scatter` will not overwrite an
 existing plan, chunk macro, or nonempty `chunks/` directory.
 
-The array-job wrapper is
-[`examples/run-atris.slurm.sh`](examples/run-atris.slurm.sh). Its array indices
-are one-based and correspond to lines in `chunks.txt`. The example above has 40
-lines, so it can be submitted from the run directory with:
+The `/run/beamOn` total from each ordinary macro is divided among its chunks.
+All chunks share one macro, so the per-chunk count is rounded up when the total
+does not divide evenly. In that case `atris-scatter` reports both the requested
+and actual totals; the actual total exceeds the request by fewer than the number
+of chunks.
 
-```bash
-sbatch --array=1-40 "$ATRIS_ROOT/examples/run-atris.slurm.sh"
-```
-
-Each successful repetition writes a `COMPLETE` marker. Submitting the same
-array again skips completed repetitions and reruns the rest.
-
-For convenience, the wrapper can also be run with Bash; it processes the plan
-sequentially and accepts an optional one-based `chunks.txt` line number.
+The chunks can be executed independently. Each successful repetition writes
+its outputs beneath `chunks/` and adds a `COMPLETE` marker. Incomplete chunks
+can be run again without repeating completed work.
 
 Gather whichever chunks have completed so far into ordinary proton and alpha
 CSV outputs in the run directory:

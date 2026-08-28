@@ -35,7 +35,9 @@ def test_chunk_plan_is_reproducible_unique_and_six_digit():
     assert len(set(pairs)) == len(pairs)
 
 
-def test_scatter_preserves_ordinary_macros_and_event_count(tmp_path):
+def test_scatter_preserves_ordinary_macros_and_rounds_chunk_event_count(
+    tmp_path, capsys
+):
     originals = write_ordinary_macros(tmp_path)
     (tmp_path / "chunks").mkdir()
 
@@ -50,7 +52,40 @@ def test_scatter_preserves_ordinary_macros_and_event_count(tmp_path):
         assert (tmp_path / f"{species}.mac").read_text() == originals[species]
         chunk = (tmp_path / f"{species}.chunk.mac").read_text()
         assert "/random/setSeeds" not in chunk
-        assert "/run/beamOn 7" in chunk
+        assert "/run/beamOn 4" in chunk
+
+    assert capsys.readouterr().out.splitlines() == [
+        "INFO: Rounded protons from 7 requested events to 8 across 2 chunks "
+        "(4 events per chunk).",
+        "INFO: Rounded alphas from 7 requested events to 8 across 2 chunks "
+        "(4 events per chunk).",
+    ]
+
+
+def test_scatter_logs_nothing_when_event_count_divides_evenly(tmp_path, capsys):
+    write_ordinary_macros(tmp_path)
+    for macro in tmp_path.glob("*.mac"):
+        macro.write_text(macro.read_text().replace("/run/beamOn 7", "/run/beamOn 8"))
+
+    scatter(tmp_path, chunks=2, random_seed=17)
+
+    assert capsys.readouterr().out == ""
+    for species in ("protons", "alphas"):
+        chunk = (tmp_path / f"{species}.chunk.mac").read_text()
+        assert "/run/beamOn 4" in chunk
+
+
+def test_scatter_rejects_missing_event_count_before_writing(tmp_path):
+    write_ordinary_macros(tmp_path)
+    (tmp_path / "alphas.mac").write_text("/run/initialize\n")
+
+    with pytest.raises(ValueError, match="exactly one /run/beamOn"):
+        scatter(tmp_path, chunks=2, random_seed=17)
+
+    assert not (tmp_path / "protons.chunk.mac").exists()
+    assert not (tmp_path / "alphas.chunk.mac").exists()
+    assert not (tmp_path / "chunks.txt").exists()
+    assert not (tmp_path / "chunks").exists()
 
 
 def test_scatter_refuses_all_destinations_before_writing(tmp_path):

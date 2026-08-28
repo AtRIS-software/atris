@@ -8,12 +8,47 @@ import random
 SPECIES = ("protons", "alphas")
 
 
-def chunk_macro(source):
+def chunk_macro(source, chunks):
     lines = source.read_text().splitlines(keepends=True)
-    return "".join(
-        line for line in lines
+    beam_lines = [
+        index
+        for index, line in enumerate(lines)
+        if line.lstrip().startswith("/run/beamOn ")
+    ]
+    if len(beam_lines) != 1:
+        raise ValueError(
+            "%s must contain exactly one /run/beamOn command" % source
+        )
+
+    beam_index = beam_lines[0]
+    fields = lines[beam_index].split()
+    if len(fields) != 2:
+        raise ValueError("Invalid /run/beamOn command in %s" % source)
+    try:
+        total_events = int(fields[1])
+    except ValueError as error:
+        raise ValueError("Invalid /run/beamOn command in %s" % source) from error
+    if total_events < 1:
+        raise ValueError(
+            "/run/beamOn must request at least one event in %s" % source
+        )
+
+    events_per_chunk = (total_events + chunks - 1) // chunks
+    newline = "\n" if lines[beam_index].endswith("\n") else ""
+    stripped_line = lines[beam_index].lstrip()
+    indentation_length = len(lines[beam_index]) - len(stripped_line)
+    indentation = lines[beam_index][:indentation_length]
+    lines[beam_index] = "%s/run/beamOn %i%s" % (
+        indentation,
+        events_per_chunk,
+        newline,
+    )
+    contents = "".join(
+        line
+        for line in lines
         if not line.lstrip().startswith("/random/setSeeds ")
     )
+    return contents, total_events, events_per_chunk
 
 
 def chunk_plan(chunks, rng):
@@ -53,6 +88,7 @@ def scatter(run_directory, chunks, random_seed=None):
             )
 
     chunk_macros = {}
+    rounded_totals = []
     for species in SPECIES:
         source = run_directory / (species + ".mac")
         destination = run_directory / (species + ".chunk.mac")
@@ -60,7 +96,13 @@ def scatter(run_directory, chunks, random_seed=None):
             raise FileNotFoundError("Ordinary macro does not exist: " + str(source))
         if destination.exists():
             raise FileExistsError("Chunk macro already exists: " + str(destination))
-        chunk_macros[destination] = chunk_macro(source)
+        contents, total_events, events_per_chunk = chunk_macro(source, chunks)
+        chunk_macros[destination] = contents
+        actual_events = events_per_chunk * chunks
+        if actual_events != total_events:
+            rounded_totals.append(
+                (species, total_events, actual_events, events_per_chunk)
+            )
 
     rng = random.Random(random_seed)
     plan_lines = chunk_plan(chunks, rng)
@@ -69,6 +111,12 @@ def scatter(run_directory, chunks, random_seed=None):
         destination.write_text(contents)
     with plan_path.open("x") as plan:
         plan.writelines(plan_lines)
+    for species, requested, actual, per_chunk in rounded_totals:
+        print(
+            "INFO: Rounded %s from %i requested events to %i across %i chunks "
+            "(%i events per chunk)."
+            % (species, requested, actual, chunks, per_chunk)
+        )
 
     return run_directory
 
