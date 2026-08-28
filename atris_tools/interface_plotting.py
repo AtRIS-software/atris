@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import numpy as np
 
-from .input_plotting import particle_name
+from .input_plotting import particle_symbol
 from .interface_output import read_interface_output
 
 
@@ -62,7 +62,9 @@ def plot_interface_output(simname):
     particle_codes = particle_codes[order]
     particle_counts = particle_counts[order]
     display_limit = 12
-    labels = [particle_name(int(code)) for code in particle_codes[:display_limit]]
+    labels = [
+        particle_symbol(int(code)) for code in particle_codes[:display_limit]
+    ]
     counts = particle_counts[:display_limit]
     if particle_codes.size > display_limit:
         labels.append("other")

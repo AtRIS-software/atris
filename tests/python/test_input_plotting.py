@@ -100,6 +100,13 @@ def test_particle_name_translates_standard_particles_and_nuclei():
     assert input_plotting.particle_name(1000260560) == "Fe-56"
 
 
+def test_particle_symbol_uses_compact_pdg_notation():
+    assert input_plotting.particle_symbol(22) == r"$\gamma$"
+    assert input_plotting.particle_symbol(12) == r"$\nu_e$"
+    assert input_plotting.particle_symbol(-11) == r"$e^{+}$"
+    assert input_plotting.particle_symbol(1000020040) == r"$^{4}\mathrm{He}$"
+
+
 def test_particle_groups_include_every_particle_once():
     particle_codes = np.array(
         [22, 2212, 2112, -2112, 11, -11, 1000010020, 1000030070]

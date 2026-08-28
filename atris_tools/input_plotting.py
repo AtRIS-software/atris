@@ -41,6 +41,30 @@ PARTICLE_NAMES = {
     321: "kaon+",
     -321: "kaon-",
 }
+PARTICLE_SYMBOLS = {
+    22: r"$\gamma$",
+    2212: r"$p$",
+    -2212: r"$\bar{p}$",
+    2112: r"$n$",
+    -2112: r"$\bar{n}$",
+    11: r"$e^{-}$",
+    -11: r"$e^{+}$",
+    12: r"$\nu_e$",
+    -12: r"$\bar{\nu}_e$",
+    13: r"$\mu^{-}$",
+    -13: r"$\mu^{+}$",
+    14: r"$\nu_\mu$",
+    -14: r"$\bar{\nu}_\mu$",
+    15: r"$\tau^{-}$",
+    -15: r"$\tau^{+}$",
+    16: r"$\nu_\tau$",
+    -16: r"$\bar{\nu}_\tau$",
+    211: r"$\pi^{+}$",
+    -211: r"$\pi^{-}$",
+    111: r"$\pi^{0}$",
+    321: r"$K^{+}$",
+    -321: r"$K^{-}$",
+}
 ELEMENT_SYMBOLS = (
     "n",
     "H",
@@ -88,6 +112,27 @@ def particle_name(pdg_code):
         )
         prefix = "anti-" if pdg_code < 0 else ""
         return "%s%s-%i" % (prefix, element, mass_number)
+    return str(pdg_code)
+
+
+def particle_symbol(pdg_code):
+    if pdg_code in PARTICLE_SYMBOLS:
+        return PARTICLE_SYMBOLS[pdg_code]
+    absolute_code = abs(pdg_code)
+    if absolute_code >= 1_000_000_000:
+        atomic_number = (absolute_code // 10_000) % 1_000
+        mass_number = (absolute_code // 10) % 1_000
+        element = (
+            ELEMENT_SYMBOLS[atomic_number]
+            if atomic_number < len(ELEMENT_SYMBOLS)
+            else "Z%i" % atomic_number
+        )
+        if pdg_code < 0:
+            return r"$^{%i}\overline{\mathrm{%s}}$" % (
+                mass_number,
+                element,
+            )
+        return r"$^{%i}\mathrm{%s}$" % (mass_number, element)
     return str(pdg_code)
 
 
