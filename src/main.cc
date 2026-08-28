@@ -40,7 +40,7 @@ G4bool atrisverbose = false;
 
 
 
-// functions of main
+// Functions used by main.
 void Phantoms(G4int howmany);
 void determine_nrofdetectors(G4String fname);
 

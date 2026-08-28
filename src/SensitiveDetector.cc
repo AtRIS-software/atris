@@ -23,8 +23,8 @@
 #include <cstdio>
 #include <map>
 #include <vector>
-extern G4int mode;                      // from main.cc
-extern G4int nrofdetectors;             // from main.cc
+extern G4int mode;                      // from src/main.cc
+extern G4int nrofdetectors;             // from src/main.cc
 extern FILE * tuples1;                  // 
 extern std::vector<G4int> useornot;     // 
 extern std::vector<std::vector<G4double>> abso;      //

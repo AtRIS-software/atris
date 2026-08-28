@@ -16,7 +16,7 @@
 #include <iostream>
 
 
-extern G4String outputFileName;                       // from main.cc
+extern G4String outputFileName;                       // from src/main.cc
 
 namespace atris {
 

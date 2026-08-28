@@ -34,7 +34,7 @@ set(ATRIS_HEADERS
 )
 
 set(ATRIS_SOURCES
-  main.cc
+  src/main.cc
   src/DetectorConstruction.cc
   src/HistoManager.cc
   src/PrimaryGeneratorAction.cc
