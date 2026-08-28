@@ -244,6 +244,19 @@ source setup_atris.sh
 This environment applies only to the current shell, so source
 `setup_atris.sh` again after opening a new one.
 
+### `pip` says the installed scripts are not on `PATH`
+
+The Python package was installed, but the shell cannot find commands placed in
+the user-local binary directory. Add that directory to `PATH`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Add the same line to the shell startup file, such as `~/.bashrc`, to retain it
+after opening a new shell. If the warning from `pip` names a different
+directory, use that directory instead.
+
 ### I broke AtRIS! How do I rebuild it?
 
 If only the generated build is broken, remove it from `<ATRIS_WORK>/atris`:
