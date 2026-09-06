@@ -7,17 +7,70 @@ import pytest
 from atris_tools import nrlmsis2psf
 
 
-def nrlmsis_row(altitude, latitude=10.0):
-    row = np.ones(27)
-    row[:5] = [2012, 5, 27, 148, 12]
-    row[5:8] = [altitude, latitude, 10]
+NRLMSIS_20_FIELDS = (
+    "Year Mon Day DOY hour Heit(km) Lat Lon Oden(cm-3) N2den(cm-3) "
+    "O2den(cm-3) air(gm/cm3) T(K) exoT(K) Heden(cm-3) Arden(cm-3) "
+    "Hden(cm-3) Nden(cm-3) F107 F107a apdaily ap0-3 ap3-6 ap6-9 "
+    "ap9-12 ap12-33 ap33-59"
+).split()
+
+
+def field_name(field):
+    return field.partition("(")[0]
+
+
+def nrlmsis_row(altitude, latitude=10.0, fields=NRLMSIS_20_FIELDS):
+    values = {
+        "Year": 2012,
+        "Mon": 5,
+        "Day": 27,
+        "DOY": 148,
+        "hour": 12,
+        "Heit": altitude,
+        "Lat": latitude,
+        "Lon": 10,
+        "Oden": 2,
+        "N2den": 3,
+        "O2den": 5,
+        "air": 7,
+        "T": 290,
+        "exoT": 1000,
+        "Heden": 11,
+        "Arden": 13,
+        "Hden": 17,
+        "Nden": 19,
+    }
+    row = np.ones(len(fields))
+    for index, field in enumerate(fields):
+        row[index] = values.get(field_name(field), 1)
     return row
 
 
-def write_table(path, rows):
-    path.write_text("CCMC output\nYear Mon Day remaining columns\n")
+def write_table(path, rows, fields=NRLMSIS_20_FIELDS):
+    path.write_text("CCMC output\n" + " ".join(fields) + "\n")
     with path.open("a") as table:
         np.savetxt(table, rows)
+
+
+@pytest.mark.parametrize(
+    "extra_field",
+    [None, "AnomOden(cm-3)", "NOden(cm-3)"],
+    ids=["NRLMSIS-2.0", "NRLMSISE-00", "NRLMSIS-2.1"],
+)
+def test_reads_all_ccmc_nrlmsis_formats_by_header(tmp_path, extra_field):
+    fields = list(NRLMSIS_20_FIELDS)
+    if extra_field:
+        fields.insert(11, extra_field)
+    table = tmp_path / "nrlmsis.txt"
+    write_table(table, [nrlmsis_row(0, fields=fields)], fields)
+
+    _, atmosphere, malformed = nrlmsis2psf._read_table(table)
+
+    assert not malformed
+    np.testing.assert_allclose(
+        atmosphere[0],
+        [2012, 5, 27, 148, 12, 0, 10, 10, 2, 3, 5, 7, 290, 11, 13, 17, 19],
+    )
 
 
 def test_convert_merges_files_and_replaces_suspicious_duplicate(

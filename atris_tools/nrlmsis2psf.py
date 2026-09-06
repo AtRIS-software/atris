@@ -3,18 +3,117 @@
 
 import argparse
 import logging
+import re
 from pathlib import Path
 
 import numpy as np
 
-from . import nrlmsis
 from .cli import add_logging_arguments, configure_logging
 
 
 HEADER_MARKER = "Year Mon Day"
+HEADER_FIELD_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9.-]*(?:\([^)]*\))?")
+TABLE_FIELDS = (
+    "Year",
+    "Mon",
+    "Day",
+    "DOY",
+    "hour",
+    "Heit",
+    "Lat",
+    "Lon",
+    "Oden",
+    "N2den",
+    "O2den",
+    "air",
+    "T",
+    "Heden",
+    "Arden",
+    "Hden",
+    "Nden",
+)
 METADATA_COLUMNS = (0, 1, 2, 3, 4, 6, 7)
 DUPLICATE_RELATIVE_TOLERANCE = 5.0e-4
 logger = logging.getLogger(__name__)
+
+
+def _physical_profile(atmosphere):
+    return atmosphere[:, [5, 8, 9, 10, 11, 12, 13, 14, 15, 16]]
+
+
+def _write_psf(data, filename="simulation.psf"):
+    altitude = data[:, 0]
+    oxygen = data[:, 1]
+    nitrogen = data[:, 2] + 0.5 * data[:, 9]
+    oxygen_molecules = data[:, 3] + 0.5 * oxygen
+    density = data[:, 4]
+    temperature = data[:, 5]
+    helium = data[:, 6]
+    argon = data[:, 7]
+    hydrogen = data[:, 8]
+
+    thickness = np.append(np.diff(altitude), altitude[-1] - altitude[-2])
+    bottom_radius = 6371.0 + altitude
+    top_radius = bottom_radius + thickness
+
+    boltzmann_constant = 1.38064852e-23
+    total_pressure = (
+        oxygen_molecules
+        + nitrogen
+        + argon
+        + helium
+        + hydrogen
+    ) * boltzmann_constant * 1_000_000 * temperature
+
+    atomic_mass_unit = 1.66054e-24
+    masses = np.column_stack(
+        (
+            nitrogen * (2 * 14.0067),
+            oxygen_molecules * (2 * 15.9994),
+            argon * 39.948,
+            helium * 4.0026,
+            hydrogen * 1.008,
+        )
+    ) * atomic_mass_unit
+    mass_fractions = masses / masses.sum(axis=1, keepdims=True)
+
+    atmosphere = np.zeros((len(data), 16))
+    atmosphere[:, 0] = bottom_radius
+    atmosphere[:, 1] = top_radius
+    atmosphere[:, 3] = 2 * np.pi
+    atmosphere[:, 5] = np.pi
+    atmosphere[:, 6] = np.arange(2, len(data) + 2)
+    atmosphere[:, 7] = temperature
+    atmosphere[:, 8] = density
+    atmosphere[:, 9] = total_pressure
+    atmosphere[:, 11:] = mass_fractions
+
+    crust_thickness = 0.02
+    upper_boundary = top_radius[-1] + 0.001
+    solids = np.zeros((3, 16))
+    solids[:, 0] = (0, 6371.0 - crust_thickness, upper_boundary)
+    solids[:, 1] = (
+        6371.0 - crust_thickness,
+        6371.0,
+        upper_boundary + crust_thickness,
+    )
+    solids[:, 3] = 2 * np.pi
+    solids[:, 5] = np.pi
+    solids[:, 6] = (0, 1, len(data) + 2)
+    solids[:, 7] = 293.15
+    solids[:, 8] = 2.7
+    solids[:, 9] = 101325
+    solids[:, 10] = 1
+
+    output = np.vstack((solids[:2], atmosphere, solids[2:]))
+    number_format = "%e %e %e %e %e %e %i %e %e %e %e %e %e %e %e %e"
+    np.savetxt(
+        filename,
+        output,
+        fmt=number_format,
+        header="O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H",
+        comments="#",
+    )
 
 
 def _read_table(path):
@@ -27,23 +126,37 @@ def _read_table(path):
     if not header_indices:
         raise ValueError("NRLMSIS table header not found in " + str(path))
 
+    header = lines[header_indices[0]]
+    header_fields = [
+        field.partition("(")[0]
+        for field in HEADER_FIELD_PATTERN.findall(header)
+    ]
+    missing = [field for field in TABLE_FIELDS if field not in header_fields]
+    if missing:
+        raise ValueError(
+            "%s is missing NRLMSIS columns: %s"
+            % (path, ", ".join(missing))
+        )
+    selected_columns = [header_fields.index(field) for field in TABLE_FIELDS]
+    altitude_column = header_fields.index("Heit")
+
     parsed = []
     malformed = []
     for line_number, line in enumerate(
         lines[header_indices[0] + 1 :],
         start=header_indices[0] + 2,
     ):
-        fields = line.split()
-        if not fields:
+        row_fields = line.split()
+        if not row_fields:
             continue
         altitude = None
-        if len(fields) > 5:
+        if len(row_fields) > altitude_column:
             try:
-                altitude = _altitude_key(fields[5])
+                altitude = _altitude_key(row_fields[altitude_column])
             except ValueError:
                 pass
         try:
-            values = [float(field) for field in fields]
+            values = [float(field) for field in row_fields]
         except ValueError:
             if altitude is None:
                 raise ValueError(
@@ -56,8 +169,7 @@ def _read_table(path):
 
     if not parsed:
         raise ValueError("No valid NRLMSIS rows found in " + str(path))
-    column_counts = [len(values) for _, _, values in parsed]
-    expected_columns = max(set(column_counts), key=column_counts.count)
+    expected_columns = len(header_fields)
     rows = []
     for line_number, altitude, values in parsed:
         if len(values) != expected_columns:
@@ -68,7 +180,7 @@ def _read_table(path):
                 )
             malformed.append(altitude)
             continue
-        rows.append(values)
+        rows.append([values[index] for index in selected_columns])
     return path, np.asarray(rows), malformed
 
 
@@ -77,7 +189,7 @@ def _altitude_key(altitude):
 
 
 def _suspicious_rows(atmosphere):
-    physical = nrlmsis.nrlm_reformer(atmosphere)
+    physical = _physical_profile(atmosphere)
     return ~np.all(np.isfinite(physical), axis=1) | np.any(
         physical[:, 1:] <= 0,
         axis=1,
@@ -91,11 +203,6 @@ def merge_nrlmsis(input_paths):
         raise ValueError("At least one NRLMSIS table is required")
 
     column_count = tables[0][1].shape[1]
-    if column_count < 18:
-        raise ValueError(
-            "%s has only %i columns; expected an NRLMSIS profile table"
-            % (tables[0][0], column_count)
-        )
     valid_rows = {}
     rejected_rows = {}
     for path, atmosphere, malformed_altitudes in tables:
@@ -209,7 +316,7 @@ def convert_nrlmsis(input_paths):
     if isinstance(input_paths, (str, Path)):
         input_paths = [input_paths]
     atmosphere = merge_nrlmsis(input_paths)
-    nrlmsis.nrml2psf(nrlmsis.nrlm_reformer(atmosphere))
+    _write_psf(_physical_profile(atmosphere))
     output_path = Path.cwd() / "simulation.psf"
     _validate_psf(output_path, len(atmosphere))
     logger.info("Wrote %s", output_path)
@@ -224,12 +331,13 @@ def main():
             "Planet Specification Format (PSF) used by AtRIS."
         ),
         epilog=(
-            "This command does not download atmosphere data. Input tables may "
-            "overlap and may be supplied in any altitude order, but they must "
-            "describe the same location and time and combine into a complete, "
-            "uniformly spaced altitude grid. The result is written as "
-            "simulation.psf in the current directory, replacing that file if "
-            "it already exists."
+            "Downloaded tables from NRLMSISE-00, NRLMSIS 2.0, and NRLMSIS 2.1 "
+            "are supported. This command does not download atmosphere data. "
+            "Input tables may overlap and may be supplied in any altitude "
+            "order, but they must describe the same location and time and "
+            "combine into a complete, uniformly spaced altitude grid. The "
+            "result is written as simulation.psf in the current directory, "
+            "replacing that file if it already exists."
         ),
     )
     parser.add_argument(
