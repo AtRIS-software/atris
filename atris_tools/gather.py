@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
 """Gather completed AtRIS repetitions into canonical histogram files."""
 
 import argparse
+from contextlib import contextmanager
 import logging
 import math
 import os
@@ -26,29 +26,59 @@ CONVERGENCE_COLUMNS = (
 logger = logging.getLogger(__name__)
 
 
-def read_chunk_plan(run_directory):
+@contextmanager
+def atomic_text_output(path):
+    """Yield a temporary text file and replace path after a successful write."""
+    temporary_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=path.parent,
+            prefix=path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as output:
+            temporary_name = output.name
+            yield output
+        os.replace(temporary_name, path)
+    finally:
+        if temporary_name is not None and os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+
+
+def read_plan(path):
+    """Read simulation and seed triples from a chunk-plan file."""
     entries = []
-    plan_path = run_directory / "chunks.txt"
-    with plan_path.open() as plan:
+    with path.open() as plan:
         for line_number, line in enumerate(plan, start=1):
             fields = line.split()
             if len(fields) != 3:
-                raise ValueError("Invalid chunks.txt line %i" % line_number)
+                raise ValueError("Invalid %s line %i" % (path.name, line_number))
             simulation, seed1, seed2 = fields
             entries.append((simulation, seed1, seed2))
     return entries
 
 
-def completed_prefixes(run_directory, entries, simulation):
+def read_chunk_plan(run_directory):
+    return read_plan(run_directory / "chunks.txt")
+
+
+def chunk_name(entry):
+    """Return the output-prefix name for one chunk-plan entry."""
+    return "%s_%s_%s" % entry
+
+
+def complete_entries(run_directory, entries, simulation):
     chunks_directory = run_directory / "chunks"
-    prefixes = []
-    for entry_simulation, seed1, seed2 in entries:
-        if entry_simulation != simulation:
-            continue
-        prefix = chunks_directory / (simulation + "_" + seed1 + "_" + seed2)
-        if prefix.with_name(prefix.name + ".COMPLETE").is_file():
-            prefixes.append(prefix)
-    return prefixes
+    return [
+        entry
+        for entry in entries
+        if entry[0] == simulation
+        and (
+            chunks_directory
+            / (chunk_name(entry) + ".COMPLETE")
+        ).is_file()
+    ]
 
 
 def chunk_progress(run_directory, entries, simulations):
@@ -57,13 +87,12 @@ def chunk_progress(run_directory, entries, simulations):
     markers = []
     total = 0
     chunks_directory = run_directory / "chunks"
-    for simulation, seed1, seed2 in entries:
+    for entry in entries:
+        simulation = entry[0]
         if simulation not in simulations:
             continue
         total += 1
-        marker = chunks_directory / (
-            "%s_%s_%s.COMPLETE" % (simulation, seed1, seed2)
-        )
+        marker = chunks_directory / (chunk_name(entry) + ".COMPLETE")
         if marker.is_file():
             markers.append(marker)
 
@@ -161,25 +190,19 @@ def write_histogram(path, header, columns, data, total_plane_sum):
             if line.startswith(PLANE_SUM_PREFIX):
                 output_header[index] = PLANE_SUM_PREFIX + "%.17g" % total_plane_sum
 
-    temporary_name = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            dir=path.parent,
-            prefix=path.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as output:
-            temporary_name = output.name
-            for line in output_header:
-                output.write(line + "\n")
-            output.write(columns + "\n")
-            formats = ["%.0f"] + ["%.17g"] * (data.shape[1] - 1)
-            np.savetxt(output, data, delimiter=",", fmt=formats)
-        os.replace(temporary_name, path)
-    finally:
-        if temporary_name is not None and os.path.exists(temporary_name):
-            os.unlink(temporary_name)
+    with atomic_text_output(path) as output:
+        for line in output_header:
+            output.write(line + "\n")
+        output.write(columns + "\n")
+        formats = ["%.0f"] + ["%.17g"] * (data.shape[1] - 1)
+        np.savetxt(output, data, delimiter=",", fmt=formats)
+
+
+def write_gathered_chunks(path, entries):
+    """Write the gathered subset of chunks.txt atomically."""
+    with atomic_text_output(path) as output:
+        for entry in entries:
+            output.write("%s %s %s\n" % entry)
 
 
 def combine_histograms(source_paths, snapshot_counts=(), observe=None):
@@ -215,6 +238,65 @@ def gather_histogram(source_paths, destination):
 
     write_histogram(destination, header, columns, total, total_plane_sum)
     return total
+
+
+def reusable_chunk_count(
+    gathered_entries,
+    current_entries,
+    state_mtime,
+    source_paths,
+    destination,
+):
+    """Return the number of chunks already present in a valid aggregate."""
+    gathered_count = len(gathered_entries)
+    if (
+        not gathered_count
+        or current_entries[:gathered_count] != gathered_entries
+        or not destination.is_file()
+    ):
+        return None
+
+    output_mtime = destination.stat().st_mtime_ns
+    if output_mtime > state_mtime:
+        return None
+    if any(
+        path.stat().st_mtime_ns > output_mtime
+        for path in source_paths[:gathered_count]
+    ):
+        return None
+    return gathered_count
+
+
+def gather_incremental_histogram(
+    gathered_entries,
+    current_entries,
+    state_mtime,
+    source_paths,
+    destination,
+):
+    """Reuse a valid aggregate and add only newly completed chunks."""
+    gathered_count = reusable_chunk_count(
+        gathered_entries,
+        current_entries,
+        state_mtime,
+        source_paths,
+        destination,
+    )
+    if gathered_count is None:
+        logger.debug("Rebuilding histogram %s", destination.name)
+        gather_histogram(source_paths, destination)
+    elif gathered_count < len(source_paths):
+        logger.debug(
+            "Adding %i new chunks to %s",
+            len(source_paths) - gathered_count,
+            destination.name,
+        )
+        gather_histogram(
+            [destination] + source_paths[gathered_count:],
+            destination,
+        )
+    else:
+        logger.debug("Histogram %s is up to date", destination.name)
 
 
 def ionization_components(primary_energy, ionization, detector_count):
@@ -382,27 +464,14 @@ def combine_ionization_histograms(
 
 def write_convergence(path, rows):
     """Write an ionization convergence table atomically."""
-    temporary_name = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            dir=path.parent,
-            prefix=path.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as output:
-            temporary_name = output.name
-            output.write(CONVERGENCE_COLUMNS + "\n")
-            np.savetxt(
-                output,
-                rows,
-                delimiter=",",
-                fmt=("%i", "%i", "%i") + ("%.17g",) * 6,
-            )
-        os.replace(temporary_name, path)
-    finally:
-        if temporary_name is not None and os.path.exists(temporary_name):
-            os.unlink(temporary_name)
+    with atomic_text_output(path) as output:
+        output.write(CONVERGENCE_COLUMNS + "\n")
+        np.savetxt(
+            output,
+            rows,
+            delimiter=",",
+            fmt=("%i", "%i", "%i") + ("%.17g",) * 6,
+        )
 
 
 def log_ionization_change(simulation, row):
@@ -421,7 +490,12 @@ def log_ionization_change(simulation, row):
 
 
 def gather_simulation(run_directory, entries, simulation):
-    prefixes = completed_prefixes(run_directory, entries, simulation)
+    current_entries = complete_entries(run_directory, entries, simulation)
+    chunks_directory = run_directory / "chunks"
+    prefixes = [
+        chunks_directory / chunk_name(entry)
+        for entry in current_entries
+    ]
     if not prefixes:
         logger.info("No completed %s runs to gather", simulation)
         return 0
@@ -450,6 +524,14 @@ def gather_simulation(run_directory, entries, simulation):
         len(paths_by_suffix),
         simulation,
     )
+
+    state_path = run_directory / (simulation + ".gathered-chunks.txt")
+    if state_path.is_file():
+        gathered_entries = read_plan(state_path)
+        state_mtime = state_path.stat().st_mtime_ns
+    else:
+        gathered_entries = []
+        state_mtime = 0
 
     primary_events = 0
     primary_snapshots = None
@@ -492,8 +574,12 @@ def gather_simulation(run_directory, entries, simulation):
 
     for suffix, source_paths in paths_by_suffix.items():
         logger.debug("Combining %s%s", simulation, suffix)
-        gather_histogram(
-            source_paths, run_directory / (simulation + suffix)
+        gather_incremental_histogram(
+            gathered_entries,
+            current_entries,
+            state_mtime,
+            source_paths,
+            run_directory / (simulation + suffix),
         )
 
     logger.info(
@@ -507,6 +593,7 @@ def gather_simulation(run_directory, entries, simulation):
             run_directory / (simulation + ".convergence.csv"), convergence
         )
         log_ionization_change(simulation, convergence[-1])
+    write_gathered_chunks(state_path, current_entries)
     return len(prefixes)
 
 
@@ -518,10 +605,10 @@ def main():
         ),
         epilog=(
             "Only chunks with .COMPLETE markers are included; partial files "
-            "from failed or running chunks are ignored. Each invocation "
-            "rebuilds and replaces the selected aggregate files from all "
-            "currently completed chunks rather than adding to an old "
-            "aggregate. Do not run gather concurrently with chunk writers. "
+            "from failed or running chunks are ignored. Primary and ionization "
+            "histograms are rebuilt to update the complete convergence history. "
+            "Other histograms reuse a validated aggregate and add only newly "
+            "completed chunks; changed inputs trigger a full rebuild. "
             "This command does not run missing chunks, scale physical response "
             "files, or make plots. To select one species in the current "
             "directory, use an explicit dot, for example: atris-gather . "

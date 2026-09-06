@@ -237,19 +237,9 @@ def test_incomplete_entry_numbers_uses_completion_markers(tmp_path):
     assert incomplete_entry_numbers(tmp_path) == [2]
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("response", "response"),
-        ("interface", "interface"),
-        ("legacy-ascii", "legacy-ascii"),
-        (-1, "response"),
-        (0, "interface"),
-        (1, "legacy-ascii"),
-    ],
-)
-def test_output_modes_have_named_numeric_compatibility_aliases(value, expected):
-    assert normalize_output_mode(value) == expected
+@pytest.mark.parametrize("value", ("response", "interface", "legacy-ascii"))
+def test_output_modes_use_named_values(value):
+    assert normalize_output_mode(value) == value
 
 
 def test_output_mode_rejects_unknown_names():

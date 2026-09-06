@@ -9,10 +9,10 @@ from atris_tools.gather import (
     change_reference_count,
     chunk_progress,
     combine_ionization_histograms,
-    completed_prefixes,
     fractional_change,
     format_duration,
     gather_histogram,
+    gather_incremental_histogram,
     gather_simulation,
     ionization_response,
     log_ionization_change,
@@ -46,23 +46,6 @@ def test_read_chunk_plan_reports_malformed_line_number(tmp_path):
 
     with pytest.raises(ValueError, match=r"line 2$"):
         read_chunk_plan(tmp_path)
-
-
-def test_completed_prefixes_require_marker_and_matching_species(tmp_path):
-    chunks = tmp_path / "chunks"
-    chunks.mkdir()
-    entries = [
-        ("protons", "111111", "222222"),
-        ("protons", "333333", "444444"),
-        ("alphas", "555555", "666666"),
-    ]
-    (chunks / "protons_111111_222222.COMPLETE").touch()
-    (chunks / "protons_333333_444444_partial.csv").write_text("unfinished\n")
-    (chunks / "alphas_555555_666666.COMPLETE").touch()
-
-    assert completed_prefixes(tmp_path, entries, "protons") == [
-        chunks / "protons_111111_222222"
-    ]
 
 
 def test_chunk_progress_estimates_from_completion_marker_times(tmp_path):
@@ -248,6 +231,77 @@ def test_gather_histogram_sums_all_columns_and_plane_values(tmp_path):
     first_result = destination.read_bytes()
     gather_histogram([first, second], destination)
     assert destination.read_bytes() == first_result
+
+
+def test_incremental_gather_reads_only_new_chunks(tmp_path, monkeypatch):
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    destination = tmp_path / "total.csv"
+    state = tmp_path / "protons.gathered-chunks.txt"
+    write_histogram(first, [[1, 2, 3, 4, 5]])
+    write_histogram(second, [[10, 20, 30, 40, 50]])
+    gather_histogram([first], destination)
+    state.write_text("protons 111111 222222\n")
+
+    reads = []
+    original_read_histogram = read_histogram
+
+    def record_read(path):
+        reads.append(Path(path))
+        return original_read_histogram(path)
+
+    monkeypatch.setattr("atris_tools.gather.read_histogram", record_read)
+    gather_incremental_histogram(
+        [("protons", "111111", "222222")],
+        [
+            ("protons", "111111", "222222"),
+            ("protons", "333333", "444444"),
+        ],
+        state.stat().st_mtime_ns,
+        [first, second],
+        destination,
+    )
+
+    assert reads == [destination, second]
+    _, _, total = original_read_histogram(destination)
+    np.testing.assert_array_equal(total, [[11, 22, 33, 44, 55]])
+
+
+def test_incremental_gather_rebuilds_after_prior_chunk_changes(
+    tmp_path, monkeypatch
+):
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    destination = tmp_path / "total.csv"
+    state = tmp_path / "protons.gathered-chunks.txt"
+    write_histogram(first, [[1, 2, 3, 4, 5]])
+    write_histogram(second, [[10, 20, 30, 40, 50]])
+    gather_histogram([first], destination)
+    state.write_text("protons 111111 222222\n")
+    write_histogram(first, [[2, 4, 6, 8, 10]])
+
+    reads = []
+    original_read_histogram = read_histogram
+
+    def record_read(path):
+        reads.append(Path(path))
+        return original_read_histogram(path)
+
+    monkeypatch.setattr("atris_tools.gather.read_histogram", record_read)
+    gather_incremental_histogram(
+        [("protons", "111111", "222222")],
+        [
+            ("protons", "111111", "222222"),
+            ("protons", "333333", "444444"),
+        ],
+        state.stat().st_mtime_ns,
+        [first, second],
+        destination,
+    )
+
+    assert reads == [first, second]
+    _, _, total = original_read_histogram(destination)
+    np.testing.assert_array_equal(total, [[12, 24, 36, 48, 60]])
 
 
 @pytest.mark.parametrize("difference", ["header", "shape", "columns"])

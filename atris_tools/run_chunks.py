@@ -9,7 +9,7 @@ import textwrap
 import time
 
 from .cli import add_logging_arguments, configure_logging
-from .gather import read_chunk_plan
+from .gather import chunk_name, read_chunk_plan
 from .phantoms import read_phantoms
 
 
@@ -21,13 +21,6 @@ OUTPUT_MODE_VALUES = {
     "interface": "0",
     "legacy-ascii": "1",
 }
-OUTPUT_MODE_ALIASES = {
-    "-1": "response",
-    "0": "interface",
-    "1": "legacy-ascii",
-}
-
-
 class HelpFormatter(argparse.HelpFormatter):
     """Use argparse wrapping without splitting words or option names."""
 
@@ -63,20 +56,13 @@ class HelpFormatter(argparse.HelpFormatter):
 
 
 def normalize_output_mode(value):
-    """Return a named AtRIS output mode, accepting old numeric aliases."""
+    """Validate and return a named AtRIS output mode."""
     value = str(value)
-    value = OUTPUT_MODE_ALIASES.get(value, value)
     if value not in OUTPUT_MODES:
         raise ValueError(
             "output mode must be response, interface, or legacy-ascii"
         )
     return value
-
-
-def chunk_name(entry):
-    """Return the output-prefix name for one chunk-plan entry."""
-    simulation, seed1, seed2 = entry
-    return "%s_%s_%s" % (simulation, seed1, seed2)
 
 
 def select_entries(entries, entry=None, worker_index=0, worker_count=1):
