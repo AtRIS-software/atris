@@ -9,34 +9,24 @@ from pathlib import Path
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
 import numpy as np
 
 from .cli import add_logging_arguments, configure_logging
-from .input_plotting import plot_inputs, read_macro
+from .input_plotting import (
+    log_norm,
+    plot_inputs,
+    read_layers,
+    read_macro,
+    setup_shell_axis,
+    shell_coordinates,
+)
 from .interface_plotting import plot_interface_output
 from .phantoms import read_phantoms
 from .postprocess import get_histogram_axes, warn_if_inputs_do_not_match_output
+from .step_plotting import is_step_trace, plot_mode_one_output
 
 
 logger = logging.getLogger(__name__)
-
-
-def _log_norm(data):
-    positive = data[np.isfinite(data) & (data > 0)]
-    if not positive.size:
-        return None
-    return LogNorm(vmin=np.min(positive), vmax=np.max(positive))
-
-
-def _centers_to_edges(centers):
-    if centers.size == 1:
-        return np.array([centers[0] - 0.5, centers[0] + 0.5])
-    edges = np.empty(centers.size + 1)
-    edges[1:-1] = (centers[:-1] + centers[1:]) / 2.0
-    edges[0] = centers[0] - (centers[1] - centers[0]) / 2.0
-    edges[-1] = centers[-1] + (centers[-1] - centers[-2]) / 2.0
-    return edges
 
 
 def _read_raw_histogram(filename, skiprows):
@@ -45,7 +35,7 @@ def _read_raw_histogram(filename, skiprows):
 
 def _read_response(filename):
     data = np.atleast_2d(np.loadtxt(filename))
-    return data[:, 1], data[:, 2:]
+    return data[:, 0], data[:, 2:]
 
 
 def _convergence_ymax(series):
@@ -198,28 +188,27 @@ def _planned_chunks(simname):
 
 
 def _add_response_plot(
-    figure,
     axis,
     histogram,
     energy_edges,
-    altitude_edges,
-    maximum_altitude,
+    detector_ids,
+    layers,
     title,
 ):
+    _, positions, plot_edges = shell_coordinates(layers, detector_ids)
     mesh = axis.pcolormesh(
         energy_edges,
-        altitude_edges,
+        plot_edges,
         histogram,
-        norm=_log_norm(histogram),
+        norm=log_norm(histogram),
         shading="flat",
         rasterized=True,
     )
+    setup_shell_axis(axis, positions)
     axis.set_title(title)
     axis.set_xlabel("Primary kinetic energy [MeV]")
-    axis.set_ylabel("Altitude [km]")
     axis.set_xscale("log")
-    axis.set_ylim(0, maximum_altitude)
-    figure.colorbar(mesh, ax=axis, label="Response per primary")
+    axis.figure.colorbar(mesh, ax=axis, label="Response per primary")
 
 
 def _angular_values(histogram, axes):
@@ -229,20 +218,20 @@ def _angular_values(histogram, axes):
     return values[1:-1, 1:-1]
 
 
-def _add_angular_plot(figure, axis, histogram, axes, title):
+def _add_angular_plot(axis, histogram, axes, title):
     values = _angular_values(histogram, axes)
     mesh = axis.pcolormesh(
         axes[0],
         axes[1],
         values,
-        norm=_log_norm(values),
+        norm=log_norm(values),
         shading="flat",
         rasterized=True,
     )
     axis.set_title(title)
     axis.set_xlabel("Azimuth phi [rad]")
     axis.set_ylabel("cos(theta)")
-    figure.colorbar(mesh, ax=axis, label="Primaries")
+    axis.figure.colorbar(mesh, ax=axis, label="Primaries")
 
 
 def _save_generic_plot(
@@ -254,8 +243,8 @@ def _save_generic_plot(
     energy_edges,
     direction_axes,
     position_axes,
-    altitude_edges,
-    maximum_altitude,
+    detector_ids,
+    layers,
     species,
     filename,
 ):
@@ -285,26 +274,23 @@ def _save_generic_plot(
     axes[0, 0].legend()
 
     _add_angular_plot(
-        figure,
         axes[0, 1],
         direction,
         direction_axes,
         species + " source direction",
     )
     _add_angular_plot(
-        figure,
         axes[1, 0],
         position,
         position_axes,
         species + " source position",
     )
     _add_response_plot(
-        figure,
         axes[1, 1],
         ionization,
         energy_edges,
-        altitude_edges,
-        maximum_altitude,
+        detector_ids,
+        layers,
         species + " ionization",
     )
 
@@ -317,8 +303,8 @@ def _save_phantom_plot(
     histograms,
     titles,
     energy_edges,
-    altitude_edges,
-    maximum_altitude,
+    detector_ids,
+    layers,
     filename,
 ):
     figure, axes = plt.subplots(
@@ -329,12 +315,11 @@ def _save_phantom_plot(
     )
     for index, (histogram, title) in enumerate(zip(histograms, titles)):
         _add_response_plot(
-            figure,
             axes[0, index],
             histogram,
             energy_edges,
-            altitude_edges,
-            maximum_altitude,
+            detector_ids,
+            layers,
             title,
         )
         if index:
@@ -489,6 +474,9 @@ def plot_run(simname):
         except Exception as error:
             errors.append("%s energy input: %s" % (simname, error))
 
+    geometry_path = Path(simname + ".gdml")
+    layers = read_layers(geometry_path)
+
     if Path(simname + ".ioni").is_file():
         try:
             direction_axes = get_histogram_axes(simname + "_h2_h2.dir.csv")
@@ -496,7 +484,7 @@ def plot_run(simname):
             primary_energy = _read_raw_histogram(simname + "_h1_h1.1.csv", 7)
             direction = _read_raw_histogram(simname + "_h2_h2.dir.csv", 10)
             position = _read_raw_histogram(simname + "_h2_h2.pos.csv", 10)
-            altitudes, ionization = _read_response(simname + ".ioni")
+            detector_ids, ionization = _read_response(simname + ".ioni")
             filename = simname + ".png"
             _save_generic_plot(
                 primary_energy,
@@ -507,8 +495,8 @@ def plot_run(simname):
                 energy_edges,
                 direction_axes,
                 position_axes,
-                _centers_to_edges(altitudes),
-                altitudes[-1],
+                detector_ids,
+                layers,
                 species,
                 filename,
             )
@@ -530,21 +518,21 @@ def plot_run(simname):
     for phantom_id in _get_processed_phantom_ids(simname):
         responses = []
         response_titles = []
-        altitudes = None
+        detector_ids = None
         for quantity, title in zip(quantities, titles):
             response_file = "%s.%s%i" % (simname, quantity, phantom_id)
             if not Path(response_file).is_file():
                 errors.append("%s results: missing %s" % (simname, response_file))
                 continue
             try:
-                response_altitudes, response = _read_response(response_file)
+                response_detector_ids, response = _read_response(response_file)
             except Exception as error:
                 errors.append("%s: %s" % (response_file, error))
                 continue
-            if altitudes is None:
-                altitudes = response_altitudes
-            elif not np.array_equal(response_altitudes, altitudes):
-                errors.append("%s: altitude values do not match" % response_file)
+            if detector_ids is None:
+                detector_ids = response_detector_ids
+            elif not np.array_equal(response_detector_ids, detector_ids):
+                errors.append("%s: detector IDs do not match" % response_file)
                 continue
             responses.append(response)
             response_titles.append(title)
@@ -561,8 +549,8 @@ def plot_run(simname):
                     for title in response_titles
                 ],
                 energy_edges,
-                _centers_to_edges(altitudes),
-                altitudes[-1],
+                detector_ids,
+                layers,
                 filename,
             )
             filenames.append(filename)
@@ -579,11 +567,12 @@ def main():
         ),
         epilog=(
             "Recognized products include prepared macros and geometry, binary "
-            "or ASCII mode-0 interface records, convergence tables, and "
-            "post-processed proton and alpha responses. Missing product groups "
-            "are skipped so partial runs can still be inspected. Existing PNG "
-            "files with the generated names are replaced. This command does "
-            "not run AtRIS, gather chunks, or post-process raw histograms."
+            "or ASCII mode-0 interface records, mode-1 step traces, convergence "
+            "tables, and post-processed proton and alpha responses. Missing "
+            "product groups are skipped so partial runs can still be inspected. "
+            "Existing PNG files with the generated names are replaced. This "
+            "command does not run AtRIS, gather chunks, or post-process raw "
+            "histograms."
         ),
     )
     parser.add_argument(
@@ -615,15 +604,22 @@ def main():
         except Exception as error:
             errors.append("inputs: " + str(error))
         for simulation in ("protons", "alphas"):
-            if (
-                Path(simulation + ".binary").is_file()
-                or Path(simulation + ".asci").is_file()
-            ):
+            binary_path = Path(simulation + ".binary")
+            ascii_path = Path(simulation + ".asci")
+            step_trace = is_step_trace(ascii_path)
+            if binary_path.is_file() or (ascii_path.is_file() and not step_trace):
                 try:
                     plotted.append(plot_interface_output(simulation))
                 except Exception as error:
                     errors.append(
                         "%s mode-0 output: %s" % (simulation, error)
+                    )
+            if step_trace:
+                try:
+                    plotted.extend(plot_mode_one_output(simulation))
+                except Exception as error:
+                    errors.append(
+                        "%s mode-1 output: %s" % (simulation, error)
                     )
             if Path(simulation + ".convergence.csv").is_file():
                 try:

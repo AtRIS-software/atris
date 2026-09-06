@@ -3,44 +3,6 @@ import numpy as np
 from atris_tools import input_plotting
 
 
-GDML = """\
-<gdml>
-  <materials>
-    <material name="air0" state="gas">
-      <D value="1.2e-3" unit="g/cm3"/>
-      <T value="290" unit="K"/>
-      <P value="1.0e5" unit="Pa"/>
-      <fraction n="0.75" ref="G4_N"/>
-      <fraction n="0.25" ref="G4_O"/>
-    </material>
-    <material name="air1" state="gas">
-      <D value="1.0e-4" unit="g/cm3"/>
-      <T value="250" unit="K"/>
-      <P value="1.0e4" unit="Pa"/>
-      <fraction n="0.70" ref="G4_N"/>
-      <fraction n="0.30" ref="G4_O"/>
-    </material>
-  </materials>
-  <solids>
-    <sphere name="shell0" rmin="6371" rmax="6372" lunit="km"/>
-    <sphere name="shell1" rmin="6372" rmax="6374" lunit="km"/>
-  </solids>
-  <structure>
-    <volume name="layer0">
-      <materialref ref="air0"/>
-      <solidref ref="shell0"/>
-      <auxiliary auxtype="SensDet" auxvalue="2"/>
-    </volume>
-    <volume name="layer1">
-      <materialref ref="air1"/>
-      <solidref ref="shell1"/>
-      <auxiliary auxtype="SensDet" auxvalue="3"/>
-    </volume>
-  </structure>
-</gdml>
-"""
-
-
 MACRO = """\
 /gps/particle proton
 /gps/ene/type User
@@ -61,8 +23,8 @@ MACRO = """\
 """
 
 
-def prepare_inputs(run_directory):
-    (run_directory / "protons.gdml").write_text(GDML)
+def prepare_inputs(run_directory, gdml_text):
+    (run_directory / "protons.gdml").write_text(gdml_text)
     (run_directory / "protons.mac").write_text(MACRO)
     np.savetxt(run_directory / "protons.bins", [1, 10, 100])
     (run_directory / "phantoms.txt").write_text(
@@ -82,30 +44,25 @@ def prepare_inputs(run_directory):
             np.savetxt(phantom_file, response)
 
 
-def test_read_macro_and_atmosphere(tmp_path):
+def test_read_macro_and_atmosphere(tmp_path, gdml_text):
     (tmp_path / "protons.mac").write_text(MACRO)
-    (tmp_path / "protons.gdml").write_text(GDML)
+    (tmp_path / "protons.gdml").write_text(gdml_text)
 
     settings, energy_points = input_plotting.read_macro(tmp_path / "protons.mac")
-    layers = input_plotting.read_atmosphere(tmp_path / "protons.gdml")
+    all_layers = input_plotting.read_layers(tmp_path / "protons.gdml")
 
     assert settings["/gps/particle"] == "proton"
     np.testing.assert_allclose(energy_points, [[1, 0], [10, 1], [100, 1]])
-    assert [layer["altitude"] for layer in layers] == [0.5, 2.0]
-    assert layers[0]["fractions"] == {"G4_N": 0.75, "G4_O": 0.25}
-
-
-def test_read_interface_altitudes_maps_detector_ids_to_layer_boundaries(
-    tmp_path,
-):
-    geometry = tmp_path / "protons.gdml"
-    geometry.write_text(GDML)
-
-    assert input_plotting.read_interface_altitudes(geometry) == {
-        1: 0.0,
-        2: 1.0,
-        3: 3.0,
-    }
+    assert all_layers[1]["fractions"] == {"G4_N": 0.75, "G4_O": 0.25}
+    assert [layer["detector_id"] for layer in all_layers] == [1, 2, 3]
+    assert [layer["state"] for layer in all_layers] == ["solid", "gas", "gas"]
+    assert input_plotting.surface_radius(all_layers) == 6371.0
+    detector_ids, positions, edges = input_plotting.shell_coordinates(
+        all_layers, [2, 3]
+    )
+    np.testing.assert_array_equal(detector_ids, [2, 3])
+    np.testing.assert_allclose(positions, [0.5, 2.0])
+    np.testing.assert_allclose(edges, [0.0, 1.0, 3.0])
 
 
 def test_particle_name_translates_standard_particles_and_nuclei():
@@ -132,8 +89,10 @@ def test_particle_groups_include_every_particle_once():
     assert groups == ([0, 1, 2, 3, 4, 5], [6, 7])
 
 
-def test_plot_inputs_writes_species_and_phantom_pngs(tmp_path, monkeypatch):
-    prepare_inputs(tmp_path)
+def test_plot_inputs_writes_species_and_phantom_pngs(
+    tmp_path, monkeypatch, gdml_text
+):
+    prepare_inputs(tmp_path, gdml_text)
     monkeypatch.chdir(tmp_path)
 
     filenames, errors = input_plotting.plot_inputs()
@@ -148,9 +107,9 @@ def test_plot_inputs_writes_species_and_phantom_pngs(tmp_path, monkeypatch):
 
 
 def test_plot_inputs_reports_missing_phantom_pair_but_keeps_species_plot(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, gdml_text
 ):
-    prepare_inputs(tmp_path)
+    prepare_inputs(tmp_path, gdml_text)
     (tmp_path / "counting_phantom0.txt").unlink()
     monkeypatch.chdir(tmp_path)
 
@@ -163,9 +122,9 @@ def test_plot_inputs_reports_missing_phantom_pair_but_keeps_species_plot(
 
 
 def test_plot_inputs_uses_numbered_name_without_phantom_metadata(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, gdml_text
 ):
-    prepare_inputs(tmp_path)
+    prepare_inputs(tmp_path, gdml_text)
     (tmp_path / "phantoms.txt").unlink()
     monkeypatch.chdir(tmp_path)
 

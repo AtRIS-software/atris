@@ -1,13 +1,11 @@
 """Create quick-look plots of the files supplied to AtRIS."""
 
-import os
 import re
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
-os.environ.setdefault("MPLBACKEND", "Agg")
-
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import numpy as np
 
 from .phantoms import read_phantoms
@@ -98,6 +96,27 @@ ELEMENT_SYMBOLS = (
 )
 
 
+def log_norm(data):
+    positive = data[np.isfinite(data) & (data > 0)]
+    if not positive.size:
+        return None
+    return LogNorm(vmin=np.min(positive), vmax=np.max(positive))
+
+
+def positive_log_edges(values, bins=80):
+    values = np.asarray(values)
+    positive = values[np.isfinite(values) & (values > 0)]
+    if not positive.size:
+        raise ValueError("No positive finite energy values are available")
+    lower = np.min(positive)
+    upper = np.max(positive)
+    if lower == upper:
+        factor = np.sqrt(10.0)
+        lower /= factor
+        upper *= factor
+    return np.geomspace(lower, upper, bins + 1)
+
+
 def particle_name(pdg_code):
     if pdg_code in PARTICLE_NAMES:
         return PARTICLE_NAMES[pdg_code]
@@ -161,22 +180,14 @@ def read_macro(filename):
     return settings, np.asarray(energy_points)
 
 
-def read_atmosphere(filename):
+def read_layers(filename):
+    """Read every sensitive spherical layer from a GDML geometry."""
     root = ElementTree.parse(filename).getroot()
 
-    materials = {}
-    for material in root.findall("./materials/material"):
-        properties = {
-            "state": material.get("state"),
-            "fractions": {
-                fraction.get("ref"): float(fraction.get("n"))
-                for fraction in material.findall("fraction")
-            },
-        }
-        for tag, name in (("D", "density"), ("T", "temperature"), ("P", "pressure")):
-            value = material.find(tag)
-            properties[name] = float(value.get("value")) if value is not None else np.nan
-        materials[material.get("name")] = properties
+    materials = {
+        material.get("name"): material
+        for material in root.findall("./materials/material")
+    }
 
     solids = {}
     for sphere in root.findall("./solids/sphere"):
@@ -194,47 +205,94 @@ def read_atmosphere(filename):
         material_reference = volume.find("materialref")
         solid_reference = volume.find("solidref")
         sensitive_detector = volume.find("auxiliary[@auxtype='SensDet']")
-        if material_reference is None or solid_reference is None:
+        if (
+            material_reference is None
+            or solid_reference is None
+            or sensitive_detector is None
+        ):
             continue
-        material = materials.get(material_reference.get("ref"))
-        radii = solids.get(solid_reference.get("ref"))
-        if material is None or radii is None or material["state"] != "gas":
-            continue
+        material = materials[material_reference.get("ref")]
+        radii = solids[solid_reference.get("ref")]
+        properties = {
+            "state": material.get("state"),
+            "fractions": {
+                fraction.get("ref"): float(fraction.get("n"))
+                for fraction in material.findall("fraction")
+            },
+            "density": float(material.find("D").get("value")),
+            "temperature": float(material.find("T").get("value")),
+            "pressure": float(material.find("P").get("value")),
+        }
         layers.append(
             {
                 "rmin": radii[0],
                 "rmax": radii[1],
-                "detector_id": (
-                    int(sensitive_detector.get("auxvalue"))
-                    if sensitive_detector is not None
-                    else None
-                ),
-                **material,
+                "detector_id": int(sensitive_detector.get("auxvalue")),
+                **properties,
             }
         )
 
     layers.sort(key=lambda layer: layer["rmin"])
     if not layers:
-        raise ValueError("No gaseous atmospheric layers found in " + str(filename))
-    surface_radius = layers[0]["rmin"]
-    for layer in layers:
-        layer["altitude"] = (
-            (layer["rmin"] + layer["rmax"]) / 2.0 - surface_radius
-        )
+        raise ValueError("No sensitive spherical layers found in " + str(filename))
     return layers
 
 
-def read_interface_altitudes(filename):
-    layers = read_atmosphere(filename)
-    if any(layer["detector_id"] is None for layer in layers):
-        raise ValueError("Atmospheric layers have no detector IDs in " + str(filename))
+def surface_radius(layers):
+    """Return the outer radius of the contiguous solid planetary body."""
+    all_layers = sorted(layers, key=lambda layer: layer["rmin"])
+    radius = all_layers[0]["rmax"]
+    for layer in all_layers[1:]:
+        if layer["state"] != "solid" or not np.isclose(
+            layer["rmin"], radius, rtol=0.0, atol=1.0e-9
+        ):
+            break
+        radius = layer["rmax"]
+    return radius
 
-    surface_radius = layers[0]["rmin"]
-    first_detector = layers[0]["detector_id"]
-    altitudes = {first_detector - 1: 0.0}
-    for layer in layers:
-        altitudes[layer["detector_id"]] = layer["rmax"] - surface_radius
-    return altitudes
+
+def shell_coordinates(layers, detector_ids=None, location="center"):
+    """Calculate signed physical coordinates for detector shells."""
+    radius = surface_radius(layers)
+
+    if detector_ids is not None:
+        by_id = {layer["detector_id"]: layer for layer in layers}
+        layers = [by_id[int(detector_id)] for detector_id in detector_ids]
+
+    detector_ids = np.array([layer["detector_id"] for layer in layers])
+    distance_min = np.array([layer["rmin"] - radius for layer in layers])
+    distance_max = np.array([layer["rmax"] - radius for layer in layers])
+    if location == "center":
+        positions = (distance_min + distance_max) / 2.0
+        edges = np.array([distance_min[0]] + list(distance_max))
+    elif location == "outer":
+        positions = distance_max
+        if positions.size == 1:
+            width = max(abs(positions[0]) * 0.05, 1.0)
+            edges = np.array([positions[0] - width, positions[0] + width])
+        else:
+            midpoints = (positions[:-1] + positions[1:]) / 2.0
+            edges = np.concatenate(
+                (
+                    [positions[0] - (midpoints[0] - positions[0])],
+                    midpoints,
+                    [positions[-1] + (positions[-1] - midpoints[-1])],
+                )
+            )
+    else:
+        raise ValueError("Unknown shell location: " + location)
+    return detector_ids, positions, edges
+
+
+def setup_shell_axis(axis, positions, axis_name="y"):
+    """Label and scale a shell axis after its data have been drawn."""
+    getattr(axis, "set_" + axis_name + "label")("Distance from surface [km]")
+    values = np.abs(positions)
+    nonzero = values[np.isfinite(values) & (values > 0)]
+    if nonzero.size:
+        getattr(axis, "set_" + axis_name + "scale")(
+            "symlog", linthresh=np.min(nonzero)
+        )
 
 
 def _setting(settings, command, default="not set"):
@@ -272,12 +330,12 @@ def _source_summary(settings):
     )
 
 
-def _plot_profile(axis, values, altitudes, title, xlabel, logarithmic=False):
-    marker = "o" if len(altitudes) <= PROFILE_MARKER_LIMIT else None
-    axis.plot(values, altitudes, marker=marker)
+def _plot_profile(axis, values, positions, title, xlabel, logarithmic=False):
+    marker = "o" if len(positions) <= PROFILE_MARKER_LIMIT else None
+    axis.plot(values, positions, marker=marker)
+    setup_shell_axis(axis, positions)
     axis.set_title(title)
     axis.set_xlabel(xlabel)
-    axis.set_ylabel("Altitude [km]")
     if logarithmic and np.any(np.asarray(values) > 0):
         axis.set_xscale("log")
     axis.grid(alpha=0.25)
@@ -286,8 +344,8 @@ def _plot_profile(axis, values, altitudes, title, xlabel, logarithmic=False):
 def plot_species_inputs(simname):
     settings, energy_points = read_macro(simname + ".mac")
     energy_bins = np.atleast_1d(np.loadtxt(simname + ".bins"))
-    layers = read_atmosphere(simname + ".gdml")
-    altitudes = np.array([layer["altitude"] for layer in layers])
+    layers = read_layers(simname + ".gdml")
+    _, positions, _ = shell_coordinates(layers)
 
     figure, axes = plt.subplots(ncols=3, nrows=2, figsize=(18, 10))
     species = simname.capitalize()
@@ -317,24 +375,24 @@ def plot_species_inputs(simname):
     _plot_profile(
         axes[0, 1],
         [layer["density"] for layer in layers],
-        altitudes,
-        species + " atmospheric density",
+        positions,
+        species + " shell density",
         "Density [g/cm3]",
         logarithmic=True,
     )
     _plot_profile(
         axes[0, 2],
         [layer["pressure"] for layer in layers],
-        altitudes,
-        species + " atmospheric pressure",
+        positions,
+        species + " shell pressure",
         "Pressure [Pa]",
         logarithmic=True,
     )
     _plot_profile(
         axes[1, 0],
         [layer["temperature"] for layer in layers],
-        altitudes,
-        species + " atmospheric temperature",
+        positions,
+        species + " shell temperature",
         "Temperature [K]",
     )
 
@@ -350,13 +408,15 @@ def plot_species_inputs(simname):
             [layer["fractions"].get(element, 0.0) for layer in layers]
         )
         fractions[fractions < MASS_FRACTION_PLOT_MINIMUM] = np.nan
-        marker = "o" if len(altitudes) <= PROFILE_MARKER_LIMIT else None
-        axes[1, 1].plot(fractions, altitudes, marker=marker, label=element)
-    axes[1, 1].set_title(species + " atmospheric composition")
+        marker = "o" if len(layers) <= PROFILE_MARKER_LIMIT else None
+        axes[1, 1].plot(
+            fractions, positions, marker=marker, label=element
+        )
+    setup_shell_axis(axes[1, 1], positions)
+    axes[1, 1].set_title(species + " shell composition")
     axes[1, 1].set_xlabel(
         "Mass fraction (values below %.0e omitted)" % MASS_FRACTION_PLOT_MINIMUM
     )
-    axes[1, 1].set_ylabel("Altitude [km]")
     axes[1, 1].set_xscale("log")
     axes[1, 1].legend()
     axes[1, 1].grid(alpha=0.25)

@@ -27,7 +27,8 @@ def write_histogram(path, axes, row_count, column_count):
         )
 
 
-def prepare_processed_run(run_directory, phantom_count):
+def prepare_processed_run(run_directory, phantom_count, gdml_text):
+    (run_directory / "protons.gdml").write_text(gdml_text)
     (run_directory / "protons.mac").write_text(
         "/gps/hist/point 1 0\n"
         "/gps/hist/point 2 1\n"
@@ -49,9 +50,9 @@ def prepare_processed_run(run_directory, phantom_count):
 
     response = np.array(
         [
-            [0, 0.0, 1.0, 2.0],
-            [1, 1.0, 3.0, 4.0],
-            [2, 2.0, 5.0, 6.0],
+            [1, 0.0, 1.0, 2.0],
+            [2, 1.0, 3.0, 4.0],
+            [3, 2.0, 5.0, 6.0],
         ]
     )
     np.savetxt(run_directory / "protons.ioni", response)
@@ -72,8 +73,10 @@ def prepare_processed_run(run_directory, phantom_count):
         (run_directory / "phantoms.txt").write_text("".join(phantom_rows))
 
 
-def test_plot_run_writes_generic_and_per_phantom_pngs(tmp_path, monkeypatch):
-    prepare_processed_run(tmp_path, 2)
+def test_plot_run_writes_generic_and_per_phantom_pngs(
+    tmp_path, monkeypatch, gdml_text
+):
+    prepare_processed_run(tmp_path, 2, gdml_text)
     monkeypatch.chdir(tmp_path)
 
     plotting.plot_run("protons")
@@ -88,9 +91,9 @@ def test_plot_run_writes_generic_and_per_phantom_pngs(tmp_path, monkeypatch):
 
 
 def test_plot_run_without_phantoms_writes_only_generic_plot(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, gdml_text
 ):
-    prepare_processed_run(tmp_path, 0)
+    prepare_processed_run(tmp_path, 0, gdml_text)
     monkeypatch.chdir(tmp_path)
 
     plotting.plot_run("protons")
@@ -154,9 +157,9 @@ def test_recent_power_law_fit_recovers_recent_trend():
 
 
 def test_plot_run_uses_numbered_name_without_phantom_metadata(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, gdml_text
 ):
-    prepare_processed_run(tmp_path, 1)
+    prepare_processed_run(tmp_path, 1, gdml_text)
     (tmp_path / "phantoms.txt").unlink()
     monkeypatch.chdir(tmp_path)
 
@@ -167,9 +170,9 @@ def test_plot_run_uses_numbered_name_without_phantom_metadata(
 
 
 def test_plot_run_reports_missing_quantity_and_plots_the_rest(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, gdml_text
 ):
-    prepare_processed_run(tmp_path, 1)
+    prepare_processed_run(tmp_path, 1, gdml_text)
     (tmp_path / "protons.equi0").unlink()
     monkeypatch.chdir(tmp_path)
 
@@ -180,9 +183,9 @@ def test_plot_run_reports_missing_quantity_and_plots_the_rest(
 
 
 def test_plot_run_warns_when_current_bins_do_not_match_output(
-    tmp_path, monkeypatch, caplog
+    tmp_path, monkeypatch, caplog, gdml_text
 ):
-    prepare_processed_run(tmp_path, 0)
+    prepare_processed_run(tmp_path, 0, gdml_text)
     np.savetxt(tmp_path / "protons.bins", [1, 2, 4])
     monkeypatch.chdir(tmp_path)
 

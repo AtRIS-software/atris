@@ -232,6 +232,13 @@ power laws fitted to the most recent half of the completed chunks and
 extrapolated through the planned run. Both axes are logarithmic so their slopes
 can be compared directly.
 
+When a mode-1 step trace is present, `atris-plot` writes two images. An image
+such as `protons.steps.png` summarizes particle species, step-defining
+processes, shower development by atmospheric layer, and the kinetic-energy
+distribution through the atmosphere. `protons.shower.png` shows the event
+containing the most recorded steps in altitude and transverse radius, using
+linear axes. The altitude range is limited to the interaction region.
+
 The previews below come from the reduced test configuration in this guide and
 are not scientific production results.
 

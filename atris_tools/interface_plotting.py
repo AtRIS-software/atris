@@ -1,50 +1,23 @@
 """Plot particle-interface records written by AtRIS output mode 0."""
 
-import os
+import logging
 from pathlib import Path
 
-os.environ.setdefault("MPLBACKEND", "Agg")
-
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
 import numpy as np
 
-from .input_plotting import particle_symbol, read_interface_altitudes
+from .input_plotting import (
+    log_norm,
+    particle_symbol,
+    positive_log_edges,
+    read_layers,
+    setup_shell_axis,
+    shell_coordinates,
+)
 from .interface_output import read_interface_output
 
 
-def _log_norm(data):
-    positive = data[np.isfinite(data) & (data > 0)]
-    if not positive.size:
-        return None
-    return LogNorm(vmin=np.min(positive), vmax=np.max(positive))
-
-
-def _positive_log_edges(values, bins=80):
-    positive = values[np.isfinite(values) & (values > 0)]
-    if not positive.size:
-        raise ValueError("No positive finite energy values are available")
-    lower = np.min(positive)
-    upper = np.max(positive)
-    if lower == upper:
-        factor = np.sqrt(10.0)
-        lower /= factor
-        upper *= factor
-    return np.geomspace(lower, upper, bins + 1)
-
-
-def _centers_to_edges(centers):
-    if centers.size == 1:
-        width = max(abs(centers[0]) * 0.05, 1.0)
-        return np.array([max(0.0, centers[0] - width), centers[0] + width])
-    midpoints = (centers[:-1] + centers[1:]) / 2.0
-    return np.concatenate(
-        (
-            [max(0.0, centers[0] - (midpoints[0] - centers[0]))],
-            midpoints,
-            [centers[-1] + (centers[-1] - midpoints[-1])],
-        )
-    )
+logger = logging.getLogger(__name__)
 
 
 def plot_interface_output(simname):
@@ -64,10 +37,17 @@ def plot_interface_output(simname):
         & (source_energy > 0)
     )
     if not np.all(valid_energy):
-        raise ValueError(
-            "%s contains %i non-positive or non-finite energy records"
-            % (source_path.name, np.count_nonzero(~valid_energy))
+        invalid_count = np.count_nonzero(~valid_energy)
+        logger.warning(
+            "%s: ignoring %i non-positive or non-finite energy records",
+            source_path.name,
+            invalid_count,
         )
+        records = records[valid_energy]
+        kinetic_energy = kinetic_energy[valid_energy]
+        source_energy = source_energy[valid_energy]
+        if not records.size:
+            raise ValueError(source_path.name + " contains no valid energy records")
 
     figure, axes = plt.subplots(
         ncols=2, nrows=2, figsize=(12, 11), layout="constrained"
@@ -97,23 +77,15 @@ def plot_interface_output(simname):
     species_axis.set_xscale("log")
 
     interfaces = records["interface"]
-    interface_ids = np.arange(
-        int(np.min(interfaces)), int(np.max(interfaces)) + 1
+    geometry_path = Path(simname + ".gdml")
+    layers = read_layers(geometry_path)
+    interface_ids, plot_positions, plot_edges = shell_coordinates(
+        layers,
+        location="outer",
     )
     interface_edges = np.concatenate(
         ([interface_ids[0] - 0.5], interface_ids + 0.5)
     )
-    interface_positions = interface_ids.astype(float)
-    display_edges = interface_edges
-    interface_label = "Interface ID"
-    geometry_path = Path(simname + ".gdml")
-    if geometry_path.is_file():
-        altitude_by_id = read_interface_altitudes(geometry_path)
-        interface_positions = np.asarray(
-            [altitude_by_id[int(interface_id)] for interface_id in interface_ids]
-        )
-        display_edges = _centers_to_edges(interface_positions)
-        interface_label = "Altitude [km]"
     for mask, label in (
         (records["angle"] < 90, "Upward"),
         (records["angle"] >= 90, "Downward"),
@@ -122,31 +94,37 @@ def plot_interface_output(simname):
             np.count_nonzero(mask & (interfaces == interface_id))
             for interface_id in interface_ids
         ]
-        crossings_axis.step(
-            interface_positions, counts, where="mid", label=label
-        )
-    crossings_axis.set_title("Crossings by altitude")
-    crossings_axis.set_xlabel(interface_label)
+        crossings_axis.step(plot_positions, counts, where="mid", label=label)
+    setup_shell_axis(
+        crossings_axis,
+        plot_positions,
+        axis_name="x",
+    )
+    crossings_axis.set_title("Crossings by distance from surface")
     crossings_axis.set_ylabel("Boundary crossings")
     crossings_axis.legend()
 
-    kinetic_edges = _positive_log_edges(kinetic_energy)
+    kinetic_edges = positive_log_edges(kinetic_energy)
     interface_energy, _, _ = np.histogram2d(
         interfaces,
         kinetic_energy,
         bins=(interface_edges, kinetic_edges),
     )
     mesh = altitude_energy_axis.pcolormesh(
-        display_edges,
+        plot_edges,
         kinetic_edges,
         interface_energy.T,
         cmap="Blues",
-        norm=_log_norm(interface_energy),
+        norm=log_norm(interface_energy),
         shading="flat",
         rasterized=True,
     )
-    altitude_energy_axis.set_title("Kinetic energy by altitude")
-    altitude_energy_axis.set_xlabel(interface_label)
+    setup_shell_axis(
+        altitude_energy_axis,
+        plot_positions,
+        axis_name="x",
+    )
+    altitude_energy_axis.set_title("Kinetic energy by distance from surface")
     altitude_energy_axis.set_ylabel("Kinetic energy [MeV]")
     altitude_energy_axis.set_yscale("log")
     figure.colorbar(
@@ -156,7 +134,7 @@ def plot_interface_output(simname):
         label="Boundary crossings",
     )
 
-    source_edges = _positive_log_edges(source_energy)
+    source_edges = positive_log_edges(source_energy)
     energy_transfer, _, _ = np.histogram2d(
         source_energy,
         kinetic_energy,
@@ -167,7 +145,7 @@ def plot_interface_output(simname):
         kinetic_edges,
         energy_transfer.T,
         cmap="Oranges",
-        norm=_log_norm(energy_transfer),
+        norm=log_norm(energy_transfer),
         shading="flat",
         rasterized=True,
     )
