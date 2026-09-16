@@ -184,7 +184,9 @@ pip install --editable ".[plot]"
 
 This makes the AtRIS commands available in the current Python environment.
 Because of the `--editable` flag, source changes take effect without
-reinstalling the package.
+reinstalling the package. If `pip` uses a per-user installation, the commands
+are placed in Python's user command directory. `setup_atris.sh` adds that
+directory to `PATH`.
 
 At this point installation is complete. Continue with the
 [running instructions](README.md) to prepare and execute a simulation.
@@ -247,15 +249,16 @@ This environment applies only to the current shell, so source
 ### `pip` says the installed scripts are not on `PATH`
 
 The Python package was installed, but the shell cannot find commands placed in
-the user-local binary directory. Add that directory to `PATH`:
+the user-local command directory. From `<ATRIS_WORK>/atris`, load the AtRIS
+environment:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
+source setup_atris.sh
 ```
 
-Add the same line to the shell startup file, such as `~/.bashrc`, to retain it
-after opening a new shell. If the warning from `pip` names a different
-directory, use that directory instead.
+The setup script asks the active Python installation for its user directory and
+adds the corresponding `bin` directory to `PATH`. Source the script again after
+opening a new shell.
 
 ### I broke AtRIS! How do I rebuild it?
 

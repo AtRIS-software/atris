@@ -5,9 +5,9 @@
 #   source setup_atris.sh
 #
 # The script finds the AtRIS checkout from its own location, exports ATRIS_ROOT,
-# adds the compiled AtRIS executable to PATH, and loads the Geant4 environment.
-# It supports Bash and zsh and is expected to be sourced so these changes remain
-# in the current shell.
+# adds the compiled AtRIS executable and user-installed Python commands to PATH,
+# and loads the Geant4 environment. It supports Bash and zsh and is expected to
+# be sourced so these changes remain in the current shell.
 #
 # By default, exactly one geant4-vX.Y.Z directory is expected beside the AtRIS
 # checkout, with Geant4 installed below it in install/. Change the geant4_dir
@@ -42,8 +42,14 @@ run "export ATRIS_ROOT=\"$atris_root\""
 # Add the compiled AtRIS executable to PATH.
 run 'export PATH="$ATRIS_ROOT/build:$PATH"'
 
+# pip may install commands such as atris-plot for the current user rather than
+# system-wide. Ask Python for that user installation location instead of
+# assuming it is always $HOME/.local.
+python_user_bin="$(python -m site --user-base)/bin"
+run "export PATH=\"$python_user_bin:\$PATH\""
+
 # Load the Geant4 environment from the adjacent installation.
 run "source \"${geant4_dir[@]}/install/bin/geant4.sh\""
 
-unset atris_root geant4_dir
+unset atris_root geant4_dir python_user_bin
 unset -f run
