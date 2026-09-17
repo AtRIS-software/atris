@@ -184,9 +184,7 @@ pip install --editable ".[plot]"
 
 This makes the AtRIS commands available in the current Python environment.
 Because of the `--editable` flag, source changes take effect without
-reinstalling the package. If `pip` uses a per-user installation, the commands
-are placed in Python's user command directory. `setup_atris.sh` adds that
-directory to `PATH`.
+reinstalling the package.
 
 At this point installation is complete. Continue with the
 [running instructions](README.md) to prepare and execute a simulation.
@@ -256,9 +254,8 @@ environment:
 source setup_atris.sh
 ```
 
-The setup script asks the active Python installation for its user directory and
-adds the corresponding `bin` directory to `PATH`. Source the script again after
-opening a new shell.
+The setup only affects the current shell, so source it again after opening a
+new one.
 
 ### I broke AtRIS! How do I rebuild it?
 
