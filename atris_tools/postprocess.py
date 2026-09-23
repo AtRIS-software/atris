@@ -11,13 +11,14 @@ import numpy as np
 
 from .cli import HelpFormatter, add_logging_arguments, configure_logging
 from .phantoms import read_phantoms
+from .psf import load_psf
 
 
 logger = logging.getLogger(__name__)
 
 
 def process_psf(filename="simulation.psf"):
-    data = np.atleast_2d(np.loadtxt(filename))
+    data = load_psf(filename)
     rmin = data[:, 0] * 100000.0
     rmax = data[:, 1] * 100000.0
     delta_phi = data[:, 3] - data[:, 2]
@@ -141,7 +142,7 @@ def input_output_warnings(simname):
     psf_path = Path("simulation.psf")
     ionization_path = Path(simname + "_h2_h2.ion.csv")
     if psf_path.is_file() and ionization_path.is_file():
-        detector_count = np.atleast_2d(np.loadtxt(psf_path)).shape[0]
+        detector_count = load_psf(psf_path).shape[0]
         output_detector_count = len(get_histogram_axes(ionization_path)[1]) - 1
         if output_detector_count != detector_count:
             warnings.append(

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .cli import HelpFormatter, add_logging_arguments, configure_logging
+from .psf import load_psf
 
 
 HEADER_MARKER = "Year Mon Day"
@@ -34,6 +35,45 @@ TABLE_FIELDS = (
 )
 METADATA_COLUMNS = (0, 1, 2, 3, 4, 6, 7)
 DUPLICATE_RELATIVE_TOLERANCE = 5.0e-4
+PSF_HEADER = """# AtRIS Planet Specification Format (PSF)
+#
+# This file defines the concentric spherical material layers of the planetary
+# model. atris-psf-to-gdml converts it into simulation.gdml, which is the geometry
+# loaded by the AtRIS executable. It is an input model, not simulation output.
+#
+# Radii are measured from the planet's center. Rows are ordered from the center
+# outwards, and the final outer radius is used to size the GDML world. Detector
+# IDs identify the corresponding layers in AtRIS output. The generated Earth
+# model consists of a solid interior, a thin crust, atmospheric shells, and an
+# outer terminating layer.
+#
+# The material-definition line below is read by the PSF-to-GDML converter. Its
+# first token defines the solid material by relative elemental abundances; the
+# remaining tokens name the material-fraction columns used by gaseous layers.
+#
+# Columns (1-based):
+#   1  inner radius [km]
+#   2  outer radius [km]
+#   3  starting azimuth phi [rad]
+#   4  ending azimuth phi [rad]
+#   5  starting polar angle theta [rad]
+#   6  ending polar angle theta [rad]
+#   7  sensitive-detector ID
+#   8  temperature [K]
+#   9  density [g/cm3]
+#  10  pressure [Pa]
+#  11  solid-material flag: 1 uses the solid formula above; 0 uses columns 12-16
+#  12  nitrogen mass fraction
+#  13  oxygen mass fraction
+#  14  argon mass fraction
+#  15  helium mass fraction
+#  16  hydrogen mass fraction
+#
+# Atmospheric rows use the elemental mass fractions in columns 12-16; these
+# fractions sum to one. Solid rows use the formula from the material-definition
+# line, so their fraction columns are zero. Comment lines are ignored when the
+# numeric table is read.
+O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H"""
 logger = logging.getLogger(__name__)
 
 
@@ -111,8 +151,8 @@ def _write_psf(data, filename="simulation.psf"):
         filename,
         output,
         fmt=number_format,
-        header="O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H",
-        comments="#",
+        header=PSF_HEADER,
+        comments="",
     )
 
 
@@ -296,7 +336,7 @@ def merge_nrlmsis(input_paths):
 
 
 def _validate_psf(path, atmosphere_rows):
-    output = np.atleast_2d(np.loadtxt(path))
+    output = load_psf(path)
     expected_rows = atmosphere_rows + 3
     if output.shape != (expected_rows, 16):
         raise RuntimeError(

@@ -5,6 +5,7 @@ import re
 import numpy as np
 
 from .cli import HelpFormatter
+from .psf import load_psf, read_psf_header
 
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -95,10 +96,7 @@ def gdml_material(mat, name, temperature, density, pressure,state="solid"):
 
 
 def parse_header(filename):
-    thefile = open(filename,'r')
-    header = thefile.readline()
-    thefile.close()
-    header     = header.split()
+    header = read_psf_header(filename)
     nrformulas = len(header)
     
     #Generate the header gdml text
@@ -122,7 +120,7 @@ def line_processor(filename):
         name = template[mat]["material"]
         columnnames.update({name:idx})
     # now we generate the gdml material blocks
-    data          = np.loadtxt(filename)
+    data          = load_psf(filename)
     nrsheets      = data.shape[0]
     assert data.shape[1] == len(columnnames), "data shape and columnnames missmatch: (%ix%i) vs %i"%(data.shape[0],data.shape[1],len(columnnames))
     

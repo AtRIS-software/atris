@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from atris_tools import nrlmsis2psf
+from atris_tools.psf2gdml import psf2gdml
 
 
 NRLMSIS_20_FIELDS = (
@@ -88,9 +89,19 @@ def test_convert_merges_files_and_replaces_suspicious_duplicate(
         output = nrlmsis2psf.convert_nrlmsis([second, first])
 
     assert output == tmp_path / "simulation.psf"
-    psf = np.loadtxt(output)
+    header = output.read_text().splitlines()
+    assert header[0] == "# AtRIS Planet Specification Format (PSF)"
+    assert "#   1  inner radius [km]" in header
+    assert "#  16  hydrogen mass fraction" in header
+    material_line = "O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H"
+    material_index = header.index(material_line)
+    assert all(line.startswith("#") for line in header[:material_index])
+    assert not header[material_index + 1].startswith("#")
+    psf = nrlmsis2psf.load_psf(output)
     assert psf.shape == (7, 16)
     np.testing.assert_allclose(psf[2:-1, 0], [6371, 6372, 6373, 6374])
+    psf2gdml()
+    assert (tmp_path / "simulation.gdml").is_file()
     assert "Discarding suspicious NRLMSIS row at 2.000 km" in caplog.text
 
 
