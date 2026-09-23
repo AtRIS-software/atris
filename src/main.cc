@@ -42,7 +42,7 @@ G4bool atrisverbose = false;
 
 
 // Functions used by main.
-void Phantoms(G4int howmany);
+G4bool Phantoms(G4int howmany);
 void determine_nrofdetectors(G4String fname);
 
 struct SimulationRun {
@@ -117,7 +117,7 @@ int main(int argc,char** argv){
 	G4cout << "\t\t "<< prefix <<".log\t\t::         detailed log file" << G4endl;
 	G4cout << "\t\t "<< prefix <<".error\t\t::       error stream file" << G4endl;
 	*/
-	Phantoms(nrphantoms);
+	if (!Phantoms(nrphantoms)) return 1;
 	SimulationRun simulation = parseSimulationRun(argv[2]);
 	outputFileName    = argv[2];
 	G4String gdmlname = simulation.inputPrefix+".gdml";
@@ -247,50 +247,56 @@ void determine_nrofdetectors(G4String fname){
 	G4cout << "### AtRIS: nrofdetectors has been determined to be: " << nrofdetectors << G4endl;
 }
 
-void Phantoms(G4int howmany){
+G4bool Phantoms(G4int howmany){
 	G4int expected = 0; 
+	std::vector<G4int> expected_pdgs;
+	G4String expected_header_name;
 	G4cout << "### AtRIS: proceeding to load " << howmany << " phantom(s)." << G4endl << std::flush;
 	for (G4int phantom_index=0; phantom_index < howmany; phantom_index++){
 		std::vector<G4double> icru;
 		G4String phantom_name = "radiation_phantom" + std::to_string(phantom_index) + ".txt";
 		G4cout << "### AtRIS: loading radiation response matrix for phantom " << phantom_index << " from " << phantom_name << G4endl << std::flush;
-		G4String dummyLine;
 		std::ifstream is(phantom_name);
-		if (phantom_index == 0){
-			// need to check which PDGs I've got and which are light&heavy.
-			G4int pdgfound;
-			G4String bLine;         // instantiate the header string
-			G4String temp;
-			if (is.is_open()){
-				std::getline(is,bLine); // read first line
-				std::stringstream ss(bLine);
-				G4int    j = 0;             // initialize the column index
-				while (ss >> temp) {
-					if (std::stringstream(temp) >> pdgfound){
-						if (std::abs(pdgfound)<2214){
-							G4cout << j << " adding sensitivity for light particle with PDG= " << pdgfound << " "<<  "  at index " << pdgfound + 2213 << G4endl;
-							useornot[pdgfound+2213] = j; // modify the corresponding useornot location to j
-							// this offset is for antiparticles up to neutron and proton!
-						}else {
-							G4cout << "Added sensitivity for heavy particle with PDG= " << pdgfound << " under the index j=" << j << G4endl;
-							heavy[pdgfound] = j;
-						}
-						j++;                         // increment j
-					}
-				}
-				G4cout << "total" << j << G4endl;
-				//nrpdgs = j;
-				// Now we need to process all the data and put it inside the icru vector
-				expected = 650 * (j);
-				G4cout << " ### AtRIS: nricrubins is:" << 650 << " and nrpdgs is : "<< (j) << ". We are expecting: " << expected << " data points in the phantom file." << G4endl;
-			}
-
-		} else {
-			// If we are not dealing with the 0th phantom, we skip the first line
-			std::getline(is, dummyLine);
+		if (!is.is_open()) {
+			G4cerr << "### AtRIS: unable to open phantom file " << phantom_name << G4endl;
+			return false;
 		}
 
-		G4String bLine;         // instantiate the header string
+		G4String bLine;
+		std::getline(is,bLine);
+		std::stringstream header_stream(bLine);
+		std::vector<G4int> pdgs;
+		G4int pdgfound;
+		while (header_stream >> pdgfound) pdgs.push_back(pdgfound);
+		if (pdgs.empty()) {
+			G4cerr << "### AtRIS: phantom file has an empty PDG header: " << phantom_name << G4endl;
+			return false;
+		}
+
+		if (phantom_index == 0){
+			// need to check which PDGs I've got and which are light&heavy.
+			expected_pdgs = pdgs;
+			expected_header_name = phantom_name;
+			for (std::size_t j = 0; j < pdgs.size(); ++j) {
+				pdgfound = pdgs[j];
+				if (std::abs(pdgfound)<2214){
+					G4cout << j << " adding sensitivity for light particle with PDG= " << pdgfound << " "<<  "  at index " << pdgfound + 2213 << G4endl;
+					useornot[pdgfound+2213] = j; // modify the corresponding useornot location to j
+					// this offset is for antiparticles up to neutron and proton!
+				}else {
+					G4cout << "Added sensitivity for heavy particle with PDG= " << pdgfound << " under the index j=" << j << G4endl;
+					heavy[pdgfound] = j;
+				}
+			}
+			G4cout << "total" << pdgs.size() << G4endl;
+			expected = 650 * pdgs.size();
+			G4cout << " ### AtRIS: nricrubins is:" << 650 << " and nrpdgs is : "<< pdgs.size() << ". We are expecting: " << expected << " data points in the phantom file." << G4endl;
+		} else if (pdgs != expected_pdgs) {
+			G4cerr << "### AtRIS: PDG header mismatch: " << phantom_name
+			       << " does not match " << expected_header_name << G4endl;
+			return false;
+		}
+
 		G4double f;
 		G4int count = 0;
 		while ( std::getline(is,bLine)){
@@ -311,7 +317,19 @@ void Phantoms(G4int howmany){
 		G4cout << "### AtRIS: loading counting response matrix for phantom " << phantom_index << " from " << phantom_name << G4endl << std::flush;
 		count = 0;
 		std::ifstream cs(phantom_name);
-		std::getline(cs, dummyLine);
+		if (!cs.is_open()) {
+			G4cerr << "### AtRIS: unable to open phantom file " << phantom_name << G4endl;
+			return false;
+		}
+		std::getline(cs, bLine);
+		std::stringstream counting_header_stream(bLine);
+		pdgs.clear();
+		while (counting_header_stream >> pdgfound) pdgs.push_back(pdgfound);
+		if (pdgs != expected_pdgs) {
+			G4cerr << "### AtRIS: PDG header mismatch: " << phantom_name
+			       << " does not match " << expected_header_name << G4endl;
+			return false;
+		}
 		while ( std::getline(cs,bLine)){
 			std::stringstream dd(bLine);
 			while (dd >> f){
@@ -324,4 +342,5 @@ void Phantoms(G4int howmany){
 		G4cout << "### AtRIS: adding the counting vector to the rate nested vector" << G4endl;
 		rate.push_back(cicru);
 	}
+	return true;
 }

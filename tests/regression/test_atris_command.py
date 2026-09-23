@@ -323,6 +323,38 @@ def test_zero_phantom_count_runs_without_phantom_histograms(tmp_path, atris_comm
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize(
+    "mismatched_file",
+    ["radiation_phantom1.txt", "counting_phantom1.txt"],
+)
+def test_mismatched_phantom_pdg_headers_exit_nonzero(
+    tmp_path, atris_command, mismatched_file
+):
+    prepare_run(tmp_path)
+    shutil.copyfile(
+        tmp_path / "radiation_phantom0.txt",
+        tmp_path / "radiation_phantom1.txt",
+    )
+    shutil.copyfile(
+        tmp_path / "counting_phantom0.txt",
+        tmp_path / "counting_phantom1.txt",
+    )
+
+    path = tmp_path / mismatched_file
+    lines = path.read_text().splitlines()
+    lines[0] = " ".join(lines[0].split()[:-1])
+    path.write_text("\n".join(lines) + "\n")
+
+    result = run_atris(atris_command, tmp_path, "protons", phantom_count="2")
+
+    assert result.returncode != 0
+    assert "### AtRIS: PDG header mismatch:" in result.stderr
+    assert mismatched_file in result.stderr
+    assert "radiation_phantom0.txt" in result.stderr
+    assert not list(tmp_path.glob("protons_*.csv"))
+
+
+@pytest.mark.regression
 @pytest.mark.parametrize("mode", ["-2", "2", "999"])
 def test_undocumented_integer_modes_currently_follow_csv_path(
     tmp_path, atris_command, mode
