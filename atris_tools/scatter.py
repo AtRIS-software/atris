@@ -9,7 +9,7 @@ import random
 import stat
 import tempfile
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 
 
 SPECIES = ("protons", "alphas")
@@ -256,6 +256,7 @@ def extend_plan(run_directory, chunks, random_seed=None):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Split the proton and alpha event totals in ordinary AtRIS macros "
             "into independently seeded, restartable chunks."

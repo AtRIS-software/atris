@@ -3,10 +3,11 @@ import importlib
 import io
 import logging
 import sys
+from types import SimpleNamespace
 
 import pytest
-import colorlog
 
+from atris_tools import cli
 from atris_tools.cli import add_logging_arguments, configure_logging
 
 
@@ -41,12 +42,11 @@ def test_logging_arguments_select_quiet_or_verbose():
 def test_configure_logging_uses_requested_level(monkeypatch):
     stream = io.StringIO()
     options = {}
-    monkeypatch.delenv("FORCE_COLOR", raising=False)
     monkeypatch.setattr(sys, "stderr", stream)
     monkeypatch.setattr(
-        colorlog,
-        "basicConfig",
-        lambda **values: options.update(values),
+        cli,
+        "colorlog",
+        SimpleNamespace(basicConfig=lambda **values: options.update(values)),
     )
 
     configure_logging(logging.DEBUG)
@@ -54,7 +54,14 @@ def test_configure_logging_uses_requested_level(monkeypatch):
     assert options == {
         "level": logging.DEBUG,
         "stream": stream,
-        "format": "%(levelname)s %(module)s: %(message)s",
+        "format": "%(log_color)s%(levelname)s %(message)s%(reset)s",
+        "log_colors": {
+            "DEBUG": "cyan",
+            "INFO": "",
+            "WARNING": "yellow",
+            "ERROR": "red",
+            "CRITICAL": "bold_red",
+        },
     }
 
 
@@ -62,18 +69,43 @@ def test_configure_logging_uses_color_for_a_terminal(monkeypatch):
     stream = io.StringIO()
     stream.isatty = lambda: True
     options = {}
-    monkeypatch.delenv("NO_COLOR", raising=False)
-    monkeypatch.delenv("FORCE_COLOR", raising=False)
     monkeypatch.setattr(sys, "stderr", stream)
     monkeypatch.setattr(
-        colorlog,
+        cli,
+        "colorlog",
+        SimpleNamespace(basicConfig=lambda **values: options.update(values)),
+    )
+
+    configure_logging(logging.INFO)
+
+    assert options["format"] == "%(log_color)s%(message)s%(reset)s"
+    assert options["log_colors"] == {
+        "DEBUG": "cyan",
+        "INFO": "",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
+    }
+
+
+def test_configure_logging_falls_back_without_colorlog(monkeypatch):
+    stream = io.StringIO()
+    options = {}
+    monkeypatch.setattr(sys, "stderr", stream)
+    monkeypatch.setattr(cli, "colorlog", None)
+    monkeypatch.setattr(
+        logging,
         "basicConfig",
         lambda **values: options.update(values),
     )
 
     configure_logging(logging.INFO)
 
-    assert options["format"] == "%(log_color)s%(module)s%(reset)s: %(message)s"
+    assert options == {
+        "level": logging.INFO,
+        "stream": stream,
+        "format": "%(levelname)s %(message)s",
+    }
 
 
 @pytest.mark.parametrize("module_name", MODERN_COMMAND_MODULES)

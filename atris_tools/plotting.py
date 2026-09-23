@@ -11,7 +11,7 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 from .input_plotting import (
     log_norm,
     plot_inputs,
@@ -561,6 +561,7 @@ def plot_run(simname):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Create quick-look PNG plots from the AtRIS inputs and result "
             "products already present in a run directory."

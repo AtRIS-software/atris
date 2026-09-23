@@ -4,7 +4,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 
 
 logger = logging.getLogger(__name__)
@@ -129,6 +129,7 @@ def stage_phantoms(run_directory, archive=None, copy=False):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Stage the phantom response and counting tables selected by "
             "phantoms.txt under the numbered filenames expected by AtRIS."

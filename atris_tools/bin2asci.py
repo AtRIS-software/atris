@@ -2,11 +2,13 @@ import argparse
 
 import numpy as np
 
+from .cli import HelpFormatter
 from .interface_output import read_binary, records_to_columns
 
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Convert native AtRIS mode-0 particle-interface records from "
             "binary to the historical five-column ASCII format."

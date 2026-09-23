@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 from .phantoms import read_phantoms
 
 
@@ -297,6 +297,7 @@ def process_run(simname):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Scale canonical AtRIS histogram CSV files into altitude- and "
             "energy-dependent ionization and phantom response tables."

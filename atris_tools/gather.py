@@ -10,7 +10,7 @@ import tempfile
 
 import numpy as np
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 from .postprocess import process_psf
 
 
@@ -599,6 +599,7 @@ def gather_simulation(run_directory, entries, simulation):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Combine completed AtRIS chunk histograms into canonical aggregate "
             "CSV files and update ionization-convergence histories."

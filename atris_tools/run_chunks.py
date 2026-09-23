@@ -2,13 +2,11 @@
 
 import argparse
 import logging
-import math
 from pathlib import Path
 import subprocess
-import textwrap
 import time
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 from .gather import chunk_name, read_chunk_plan
 from .phantoms import read_phantoms
 
@@ -21,38 +19,6 @@ OUTPUT_MODE_VALUES = {
     "interface": "0",
     "legacy-ascii": "1",
 }
-class HelpFormatter(argparse.HelpFormatter):
-    """Use argparse wrapping without splitting words or option names."""
-
-    def _split_lines(self, text, width):
-        text = self._whitespace_matcher.sub(" ", text).strip()
-        return textwrap.wrap(
-            text,
-            width,
-            break_long_words=False,
-            break_on_hyphens=False,
-        )
-
-    def _fill_text(self, text, width, indent):
-        rendered = []
-        for line in text.splitlines():
-            if not line.strip():
-                rendered.append("")
-                continue
-            leading_space = line[: len(line) - len(line.lstrip())]
-            line_indent = indent + leading_space
-            line = self._whitespace_matcher.sub(" ", line).strip()
-            rendered.append(
-                textwrap.fill(
-                    line,
-                    width,
-                    initial_indent=line_indent,
-                    subsequent_indent=line_indent,
-                    break_long_words=False,
-                    break_on_hyphens=False,
-                )
-            )
-        return "\n".join(rendered)
 
 
 def normalize_output_mode(value):
@@ -63,6 +29,30 @@ def normalize_output_mode(value):
             "output mode must be response, interface, or legacy-ascii"
         )
     return value
+
+
+def format_estimated_time(minutes):
+    """Format an estimated remaining time in minutes or hours."""
+    if minutes < 60:
+        return "%.1f min" % minutes
+    return "%.1f h" % (minutes / 60)
+
+
+def worker_label(worker_index, worker_count):
+    """Return a space-aligned label when several workers share a run."""
+    if worker_count == 1:
+        return ""
+    number = str(worker_index + 1).rjust(len(str(worker_count)))
+    return "Worker %s/%i" % (number, worker_count)
+
+
+def chunk_label(worker, chunk_number, chunk_count):
+    """Return a consistently aligned worker and chunk progress label."""
+    number = str(chunk_number).rjust(len(str(chunk_count)))
+    chunk = "chunk %s/%i" % (number, chunk_count)
+    if worker:
+        return "%s %s" % (worker, chunk)
+    return chunk.capitalize()
 
 
 def select_entries(entries, entry=None, worker_index=0, worker_count=1):
@@ -106,10 +96,12 @@ def run_chunks(
     deadline=None,
     stop_before_end=0,
     clock=time.time,
+    timer=time.monotonic,
 ):
     """Run incomplete chunks and mark each successful run as complete."""
     run_directory = Path(run_directory).expanduser().resolve()
-    mode = OUTPUT_MODE_VALUES[normalize_output_mode(mode)]
+    mode_name = normalize_output_mode(mode)
+    mode = OUTPUT_MODE_VALUES[mode_name]
     entries = read_chunk_plan(run_directory)
     selected_entries = select_entries(
         entries,
@@ -117,61 +109,98 @@ def run_chunks(
         worker_index=worker_index,
         worker_count=worker_count,
     )
+    worker = worker_label(worker_index, worker_count)
+    prefix = worker + ": " if worker else ""
     if stop_before_end < 0:
         raise ValueError("Stop-before-end interval cannot be negative")
     if stop_before_end and deadline is None:
         raise ValueError("Stop-before-end interval requires a job deadline")
 
-    pending_count = sum(
-        not (
-            run_directory
-            / "chunks"
-            / (chunk_name(plan_entry) + ".COMPLETE")
-        ).is_file()
-        for _, plan_entry in selected_entries
-    )
-    logger.info(
-        "Worker %i/%i has %i incomplete chunks among %i assigned",
-        worker_index + 1,
-        worker_count,
-        pending_count,
-        len(selected_entries),
-    )
-    milestone = max(1, math.ceil(pending_count / 7))
+    phantoms = read_phantoms(run_directory)
+    phantom_count = len(phantoms)
+    logger.info("%sStarting AtRIS chunked run", prefix)
+    logger.info("%sRun directory: %s", prefix, run_directory)
+    logger.info("%sChunk plan: %s", prefix, run_directory / "chunks.txt")
+    logger.info("%sPhysics list: %s", prefix, physics_list)
+    logger.info("%sOutput mode: %s (%s)", prefix, mode_name, mode)
+    for phantom_number, phantom in enumerate(phantoms, start=1):
+        phantom_id = phantom["id"]
+        phantom_label = "Phantom %i/%i" % (phantom_number, phantom_count)
+        response_path = (
+            run_directory / ("radiation_phantom%i.txt" % phantom_id)
+        ).resolve()
+        counting_path = (
+            run_directory / ("counting_phantom%i.txt" % phantom_id)
+        ).resolve()
+        logger.info("%s%s: %s", prefix, phantom_label, phantom["stem"])
+        logger.debug(
+            "%s%s counting file: %s",
+            prefix,
+            phantom_label,
+            counting_path,
+        )
+        logger.debug(
+            "%s%s response file: %s",
+            prefix,
+            phantom_label,
+            response_path,
+        )
+    logger.info("%sProcessing %i chunks...", prefix, len(selected_entries))
 
-    phantom_count = len(read_phantoms(run_directory))
-    completed = 0
+    pending_entries = []
     for line_number, plan_entry in selected_entries:
         run_name = chunk_name(plan_entry)
         complete = run_directory / "chunks" / (run_name + ".COMPLETE")
         if complete.is_file():
             logger.debug(
-                "Chunk %i/%i already complete: %s",
-                line_number,
-                len(entries),
-                run_name,
+                "%s complete: %s",
+                chunk_label(worker, line_number, len(entries)),
+                Path("chunks") / run_name,
             )
-            continue
+        else:
+            pending_entries.append((line_number, plan_entry))
+
+    pending_count = len(pending_entries)
+    finished_count = len(selected_entries) - pending_count
+    finished_noun = "chunk" if finished_count == 1 else "chunks"
+    pending_noun = "chunk" if pending_count == 1 else "chunks"
+    logger.info(
+        "%s%i/%i %s already processed",
+        prefix,
+        finished_count,
+        len(selected_entries),
+        finished_noun,
+    )
+    logger.info(
+        "%sProcessing remaining %i/%i %s...",
+        prefix,
+        pending_count,
+        len(selected_entries),
+        pending_noun,
+    )
+    completed = 0
+    elapsed_minutes = 0
+    for line_number, plan_entry in pending_entries:
+        run_name = chunk_name(plan_entry)
+        complete = run_directory / "chunks" / (run_name + ".COMPLETE")
+        progress = chunk_label(worker, line_number, len(entries))
 
         if deadline is not None and clock() >= deadline - stop_before_end:
             logger.info(
-                "Worker %i/%i stopped before starting chunk %i/%i because "
+                "%s not started because "
                 "the wall-time safety window has begun",
-                worker_index + 1,
-                worker_count,
-                line_number,
-                len(entries),
+                progress,
             )
             break
 
         log_path = run_directory / "chunks" / (run_name + ".log")
+        chunk_stem = str(Path("chunks") / run_name)
         logger.debug(
-            "Starting chunk %i/%i: %s (log: %s)",
-            line_number,
-            len(entries),
-            run_name,
-            log_path,
+            "%s starting: %s",
+            progress,
+            chunk_stem,
         )
+        started = timer()
         with log_path.open("w") as log:
             subprocess.run(
                 [
@@ -188,20 +217,44 @@ def run_chunks(
             )
         complete.touch()
         completed += 1
-        logger.debug(
-            "Completed chunk %i/%i: %s",
-            line_number,
-            len(entries),
-            run_name,
+        chunk_minutes = (timer() - started) / 60
+        elapsed_minutes += chunk_minutes
+        estimated_minutes = (
+            elapsed_minutes / completed * (pending_count - completed)
         )
-        if completed % milestone == 0 or completed == pending_count:
-            logger.info(
-                "Worker %i/%i completed %i/%i pending chunks",
-                worker_index + 1,
-                worker_count,
-                completed,
-                pending_count,
-            )
+        estimated_time = format_estimated_time(estimated_minutes)
+        logger.info(
+            "%s complete in %.1f min. ETA: %s",
+            progress,
+            chunk_minutes,
+            estimated_time,
+        )
+
+    remaining_count = pending_count - completed
+    finished_total = finished_count + completed
+    status = "finished" if remaining_count == 0 else "stopped"
+    completed_noun = "chunk" if completed == 1 else "chunks"
+    remaining_noun = "chunk" if remaining_count == 1 else "chunks"
+    logger.info("%sAtRIS chunk run %s", prefix, status)
+    logger.info(
+        "%sCompleted %i new %s in %s",
+        prefix,
+        completed,
+        completed_noun,
+        format_estimated_time(elapsed_minutes),
+    )
+    logger.info(
+        "%sFinished chunks: %i/%i",
+        prefix,
+        finished_total,
+        len(selected_entries),
+    )
+    logger.info(
+        "%sRemaining: %i %s",
+        prefix,
+        remaining_count,
+        remaining_noun,
+    )
 
     return completed
 
@@ -356,7 +409,7 @@ def main():
     else:
         worker_index, worker_count = args.worker_index, args.worker_count
 
-    completed = run_chunks(
+    run_chunks(
         args.run_directory,
         physics_list=args.physics_list,
         mode=args.mode,
@@ -366,7 +419,6 @@ def main():
         deadline=args.deadline,
         stop_before_end=args.stop_before_end,
     )
-    logger.info("Completed %i new chunks", completed)
     return 0
 
 

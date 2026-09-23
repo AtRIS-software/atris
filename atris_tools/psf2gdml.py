@@ -4,6 +4,8 @@ import re
 
 import numpy as np
 
+from .cli import HelpFormatter
+
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 # We load "nist.exist", which holds information about which materials already
@@ -230,6 +232,7 @@ def psf2gdml():
 def main():
     """Convert simulation.psf in the current directory to simulation.gdml."""
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Convert an AtRIS Planet Specification Format model into the GDML "
             "geometry and material description read by Geant4."

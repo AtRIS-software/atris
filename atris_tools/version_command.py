@@ -7,6 +7,8 @@ import re
 import subprocess
 import sys
 
+from .cli import HelpFormatter
+
 
 GIT_DESCRIBE_VERSION = re.compile(
     r"^v?(\d+)\.(\d+)\.(\d+)-(\d+)-g([0-9a-f]+)(-dirty)?$"
@@ -47,6 +49,7 @@ def versions_match(tools_version, executable_version):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Report the installed atris-tools version and, when available, the "
             "AtRIS executable version, then compare their source revisions."

@@ -1,10 +1,48 @@
 """Shared command-line behavior for the AtRIS Python tools."""
 
+import argparse
 import logging
-import os
 import sys
+import textwrap
 
-import colorlog
+try:
+    import colorlog
+except ImportError:
+    colorlog = None
+
+
+class HelpFormatter(argparse.HelpFormatter):
+    """Use argparse wrapping without splitting words or option names."""
+
+    def _split_lines(self, text, width):
+        text = self._whitespace_matcher.sub(" ", text).strip()
+        return textwrap.wrap(
+            text,
+            width,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+
+    def _fill_text(self, text, width, indent):
+        rendered = []
+        for line in text.splitlines():
+            if not line.strip():
+                rendered.append("")
+                continue
+            leading_space = line[: len(line) - len(line.lstrip())]
+            line_indent = indent + leading_space
+            line = self._whitespace_matcher.sub(" ", line).strip()
+            rendered.append(
+                textwrap.fill(
+                    line,
+                    width,
+                    initial_indent=line_indent,
+                    subsequent_indent=line_indent,
+                    break_long_words=False,
+                    break_on_hyphens=False,
+                )
+            )
+        return "\n".join(rendered)
 
 
 def add_logging_arguments(parser):
@@ -31,11 +69,29 @@ def add_logging_arguments(parser):
 
 def configure_logging(level):
     """Configure colored command-line logging at the requested level."""
-    color = "FORCE_COLOR" in os.environ or (
-        "NO_COLOR" not in os.environ and sys.stderr.isatty()
-    )
-    if color:
-        log_format = "%(log_color)s%(module)s%(reset)s: %(message)s"
+    if sys.stderr.isatty():
+        plain_format = "%(message)s"
+        log_format = "%(log_color)s%(message)s%(reset)s"
     else:
-        log_format = "%(levelname)s %(module)s: %(message)s"
-    colorlog.basicConfig(level=level, stream=sys.stderr, format=log_format)
+        plain_format = "%(levelname)s %(message)s"
+        log_format = "%(log_color)s%(levelname)s %(message)s%(reset)s"
+    if colorlog is None:
+        logging.basicConfig(
+            level=level,
+            stream=sys.stderr,
+            format=plain_format,
+        )
+        return
+    log_colors = {
+        "DEBUG": "cyan",
+        "INFO": "",
+        "WARNING": "yellow",
+        "ERROR": "red",
+        "CRITICAL": "bold_red",
+    }
+    colorlog.basicConfig(
+        level=level,
+        stream=sys.stderr,
+        format=log_format,
+        log_colors=log_colors,
+    )

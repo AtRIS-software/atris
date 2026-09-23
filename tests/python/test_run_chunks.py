@@ -4,11 +4,13 @@ import subprocess
 import pytest
 
 from atris_tools.run_chunks import (
+    chunk_label,
     incomplete_entry_numbers,
     main,
     normalize_output_mode,
     run_chunks,
     select_entries,
+    worker_label,
 )
 
 
@@ -58,7 +60,7 @@ def test_run_chunks_executes_plan_and_marks_success(tmp_path, monkeypatch):
     assert (tmp_path / "chunks/alphas_333333_444444.COMPLETE").is_file()
 
 
-def test_run_chunks_skips_complete_entries(tmp_path, monkeypatch):
+def test_run_chunks_skips_complete_entries(tmp_path, monkeypatch, caplog):
     prepare_run(tmp_path)
     (tmp_path / "chunks/protons_111111_222222.COMPLETE").touch()
     calls = []
@@ -67,10 +69,25 @@ def test_run_chunks_skips_complete_entries(tmp_path, monkeypatch):
         lambda command, **kwargs: calls.append(command),
     )
 
-    assert run_chunks(tmp_path) == 1
+    with caplog.at_level(logging.DEBUG, logger="atris_tools.run_chunks"):
+        assert run_chunks(tmp_path) == 1
+
     assert calls == [
         ["AtRIS", "FTFP_BERT_HP", "chunks/alphas_333333_444444", "-1", "2"]
     ]
+    assert "Chunk 1/2 complete: chunks/protons_111111_222222" in caplog.text
+    assert "Chunk 2/2 starting: chunks/alphas_333333_444444" in caplog.text
+    assert "Chunk 2/2 complete" in caplog.text
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages.index(
+        "Chunk 1/2 complete: chunks/protons_111111_222222"
+    ) < messages.index("1/2 chunk already processed")
+    assert messages.index(
+        "1/2 chunk already processed"
+    ) < messages.index("Processing remaining 1/2 chunk...")
+    assert messages.index(
+        "Processing remaining 1/2 chunk..."
+    ) < messages.index("Chunk 2/2 starting: chunks/alphas_333333_444444")
 
 
 def test_run_chunks_can_select_one_plan_entry(tmp_path, monkeypatch):
@@ -157,29 +174,90 @@ def test_run_chunks_executes_only_the_workers_shard(tmp_path, monkeypatch):
     ]
 
 
-def test_run_chunks_keeps_default_progress_under_ten_lines(
-    tmp_path, monkeypatch, caplog
-):
-    plan = [
-        ("protons", "%06i" % number, "%06i" % (number + 1000))
-        for number in range(70)
+def test_run_chunks_logs_timed_progress_for_each_chunk(tmp_path, monkeypatch, caplog):
+    prepare_run(tmp_path)
+    monkeypatch.setattr(
+        "atris_tools.run_chunks.subprocess.run",
+        lambda *args, **kwargs: None,
+    )
+    times = iter((0, 90, 90, 210))
+
+    with caplog.at_level(logging.DEBUG, logger="atris_tools.run_chunks"):
+        assert run_chunks(tmp_path, timer=lambda: next(times)) == 2
+
+    info_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "atris_tools.run_chunks" and record.levelno == logging.INFO
     ]
-    prepare_run(tmp_path, plan)
+    assert info_messages == [
+        "Starting AtRIS chunked run",
+        "Run directory: %s" % tmp_path.resolve(),
+        "Chunk plan: %s" % (tmp_path.resolve() / "chunks.txt"),
+        "Physics list: FTFP_BERT_HP",
+        "Output mode: response (-1)",
+        "Phantom 1/2: first",
+        "Phantom 2/2: second",
+        "Processing 2 chunks...",
+        "0/2 chunks already processed",
+        "Processing remaining 2/2 chunks...",
+        "Chunk 1/2 complete in 1.5 min. ETA: 1.5 min",
+        "Chunk 2/2 complete in 2.0 min. ETA: 0.0 min",
+        "AtRIS chunk run finished",
+        "Completed 2 new chunks in 3.5 min",
+        "Finished chunks: 2/2",
+        "Remaining: 0 chunks",
+    ]
+    debug_messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "atris_tools.run_chunks" and record.levelno == logging.DEBUG
+    ]
+    assert debug_messages == [
+        "Phantom 1/2 counting file: %s" % (tmp_path / "counting_phantom0.txt"),
+        "Phantom 1/2 response file: %s" % (tmp_path / "radiation_phantom0.txt"),
+        "Phantom 2/2 counting file: %s" % (tmp_path / "counting_phantom1.txt"),
+        "Phantom 2/2 response file: %s" % (tmp_path / "radiation_phantom1.txt"),
+        "Chunk 1/2 starting: chunks/protons_111111_222222",
+        "Chunk 2/2 starting: chunks/alphas_333333_444444",
+    ]
+
+
+def test_run_chunks_logs_resolved_phantom_paths(tmp_path, monkeypatch, caplog):
+    prepare_run(tmp_path)
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    response = archive / "first_response.txt"
+    counting = archive / "first_counting.txt"
+    response.touch()
+    counting.touch()
+    (tmp_path / "radiation_phantom0.txt").symlink_to(response)
+    (tmp_path / "counting_phantom0.txt").symlink_to(counting)
     monkeypatch.setattr(
         "atris_tools.run_chunks.subprocess.run",
         lambda *args, **kwargs: None,
     )
 
-    with caplog.at_level(logging.INFO, logger="atris_tools.run_chunks"):
-        assert run_chunks(tmp_path) == 70
+    with caplog.at_level(logging.DEBUG, logger="atris_tools.run_chunks"):
+        run_chunks(tmp_path, entry=1)
 
-    records = [
-        record
-        for record in caplog.records
-        if record.name == "atris_tools.run_chunks"
-        and record.levelno == logging.INFO
-    ]
-    assert len(records) == 8
+    assert "Phantom 1/2: first" in caplog.messages
+    assert "Phantom 1/2 counting file: %s" % counting.resolve() in caplog.messages
+    assert "Phantom 1/2 response file: %s" % response.resolve() in caplog.messages
+
+
+def test_worker_label_is_conditional_and_space_aligned():
+    assert worker_label(0, 1) == ""
+    assert worker_label(0, 200) == "Worker   1/200"
+    assert worker_label(199, 200) == "Worker 200/200"
+
+
+def test_chunk_label_is_conditional_and_space_aligned():
+    assert chunk_label("", 1, 200) == "Chunk   1/200"
+    assert (
+        chunk_label("Worker   1/200", 1, 200)
+        == "Worker   1/200 chunk   1/200"
+    )
 
 
 def test_run_chunks_stops_before_the_job_deadline(tmp_path, monkeypatch, caplog):
@@ -200,6 +278,10 @@ def test_run_chunks_stops_before_the_job_deadline(tmp_path, monkeypatch, caplog)
 
     assert calls == []
     assert "wall-time safety window has begun" in caplog.text
+    assert "AtRIS chunk run stopped" in caplog.text
+    assert "Completed 0 new chunks in 0.0 min" in caplog.text
+    assert "Finished chunks: 0/2" in caplog.text
+    assert "Remaining: 2 chunks" in caplog.text
 
 
 def test_main_defaults_to_one_scheduler_neutral_worker(tmp_path, monkeypatch):

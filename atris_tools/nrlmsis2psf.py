@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 
 
 HEADER_MARKER = "Year Mon Day"
@@ -326,6 +326,7 @@ def convert_nrlmsis(input_paths):
 def main():
     """Run the NRLMSIS-to-PSF command."""
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Convert one or more NASA CCMC NRLMSIS text tables into the "
             "Planet Specification Format (PSF) used by AtRIS."

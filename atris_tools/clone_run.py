@@ -6,7 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 
 
 INPUT_NAMES = (
@@ -89,6 +89,7 @@ def clone_run(source_directory, destination_directory):
 
 def main():
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Create a new AtRIS run directory from the reusable inputs in an "
             "existing run."

@@ -69,7 +69,7 @@ import shutil
 
 import numpy as np
 
-from .cli import add_logging_arguments, configure_logging
+from .cli import HelpFormatter, add_logging_arguments, configure_logging
 
 
 GENERATED_INPUTS = (
@@ -158,6 +158,7 @@ def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",rand
 def main():
     """Run the AtRIS macro-generation command."""
     parser = argparse.ArgumentParser(
+        formatter_class=HelpFormatter,
         description=(
             "Generate the proton and alpha macros, energy grids, and geometry "
             "copies needed to run AtRIS."
