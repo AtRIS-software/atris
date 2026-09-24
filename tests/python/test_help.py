@@ -61,8 +61,13 @@ ENTRY_POINT_HELP = (
     ),
     (
         "atris-bin-to-ascii",
-        "bin2asci",
+        "bin2ascii",
         ("binary input is retained", "does not gather chunks"),
+    ),
+    (
+        "atris-dump",
+        "dump",
+        ("standard output", "input file is not modified"),
     ),
     (
         "nrlmsis2psf",
@@ -72,7 +77,7 @@ ENTRY_POINT_HELP = (
     ("psf2gdml", "psf2gdml", ("output defaults to the input basename",)),
     ("atrismacrogen", "atrismacrogen", ("refuses to overwrite",)),
     ("postprocess", "postprocess", ("does not gather chunk histograms",)),
-    ("bin2ascii", "bin2asci", ("binary input is retained",)),
+    ("bin2ascii", "bin2ascii", ("binary input is retained",)),
 )
 
 

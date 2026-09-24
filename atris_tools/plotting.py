@@ -23,7 +23,7 @@ from .input_plotting import (
 from .interface_plotting import plot_interface_output
 from .phantoms import read_phantoms
 from .postprocess import get_histogram_axes, warn_if_inputs_do_not_match_output
-from .step_plotting import is_step_trace, plot_mode_one_output
+from .step_plotting import plot_mode_one_output
 
 
 logger = logging.getLogger(__name__)
@@ -606,16 +606,16 @@ def main():
             errors.append("inputs: " + str(error))
         for simulation in ("protons", "alphas"):
             binary_path = Path(simulation + ".binary")
-            ascii_path = Path(simulation + ".asci")
-            step_trace = is_step_trace(ascii_path)
-            if binary_path.is_file() or (ascii_path.is_file() and not step_trace):
+            ascii_path = Path(simulation + ".ascii")
+            step_path = Path(simulation + ".steps.binary")
+            if binary_path.is_file() or ascii_path.is_file():
                 try:
                     plotted.append(plot_interface_output(simulation))
                 except Exception as error:
                     errors.append(
                         "%s mode-0 output: %s" % (simulation, error)
                     )
-            if step_trace:
+            if step_path.is_file():
                 try:
                     plotted.extend(plot_mode_one_output(simulation))
                 except Exception as error:

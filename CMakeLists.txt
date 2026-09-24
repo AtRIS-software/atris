@@ -25,6 +25,7 @@ endif()
 message(STATUS "AtRIS version: ${ATRIS_VERSION}")
 
 set(ATRIS_HEADERS
+  include/BinaryOutput.hh
   include/DetectorConstruction.hh
   include/HistoManager.hh
   include/PrimaryGeneratorAction.hh

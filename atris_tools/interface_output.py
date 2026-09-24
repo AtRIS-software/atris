@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .binary_output import INTERFACE_RECORDS, read_records
+
 
 FIELD_NAMES = (
     "pdg",
@@ -25,13 +27,12 @@ BINARY_DTYPE = np.dtype(
 
 def read_binary(filename):
     """Read one native AtRIS mode-0 binary file."""
-    path = Path(filename)
-    if path.stat().st_size % BINARY_DTYPE.itemsize:
-        raise ValueError(
-            "%s does not contain complete %i-byte records"
-            % (path, BINARY_DTYPE.itemsize)
-        )
-    return np.fromfile(path, dtype=BINARY_DTYPE)
+    return read_records(
+        filename,
+        INTERFACE_RECORDS,
+        BINARY_DTYPE,
+        allow_legacy=True,
+    )
 
 
 def read_ascii(filename):
@@ -55,7 +56,7 @@ def read_interface_output(prefix):
     if binary_path.is_file():
         return read_binary(binary_path), binary_path
 
-    ascii_path = Path(str(prefix) + ".asci")
+    ascii_path = Path(str(prefix) + ".ascii")
     if ascii_path.is_file():
         return read_ascii(ascii_path), ascii_path
 

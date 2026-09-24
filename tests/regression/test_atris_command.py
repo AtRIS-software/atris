@@ -13,6 +13,8 @@ import subprocess
 import numpy as np
 import pytest
 
+from atris_tools.step_output import process_name, read_step_records
+
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 FIXTURE = REPOSITORY_ROOT / "tests" / "fixtures" / "minimal"
@@ -108,15 +110,15 @@ def histogram_entries(path):
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    ("mode", "creates_binary", "creates_ascii"),
+    ("mode", "creates_interfaces", "creates_steps"),
     [
         pytest.param("-1", False, False, id="csv-response-mode"),
         pytest.param("0", True, False, id="binary-interface-mode"),
-        pytest.param("1", False, True, id="ascii-step-mode"),
+        pytest.param("1", True, True, id="binary-step-mode"),
     ],
 )
 def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
-    tmp_path, atris_command, mode, creates_binary, creates_ascii
+    tmp_path, atris_command, mode, creates_interfaces, creates_steps
 ):
     prepare_run(tmp_path)
 
@@ -134,27 +136,46 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
     }
     assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
     assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
-    assert (tmp_path / "protons.binary").exists() is creates_binary
-    assert (tmp_path / "protons.asci").exists() is creates_ascii
+    assert (tmp_path / "protons.binary").exists() is creates_interfaces
+    assert (tmp_path / "protons.steps.binary").exists() is creates_steps
+    assert not (tmp_path / "protons.ascii").exists()
 
 
 @pytest.mark.regression
-def test_ascii_mode_writes_step_trace_with_track_genealogy(tmp_path, atris_command):
+def test_mode_one_writes_binary_step_trace_with_track_genealogy(
+    tmp_path, atris_command
+):
     prepare_run(tmp_path)
 
     result = run_atris(atris_command, tmp_path, "protons", mode="1")
 
     assert result.returncode == 0, result.stdout + result.stderr
-    trace = (tmp_path / "protons.asci").read_text().splitlines()
-    assert trace[0] == "# AtRIS step trace version 1"
-    columns = trace[1].split(",")
-    rows = [dict(zip(columns, line.split(","))) for line in trace[2:]]
-    assert rows
-    assert {int(row["event_id"]) for row in rows} == {0, 1}
-    assert all(int(row["track_id"]) > 0 for row in rows)
-    assert all(int(row["step_id"]) > 0 for row in rows)
-    assert all(row["creator_process"] for row in rows)
-    assert all(row["step_process"] for row in rows)
+    records = read_step_records(tmp_path / "protons.steps.binary")
+    assert len(records)
+    assert set(records["event_id"]) == {0, 1}
+    assert np.all(records["track_id"] > 0)
+    assert np.all(records["step_id"] > 0)
+    assert all(process_name(value) for value in records["creator_process"])
+    assert all(process_name(value) for value in records["step_process"])
+
+
+@pytest.mark.regression
+def test_mode_one_contains_mode_zero_interface_records(tmp_path, atris_command):
+    mode_zero = tmp_path / "mode-zero"
+    mode_one = tmp_path / "mode-one"
+    mode_zero.mkdir()
+    mode_one.mkdir()
+    prepare_run(mode_zero)
+    prepare_run(mode_one)
+
+    zero_result = run_atris(atris_command, mode_zero, "protons", mode="0")
+    one_result = run_atris(atris_command, mode_one, "protons", mode="1")
+
+    assert zero_result.returncode == 0, zero_result.stdout + zero_result.stderr
+    assert one_result.returncode == 0, one_result.stdout + one_result.stderr
+    assert (mode_zero / "protons.binary").read_bytes() == (
+        mode_one / "protons.binary"
+    ).read_bytes()
 
 
 @pytest.mark.regression

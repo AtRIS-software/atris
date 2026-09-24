@@ -1,6 +1,5 @@
 """Plot transport-step traces written by AtRIS output mode 1."""
 
-import csv
 import random
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -19,46 +18,14 @@ from .input_plotting import (
     shell_coordinates,
     surface_radius,
 )
+from .step_output import process_name, read_step_records
 
 
-TRACE_MARKER = "# AtRIS step trace version 1"
-TRACE_COLUMNS = (
-    "event_id",
-    "track_id",
-    "parent_id",
-    "step_id",
-    "pdg",
-    "detector_id",
-    "pre_x_km",
-    "pre_y_km",
-    "pre_z_km",
-    "post_x_km",
-    "post_y_km",
-    "post_z_km",
-    "pre_kinetic_energy_MeV",
-    "post_kinetic_energy_MeV",
-    "energy_deposit_MeV",
-    "nonionizing_energy_deposit_MeV",
-    "step_length_m",
-    "global_time_ns",
-    "primary_energy_MeV",
-    "creator_process",
-    "step_process",
-)
 ENERGY_SAMPLE_LIMIT = 100_000
 BAR_LIMIT = 12
 SHOWER_SPECIES_LIMIT = 6
 INTERACTION_ALTITUDE_MARGIN = 0.05
 MINIMUM_ALTITUDE_MARGIN_KM = 1.0
-
-
-def is_step_trace(filename):
-    """Return whether a file starts with the versioned mode-1 marker."""
-    path = Path(filename)
-    if not path.is_file():
-        return False
-    with path.open(errors="replace") as trace:
-        return trace.readline().rstrip("\r\n") == TRACE_MARKER
 
 
 def read_step_trace(filename, sample_limit=ENERGY_SAMPLE_LIMIT):
@@ -76,52 +43,37 @@ def read_step_trace(filename, sample_limit=ENERGY_SAMPLE_LIMIT):
     first_event = None
     last_event = None
 
-    with path.open(newline="") as trace:
-        marker = trace.readline().rstrip("\r\n")
-        if marker != TRACE_MARKER:
-            raise ValueError(path.name + " is not an AtRIS mode-1 step trace")
-        reader = csv.DictReader(trace)
-        if reader.fieldnames != list(TRACE_COLUMNS):
-            raise ValueError(path.name + " has an unexpected step-trace header")
+    for row_index, row in enumerate(read_step_records(path)):
+        event_id = int(row["event_id"])
+        pdg = int(row["pdg"])
+        detector_id = int(row["detector_id"])
+        kinetic_energy = float(row["post_kinetic_energy_MeV"])
+        energy_deposit = float(row["energy_deposit_MeV"])
+        if not np.isfinite(kinetic_energy) or not np.isfinite(energy_deposit):
+            raise ValueError(
+                "%s has non-finite numeric data in record %i"
+                % (path.name, row_index)
+            )
 
-        for line_number, row in enumerate(reader, start=3):
-            try:
-                event_id = int(row["event_id"])
-                pdg = int(row["pdg"])
-                detector_id = int(row["detector_id"])
-                kinetic_energy = float(row["post_kinetic_energy_MeV"])
-                energy_deposit = float(row["energy_deposit_MeV"])
-            except (TypeError, ValueError) as error:
-                raise ValueError(
-                    "%s has invalid numeric data at line %i"
-                    % (path.name, line_number)
-                ) from error
+        row_count += 1
+        first_event = event_id if first_event is None else min(first_event, event_id)
+        last_event = event_id if last_event is None else max(last_event, event_id)
+        event_counts[event_id] += 1
+        particle_counts[pdg] += 1
+        process_counts[process_name(row["step_process"]) or "unknown"] += 1
+        detector_counts[detector_id] += 1
+        detector_deposit[detector_id] += energy_deposit
 
-            if not np.isfinite(kinetic_energy) or not np.isfinite(energy_deposit):
-                raise ValueError(
-                    "%s has non-finite numeric data at line %i"
-                    % (path.name, line_number)
-                )
-
-            row_count += 1
-            first_event = event_id if first_event is None else min(first_event, event_id)
-            last_event = event_id if last_event is None else max(last_event, event_id)
-            event_counts[event_id] += 1
-            particle_counts[pdg] += 1
-            process_counts[row["step_process"] or "unknown"] += 1
-            detector_counts[detector_id] += 1
-            detector_deposit[detector_id] += energy_deposit
-
-            if kinetic_energy <= 0 or sample_limit <= 0:
-                continue
-            positive_energy_rows += 1
-            sample_row = (detector_id, kinetic_energy)
-            if len(energy_sample) < sample_limit:
-                energy_sample.append(sample_row)
-                continue
-            replacement = random_generator.randrange(positive_energy_rows)
-            if replacement < sample_limit:
-                energy_sample[replacement] = sample_row
+        if kinetic_energy <= 0 or sample_limit <= 0:
+            continue
+        positive_energy_rows += 1
+        sample_row = (detector_id, kinetic_energy)
+        if len(energy_sample) < sample_limit:
+            energy_sample.append(sample_row)
+            continue
+        replacement = random_generator.randrange(positive_energy_rows)
+        if replacement < sample_limit:
+            energy_sample[replacement] = sample_row
 
     if not row_count:
         raise ValueError(path.name + " contains no step records")
@@ -158,7 +110,7 @@ def _plot_counts(axis, counts, title, xlabel, labels):
 def plot_step_trace(simname, summary=None):
     """Create a bounded-memory overview of an AtRIS mode-1 step trace."""
     if summary is None:
-        summary = read_step_trace(simname + ".asci")
+        summary = read_step_trace(simname + ".steps.binary")
     detector_ids = sorted(summary["detector_counts"])
     geometry_path = Path(simname + ".gdml")
     layers = read_layers(geometry_path)
@@ -293,33 +245,24 @@ def _read_event_steps(filename, event_id):
     parent_ids = []
     step_processes = []
     track_ids = set()
-    with Path(filename).open(newline="") as trace:
-        trace.readline()
-        reader = csv.DictReader(trace)
-        for line_number, row in enumerate(reader, start=3):
-            try:
-                if int(row["event_id"]) != event_id:
-                    continue
-                pre_position = [
-                    float(row["pre_x_km"]),
-                    float(row["pre_y_km"]),
-                    float(row["pre_z_km"]),
-                ]
-                post_position = [
-                    float(row["post_x_km"]),
-                    float(row["post_y_km"]),
-                    float(row["post_z_km"]),
-                ]
-                particle_codes.append(int(row["pdg"]))
-                parent_ids.append(int(row["parent_id"]))
-                step_processes.append(row["step_process"])
-                track_ids.add(int(row["track_id"]))
-            except (TypeError, ValueError) as error:
-                raise ValueError(
-                    "%s has invalid trajectory data at line %i"
-                    % (Path(filename).name, line_number)
-                ) from error
-            segments.append((pre_position, post_position))
+    for row in read_step_records(filename):
+        if int(row["event_id"]) != event_id:
+            continue
+        pre_position = [
+            float(row["pre_x_km"]),
+            float(row["pre_y_km"]),
+            float(row["pre_z_km"]),
+        ]
+        post_position = [
+            float(row["post_x_km"]),
+            float(row["post_y_km"]),
+            float(row["post_z_km"]),
+        ]
+        particle_codes.append(int(row["pdg"]))
+        parent_ids.append(int(row["parent_id"]))
+        step_processes.append(process_name(row["step_process"]))
+        track_ids.add(int(row["track_id"]))
+        segments.append((pre_position, post_position))
     if not segments:
         raise ValueError("Event %i has no recorded steps" % event_id)
     return (
@@ -351,7 +294,7 @@ def _local_shower_coordinates(segments):
 
 def plot_shower(simname, summary=None):
     """Plot the mode-1 event with the largest number of recorded steps."""
-    trace_path = Path(simname + ".asci")
+    trace_path = Path(simname + ".steps.binary")
     if summary is None:
         summary = read_step_trace(trace_path)
     event_id, step_count = summary["event_counts"].most_common(1)[0]
@@ -453,7 +396,7 @@ def plot_shower(simname, summary=None):
 
 def plot_mode_one_output(simname):
     """Write aggregate and per-event plots for one mode-1 trace."""
-    summary = read_step_trace(simname + ".asci")
+    summary = read_step_trace(simname + ".steps.binary")
     return [
         plot_step_trace(simname, summary),
         plot_shower(simname, summary),

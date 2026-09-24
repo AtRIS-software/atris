@@ -85,6 +85,21 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 2              number of numbered phantom pairs to load
 ```
 
+Mode `-1` writes the standard histogram output. Mode `0` adds particle records
+at layer interfaces in `<name>.binary`. Mode `1` writes the same interface file
+and adds one transport-step record per step in `<name>.steps.binary`; this can
+produce much more data than the other modes.
+
+Inspect either binary format as a CSV stream with `atris-dump`:
+
+```bash
+atris-dump protons.binary | head
+atris-dump protons.steps.binary | head
+```
+
+`head` closes the pipe after its requested number of lines. The dumper then
+stops reading; neither command modifies the binary file.
+
 Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 
 An existing macro containing `/run/numberOfThreads` retains that setting unless
@@ -232,7 +247,7 @@ power laws fitted to the most recent half of the completed chunks and
 extrapolated through the planned run. Both axes are logarithmic so their slopes
 can be compared directly.
 
-When a mode-1 step trace is present, `atris-plot` writes two images. An image
+When a mode-1 binary step trace is present, `atris-plot` writes two images. An image
 such as `protons.steps.png` summarizes particle species, step-defining
 processes, shower development by atmospheric layer, and the kinetic-energy
 distribution through the atmosphere. `protons.shower.png` shows the event

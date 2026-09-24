@@ -3,8 +3,10 @@ from pathlib import Path
 
 import numpy as np
 
+from .binary_output import INTERFACE_RECORDS
 from .cli import HelpFormatter
-from .interface_output import read_binary, records_to_columns
+from .dump import read_binary_output
+from .interface_output import records_to_columns
 
 
 def main():
@@ -15,7 +17,7 @@ def main():
             "binary to the historical five-column ASCII format."
         ),
         epilog=(
-            "The output defaults to the input basename with an .asci suffix, "
+            "The output defaults to the input basename with an .ascii suffix, "
             "replacing an existing file. The binary input is retained. This "
             "command does not gather chunks, post-process response histograms, "
             "or make plots; the binary representation remains faster and "
@@ -33,14 +35,17 @@ def main():
         "--output",
         type=Path,
         metavar="ASCII_FILE",
-        help="ASCII file to write (default: input basename with .asci suffix).",
+        help="ASCII file to write (default: input basename with .ascii suffix).",
     )
     args = parser.parse_args()
 
     input_path = args.binary_file
-    output_path = args.output or input_path.with_suffix(".asci")
+    output_path = args.output or input_path.with_suffix(".ascii")
     print("### AtRIS: reading binary data....", end="")
-    d = records_to_columns(read_binary(input_path))
+    record_type, records, _ = read_binary_output(input_path)
+    if record_type != INTERFACE_RECORDS:
+        raise ValueError(str(input_path) + " does not contain interface records")
+    d = records_to_columns(records)
     print(".........done.")
     print("### AtRIS: now saving the data....", end="")
     fmt = "%i %i %i %f %f"

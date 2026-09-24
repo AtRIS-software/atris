@@ -3,7 +3,8 @@ import sys
 import numpy as np
 import pytest
 
-from atris_tools import bin2asci
+from atris_tools import bin2ascii
+from atris_tools.binary_output import INTERFACE_RECORDS, write_header
 from atris_tools.interface_output import (
     BINARY_DTYPE,
     read_ascii,
@@ -23,10 +24,16 @@ SAMPLE_RECORDS = np.array(
 )
 
 
+def write_binary(path, records=SAMPLE_RECORDS):
+    with path.open("wb") as stream:
+        write_header(stream, INTERFACE_RECORDS, BINARY_DTYPE.itemsize)
+        records.tofile(stream)
+
+
 def test_read_binary_and_ascii_return_the_same_records(tmp_path):
     binary_path = tmp_path / "protons.binary"
-    ascii_path = tmp_path / "protons.asci"
-    SAMPLE_RECORDS.tofile(binary_path)
+    ascii_path = tmp_path / "protons.ascii"
+    write_binary(binary_path)
     np.savetxt(ascii_path, records_to_columns(SAMPLE_RECORDS))
 
     np.testing.assert_array_equal(read_binary(binary_path), SAMPLE_RECORDS)
@@ -34,9 +41,9 @@ def test_read_binary_and_ascii_return_the_same_records(tmp_path):
 
 
 def test_read_interface_output_prefers_binary(tmp_path):
-    SAMPLE_RECORDS.tofile(tmp_path / "protons.binary")
+    write_binary(tmp_path / "protons.binary")
     np.savetxt(
-        tmp_path / "protons.asci",
+        tmp_path / "protons.ascii",
         records_to_columns(SAMPLE_RECORDS[:1]),
     )
 
@@ -48,31 +55,45 @@ def test_read_interface_output_prefers_binary(tmp_path):
 
 def test_read_binary_rejects_incomplete_record(tmp_path):
     path = tmp_path / "protons.binary"
-    path.write_bytes(b"incomplete")
+    with path.open("wb") as stream:
+        write_header(stream, INTERFACE_RECORDS, BINARY_DTYPE.itemsize)
+        stream.write(b"incomplete")
 
     with pytest.raises(ValueError, match="complete 16-byte records"):
         read_binary(path)
 
 
+def test_read_binary_accepts_legacy_headerless_records(tmp_path):
+    path = tmp_path / "legacy.binary"
+    SAMPLE_RECORDS.tofile(path)
+
+    np.testing.assert_array_equal(read_binary(path), SAMPLE_RECORDS)
+
+
 def test_binary_to_ascii_uses_shared_reader(tmp_path, monkeypatch):
-    SAMPLE_RECORDS.tofile(tmp_path / "protons.binary")
+    write_binary(tmp_path / "protons.binary")
     monkeypatch.setattr(
         sys,
         "argv",
         ["atris-bin-to-ascii", str(tmp_path / "protons.binary")],
     )
 
-    bin2asci.main()
+    bin2ascii.main()
 
+    assert (tmp_path / "protons.ascii").read_text() == (
+        "2212 2 125 100.000000 100.000000\n"
+        "22 3 45 12.500000 100.000000\n"
+        "11 4 92 1.250000 10.000000\n"
+    )
     np.testing.assert_array_equal(
-        read_ascii(tmp_path / "protons.asci"), SAMPLE_RECORDS
+        read_ascii(tmp_path / "protons.ascii"), SAMPLE_RECORDS
     )
 
 
 def test_binary_to_ascii_accepts_output_path(tmp_path, monkeypatch):
     input_path = tmp_path / "protons.binary"
     output_path = tmp_path / "particles.txt"
-    SAMPLE_RECORDS.tofile(input_path)
+    write_binary(input_path)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -84,6 +105,6 @@ def test_binary_to_ascii_accepts_output_path(tmp_path, monkeypatch):
         ],
     )
 
-    bin2asci.main()
+    bin2ascii.main()
 
     np.testing.assert_array_equal(read_ascii(output_path), SAMPLE_RECORDS)

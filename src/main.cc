@@ -4,6 +4,7 @@
 #include "G4UImanager.hh"
 #include "G4GDMLParser.hh"
 
+#include "BinaryOutput.hh"
 #include "DetectorConstruction.hh"
 #include "UserActionInitialization.hh"
 #include "Randomize.hh"
@@ -113,7 +114,7 @@ int main(int argc,char** argv){
 	G4cout << "\t\t "<< prefix <<"_h2_h2.dir.csv\t:: source direction distribution" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h2_h2.pos.csv\t:: source position distribution" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h2_h2.ion.csv\t:: resulting ionization histrogram" << G4endl;
-	G4cout << "\t\t "<< prefix <<".asci\t\t::        mode 1 ascii output" << G4endl;
+	G4cout << "\t\t "<< prefix <<".steps.binary\t:: mode 1 binary step output" << G4endl;
 	G4cout << "\t\t "<< prefix <<".log\t\t::         detailed log file" << G4endl;
 	G4cout << "\t\t "<< prefix <<".error\t\t::       error stream file" << G4endl;
 	*/
@@ -168,32 +169,42 @@ int main(int argc,char** argv){
 		}
 		return -1;
 	}
-	if (mode == 0){
+	if ((mode == 0) or (mode == 1)){
 		G4String bFN = outputFileName + (G4String) ".binary";
 		G4cout << "### AtRIS: opening file:" << bFN << G4endl;
 		tuples1 = std::fopen(bFN,"wb");
-
+		if (
+			tuples1 == nullptr
+			or not atris::WriteBinaryHeader(
+				tuples1,
+				atris::BinaryRecordType::Interface,
+				sizeof(atris::InterfaceRecord)
+			)
+		) {
+			G4cerr << "### AtRIS: unable to open interface output: " << bFN << G4endl;
+			delete runManager;
+			return 1;
+		}
 	}
 	if (mode == 1){
-		G4String traceFileName = outputFileName + (G4String) ".asci";
+		G4String traceFileName = outputFileName + (G4String) ".steps.binary";
 		G4cout << "### AtRIS: opening step trace: " << traceFileName << G4endl;
-		G4cout << "### AtRIS: mode 1 writes one ASCII row per transport step; output may be very large" << G4endl;
-		stepTrace = std::fopen(traceFileName, "w");
+		G4cout << "### AtRIS: mode 1 writes one binary record per transport step; output may be very large" << G4endl;
+		stepTrace = std::fopen(traceFileName, "wb");
 		if (stepTrace == nullptr) {
 			G4cerr << "### AtRIS: unable to open step trace: " << traceFileName << G4endl;
 			delete runManager;
 			return 1;
 		}
-		std::fputs("# AtRIS step trace version 1\n", stepTrace);
-		std::fputs(
-			"event_id,track_id,parent_id,step_id,pdg,detector_id,"
-			"pre_x_km,pre_y_km,pre_z_km,post_x_km,post_y_km,post_z_km,"
-			"pre_kinetic_energy_MeV,post_kinetic_energy_MeV,"
-			"energy_deposit_MeV,nonionizing_energy_deposit_MeV,"
-			"step_length_m,global_time_ns,primary_energy_MeV,"
-			"creator_process,step_process\n",
-			stepTrace
-		);
+		if (not atris::WriteBinaryHeader(
+			stepTrace,
+			atris::BinaryRecordType::Step,
+			sizeof(atris::StepRecord)
+		)) {
+			G4cerr << "### AtRIS: unable to write step trace header: " << traceFileName << G4endl;
+			delete runManager;
+			return 1;
+		}
 	}
 
 	// DEACT atris::PrimaryGeneratorAction *pga = new atris::PrimaryGeneratorAction;
@@ -223,7 +234,7 @@ int main(int argc,char** argv){
 	} else {
 		G4cerr << "### AtRIS: macro execution failed with Geant4 status " << commandStatus << G4endl;
 	}
-	if (mode == 0) {std::fclose(tuples1);}
+	if ((mode == 0) or (mode == 1)) {std::fclose(tuples1);}
 	if (mode == 1) {std::fclose(stepTrace);}
 	delete runManager;
 	G4cout << "### AtRIS: The logfile has been sucessfully closed... " << G4endl;

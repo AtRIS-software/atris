@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 
 from atris_tools import plotting
+from atris_tools.binary_output import INTERFACE_RECORDS, write_header
 from atris_tools.interface_output import BINARY_DTYPE, records_to_columns
 
 
-@pytest.mark.parametrize("extension", ["binary", "asci"])
+@pytest.mark.parametrize("extension", ["binary", "ascii"])
 def test_plot_interface_output_reads_binary_or_ascii_and_ignores_invalid_energy(
     tmp_path, monkeypatch, caplog, extension, gdml_text
 ):
@@ -23,7 +24,9 @@ def test_plot_interface_output_reads_binary_or_ascii_and_ignores_invalid_energy(
     )
     path = tmp_path / ("protons." + extension)
     if extension == "binary":
-        records.tofile(path)
+        with path.open("wb") as stream:
+            write_header(stream, INTERFACE_RECORDS, BINARY_DTYPE.itemsize)
+            records.tofile(stream)
     else:
         np.savetxt(path, records_to_columns(records))
     (tmp_path / "protons.gdml").write_text(gdml_text)

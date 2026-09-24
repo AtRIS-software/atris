@@ -19,6 +19,7 @@
 #include "G4CsvAnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
 #include "G4AutoLock.hh"
+#include "BinaryOutput.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
 #include "G4VProcess.hh"
@@ -43,10 +44,6 @@ G4Mutex stepTraceMutex;
 
 namespace atris {
 
-G4int intsize     = sizeof(G4int);
-G4int floatsize   = sizeof(G4float);
-G4int ushortsize  = sizeof(unsigned short);
-G4int ucharsize   = sizeof(unsigned char);
 G4double icrustep = 0.02;
 
 G4Allocator<SDHit>* SDHit::SDHitAllocator = nullptr;
@@ -107,18 +104,13 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			? stepProcess->GetProcessName()
 			: "none";
 
-		G4AutoLock lock(&stepTraceMutex);
-		std::fprintf(
-			stepTrace,
-			"%d,%d,%d,%d,%d,%d,"
-			"%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,"
-			"%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%s,%s\n",
-			event ? event->GetEventID() : -1,
-			trk->GetTrackID(),
-			trk->GetParentID(),
-			trk->GetCurrentStepNumber(),
-			trk->GetParticleDefinition()->GetPDGEncoding(),
-			detid,
+		StepRecord record = {
+			static_cast<std::int32_t>(event ? event->GetEventID() : -1),
+			static_cast<std::int32_t>(trk->GetTrackID()),
+			static_cast<std::int32_t>(trk->GetParentID()),
+			static_cast<std::int32_t>(trk->GetCurrentStepNumber()),
+			static_cast<std::int32_t>(trk->GetParticleDefinition()->GetPDGEncoding()),
+			static_cast<std::int32_t>(detid),
 			prePosition.x()/km,
 			prePosition.y()/km,
 			prePosition.z()/km,
@@ -132,9 +124,24 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			step->GetStepLength()/m,
 			postPoint->GetGlobalTime()/ns,
 			einp/MeV,
-			creatorName.c_str(),
+			{},
+			{}
+		};
+		std::snprintf(
+			record.creatorProcess,
+			sizeof(record.creatorProcess),
+			"%s",
+			creatorName.c_str()
+		);
+		std::snprintf(
+			record.stepProcess,
+			sizeof(record.stepProcess),
+			"%s",
 			stepProcessName.c_str()
 		);
+
+		G4AutoLock lock(&stepTraceMutex);
+		std::fwrite(&record, sizeof(record), 1, stepTrace);
 	}
 	if (detid == 0){
 		trk->SetTrackStatus(fStopAndKill);
@@ -149,7 +156,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	// mode -1:      dose rate determination
 	// mode 0:   	 output binary data for all atmospheric sheets, at sheet interface
 	//         	 purpose: altitude particle profiles
-	// mode 1: 	 output asci data at each step 
+	// mode 1: 	 output binary data at each step
 	//           	 purpose: shower visualization
 
 	//before the step, the particle should have been at the boundary. 
@@ -217,26 +224,16 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			}
 		}
 
-		if (mode == 0) {
-			G4float       esource      = (G4float) einp;
-			G4float       ekinf         = (G4float) pre->GetKineticEnergy();
-			unsigned short entering    = (unsigned short) diid;
-			unsigned short sangle        = (unsigned short)std::round(inclination/deg);
-			//G4int is a 4 byte signed integer and this size is necessary to be able to hold ions
-			// Here casting is essential, since otherwise fwrite makes wierd stuff.
-			//G4cout << "angle before casting " << inclination/deg << G4endl;
-			//G4cout << "angle before writing " << angle << " and diid " << diid << G4endl;
-			// Now we have everything: PDG code, kinetic energy, inclination, altitude
-			// For rescaling we will also include input energy. Because of the variability of input
-			// energy, and the sequential nature of the simulation, this is enough info to discriminate 
-			// between daughters of different parent particles. 
+		if ((mode == 0) or (mode == 1)) {
+			const InterfaceRecord record = {
+				static_cast<std::int32_t>(partPDG),
+				static_cast<std::uint16_t>(diid),
+				static_cast<std::uint16_t>(std::round(inclination/deg)),
+				static_cast<float>(pre->GetKineticEnergy()),
+				static_cast<float>(einp),
+			};
 			G4AutoLock lock(&binaryOutputMutex);
-			std::fwrite(&partPDG,intsize,1,tuples1);
-			std::fwrite(&entering,ushortsize,1,tuples1);
-			std::fwrite(&sangle,ushortsize,1,tuples1);
-			//fwrite(&inclination,floatsize,1,tuples1);
-			std::fwrite(&ekinf,floatsize,1,tuples1);
-			std::fwrite(&esource,floatsize,1,tuples1);
+			std::fwrite(&record, sizeof(record), 1, tuples1);
 		}
 	}
 
