@@ -237,7 +237,11 @@ int main(int argc,char** argv){
 	if ((mode == 0) or (mode == 1)) {std::fclose(tuples1);}
 	if (mode == 1) {std::fclose(stepTrace);}
 	delete runManager;
-	G4cout << "### AtRIS: The logfile has been sucessfully closed... " << G4endl;
+	if (commandStatus == 0) {
+		G4cout << "### AtRIS: Run completed successfully." << G4endl;
+	} else {
+		G4cerr << "### AtRIS: Run failed." << G4endl;
+	}
 	return commandStatus == 0 ? 0 : 1;
 }
 
