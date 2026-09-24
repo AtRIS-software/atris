@@ -5,6 +5,8 @@ import logging
 import sys
 import textwrap
 
+from .version import report_versions
+
 try:
     import colorlog
 except ImportError:
@@ -43,6 +45,27 @@ class HelpFormatter(argparse.HelpFormatter):
                 )
             )
         return "\n".join(rendered)
+
+
+class VersionAction(argparse.Action):
+    """Report the Python tools and C++ executable versions and exit."""
+
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        report_versions()
+        parser.exit()
+
+
+def add_version_argument(parser):
+    """Add --version to modern atris-* commands."""
+    if parser.prog.startswith("atris-"):
+        parser.add_argument(
+            "--version",
+            action=VersionAction,
+            help="Show the AtRIS and atris-tools versions and exit.",
+        )
 
 
 def add_logging_arguments(parser):

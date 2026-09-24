@@ -1,4 +1,4 @@
-from atris_tools.version_command import (
+from atris_tools.version import (
     git_describe_to_pep440,
     shorten_pep440_commit,
     versions_match,

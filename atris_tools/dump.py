@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 from .binary_output import INTERFACE_RECORDS, STEP_RECORDS, read_header
-from .cli import HelpFormatter
+from .cli import HelpFormatter, add_version_argument
 from .interface_output import BINARY_DTYPE, read_binary
 from .step_output import STEP_DTYPE, process_name, read_step_records
 
@@ -69,6 +69,7 @@ def main():
         metavar="BINARY_FILE",
         help="AtRIS .binary or .steps.binary file to dump.",
     )
+    add_version_argument(parser)
     args = parser.parse_args()
     try:
         dump_binary(args.binary_file, sys.stdout)

@@ -10,7 +10,12 @@ import tempfile
 
 import numpy as np
 
-from .cli import HelpFormatter, add_logging_arguments, configure_logging
+from .cli import (
+    HelpFormatter,
+    add_logging_arguments,
+    add_version_argument,
+    configure_logging,
+)
 from .postprocess import process_psf
 
 
@@ -632,6 +637,7 @@ def main():
         help="Simulation prefixes to gather (default: protons alphas).",
     )
     add_logging_arguments(parser)
+    add_version_argument(parser)
     args = parser.parse_args()
 
     configure_logging(args.log_level)

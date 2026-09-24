@@ -4,7 +4,12 @@ import os
 import shutil
 from pathlib import Path
 
-from .cli import HelpFormatter, add_logging_arguments, configure_logging
+from .cli import (
+    HelpFormatter,
+    add_logging_arguments,
+    add_version_argument,
+    configure_logging,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -166,6 +171,7 @@ def main():
         ),
     )
     add_logging_arguments(parser)
+    add_version_argument(parser)
     args = parser.parse_args()
     configure_logging(args.log_level)
 

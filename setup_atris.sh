@@ -52,11 +52,11 @@ run 'export PATH="$ATRIS_ROOT/build:$PATH"'
 
 # Keep commands from the active Python environment. If none is on PATH, make
 # commands from a per-user pip installation available without assuming ~/.local.
-if ! command -v atris-version >/dev/null 2>&1
+if ! command -v atris-run >/dev/null 2>&1
 then
     if ! command -v python >/dev/null 2>&1
     then
-        echo "atris-version is not on PATH and python is unavailable." >&2
+        echo "AtRIS Python tools are not on PATH and python is unavailable." >&2
     elif python_user_base="$(python -m site --user-base)" &&
          [[ -n "$python_user_base" ]]
     then
@@ -71,9 +71,9 @@ run "source \"${geant4_dir[@]}/install/bin/geant4.sh\""
 
 # Check revisions quietly when both the local executable and tools exist.
 if [[ -x "$ATRIS_ROOT/build/AtRIS" ]] &&
-   command -v atris-version >/dev/null 2>&1
+   command -v atris-run >/dev/null 2>&1
 then
-    atris-version >/dev/null || echo "Warning: version check failed." >&2
+    atris-run --version >/dev/null || echo "Warning: version check failed." >&2
 fi
 
 unset atris_root geant4_dir python_user_base

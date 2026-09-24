@@ -11,7 +11,12 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .cli import HelpFormatter, add_logging_arguments, configure_logging
+from .cli import (
+    HelpFormatter,
+    add_logging_arguments,
+    add_version_argument,
+    configure_logging,
+)
 from .input_plotting import (
     log_norm,
     plot_inputs,
@@ -585,6 +590,7 @@ def main():
         help="Run directory to inspect (default: current directory).",
     )
     add_logging_arguments(parser)
+    add_version_argument(parser)
     args = parser.parse_args()
     configure_logging(args.log_level)
 

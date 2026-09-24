@@ -8,7 +8,12 @@ from pathlib import Path
 
 import numpy as np
 
-from .cli import HelpFormatter, add_logging_arguments, configure_logging
+from .cli import (
+    HelpFormatter,
+    add_logging_arguments,
+    add_version_argument,
+    configure_logging,
+)
 from .psf import load_psf
 
 
@@ -411,6 +416,7 @@ def main():
         ),
     )
     add_logging_arguments(parser)
+    add_version_argument(parser)
     args = parser.parse_args()
     configure_logging(args.log_level)
     if args.output is None:

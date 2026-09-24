@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .cli import HelpFormatter
+from .cli import HelpFormatter, add_version_argument
 from .psf import load_psf, read_psf_header
 
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
@@ -260,6 +260,7 @@ def main():
         metavar="GDML_FILE",
         help="GDML file to write (default: input basename with .gdml suffix).",
     )
+    add_version_argument(parser)
     args = parser.parse_args()
     psf2gdml(args.psf_file, args.output)
 

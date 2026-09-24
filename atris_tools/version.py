@@ -1,13 +1,10 @@
 """Report the Python tools and C++ executable versions."""
 
-import argparse
 from datetime import datetime, timezone
 from importlib.metadata import version
 import re
 import subprocess
 import sys
-
-from .cli import HelpFormatter
 
 
 GIT_DESCRIBE_VERSION = re.compile(
@@ -17,6 +14,7 @@ PEP440_COMMIT = re.compile(r"(\+g[0-9a-f]{7})[0-9a-f]+")
 
 
 def git_describe_to_pep440(git_version):
+    """Convert a git-describe version to its setuptools-scm equivalent."""
     match = GIT_DESCRIBE_VERSION.fullmatch(git_version)
     if match is None:
         return git_version.lstrip("v")
@@ -32,10 +30,12 @@ def git_describe_to_pep440(git_version):
 
 
 def shorten_pep440_commit(pep440_version):
+    """Shorten the commit component of a displayed PEP 440 version."""
     return PEP440_COMMIT.sub(r"\1", pep440_version)
 
 
 def versions_match(tools_version, executable_version):
+    """Return whether package and executable versions identify the same source."""
     executable_version = executable_version.lstrip("v")
     if "-g" not in executable_version:
         return tools_version == executable_version
@@ -47,24 +47,8 @@ def versions_match(tools_version, executable_version):
     return tools_commit.startswith(executable_commit)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        formatter_class=HelpFormatter,
-        description=(
-            "Report the installed atris-tools version and, when available, the "
-            "AtRIS executable version, then compare their source revisions."
-        ),
-        epilog=(
-            "The executable is found on PATH and queried with AtRIS --version; "
-            "no simulation is run and the Geant4 runtime is not validated. Git "
-            "describe versions are displayed in PEP 440 form: for example, "
-            "v3.1.0-5-gabcdef0 becomes 3.1.1.dev5+gabcdef0. If AtRIS cannot be "
-            "queried, the Python package version is still reported and the "
-            "executable version is shown as unavailable."
-        ),
-    )
-    parser.parse_args()
-
+def report_versions():
+    """Print the atris-tools and AtRIS executable versions."""
     tools_version = version("atris-tools")
     displayed_tools_version = shorten_pep440_commit(tools_version)
 
@@ -99,7 +83,3 @@ def main():
             + "; AtRIS " + displayed_executable_version + ").",
             file=sys.stderr,
         )
-
-
-if __name__ == "__main__":
-    main()

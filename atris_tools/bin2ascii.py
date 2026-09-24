@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from .binary_output import INTERFACE_RECORDS
-from .cli import HelpFormatter
+from .cli import HelpFormatter, add_version_argument
 from .dump import read_binary_output
 from .interface_output import records_to_columns
 
@@ -37,6 +37,7 @@ def main():
         metavar="ASCII_FILE",
         help="ASCII file to write (default: input basename with .ascii suffix).",
     )
+    add_version_argument(parser)
     args = parser.parse_args()
 
     input_path = args.binary_file

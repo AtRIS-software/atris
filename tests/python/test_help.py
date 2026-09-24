@@ -1,14 +1,10 @@
 import importlib
+from types import SimpleNamespace
 
 import pytest
 
 
 ENTRY_POINT_HELP = (
-    (
-        "atris-version",
-        "version_command",
-        ("no simulation is run", "geant4 runtime is not validated"),
-    ),
     (
         "atris-nrlmsis-to-psf",
         "nrlmsis2psf",
@@ -80,6 +76,17 @@ ENTRY_POINT_HELP = (
     ("bin2ascii", "bin2ascii", ("binary input is retained",)),
 )
 
+MODERN_ENTRY_POINTS = tuple(
+    (command, module_name)
+    for command, module_name, _ in ENTRY_POINT_HELP
+    if command.startswith("atris-")
+)
+LEGACY_ENTRY_POINTS = tuple(
+    (command, module_name)
+    for command, module_name, _ in ENTRY_POINT_HELP
+    if not command.startswith("atris-")
+)
+
 
 @pytest.mark.parametrize(("command", "module_name", "expected"), ENTRY_POINT_HELP)
 def test_entry_point_help_explains_scope(
@@ -96,3 +103,39 @@ def test_entry_point_help_explains_scope(
     assert help_text.startswith("usage: " + command)
     for text in expected:
         assert text in help_text
+
+
+@pytest.mark.parametrize(("command", "module_name"), MODERN_ENTRY_POINTS)
+def test_modern_entry_points_report_both_versions(
+    command, module_name, monkeypatch, capsys
+):
+    module = importlib.import_module("atris_tools." + module_name)
+    monkeypatch.setattr("sys.argv", [command, "--version"])
+    monkeypatch.setattr(
+        "atris_tools.version.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=0,
+            stdout="AtRIS v3.1.0\n",
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        module.main()
+
+    assert exit_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "AtRIS executable version (PEP 440): 3.1.0" in output
+    assert "atris-tools version (PEP 440):" in output
+
+
+@pytest.mark.parametrize(("command", "module_name"), LEGACY_ENTRY_POINTS)
+def test_legacy_entry_points_do_not_advertise_version(
+    command, module_name, monkeypatch, capsys
+):
+    module = importlib.import_module("atris_tools." + module_name)
+    monkeypatch.setattr("sys.argv", [command, "--help"])
+
+    with pytest.raises(SystemExit):
+        module.main()
+
+    assert "--version" not in capsys.readouterr().out

@@ -6,7 +6,12 @@ from pathlib import Path
 import subprocess
 import time
 
-from .cli import HelpFormatter, add_logging_arguments, configure_logging
+from .cli import (
+    HelpFormatter,
+    add_logging_arguments,
+    add_version_argument,
+    configure_logging,
+)
 from .gather import chunk_name, read_chunk_plan
 from .phantoms import read_phantoms
 
@@ -384,6 +389,7 @@ def main():
             "  Check whether every planned chunk has a completion marker."
         ),
     )
+    add_version_argument(parser)
     args = parser.parse_args()
     configure_logging(args.log_level)
 

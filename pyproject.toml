@@ -16,7 +16,6 @@ plot = ["matplotlib"]
 test = ["pytest", "matplotlib"]
 
 [project.scripts]
-atris-version = "atris_tools.version_command:main"
 atris-nrlmsis-to-psf = "atris_tools.nrlmsis2psf:main"
 atris-psf-to-gdml = "atris_tools.psf2gdml:main"
 atris-generate-macros = "atris_tools.atrismacrogen:main"
