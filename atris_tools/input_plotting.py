@@ -393,7 +393,6 @@ def _source_summary(settings, layers, energy_count):
             "Secondary production range cut: "
             + _setting(settings, "/run/setCut"),
             "Random seeds: " + _setting(settings, "/random/setSeeds"),
-            "Termination shells: excluded from y-axis limits",
         )
     )
     return "\n".join(lines)

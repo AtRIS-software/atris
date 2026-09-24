@@ -58,7 +58,7 @@ Merge and validate all downloaded tables while converting them to
 `simulation.psf`:
 
 ```bash
-nrlmsis2psf nrlmsis-*.txt
+nrlmsis2psf nrlmsis-*.txt --output simulation.psf
 ```
 
 The overlapping boundary rows allow the converter to replace a malformed row
@@ -69,7 +69,7 @@ non-finite, zero, or negative atmospheric values.
 Convert the PSF to the Geant4 geometry `simulation.gdml`:
 
 ```bash
-psf2gdml
+psf2gdml simulation.psf
 ```
 
 ## Prepare the particle inputs

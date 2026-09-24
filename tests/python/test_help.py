@@ -12,12 +12,12 @@ ENTRY_POINT_HELP = (
     (
         "atris-nrlmsis-to-psf",
         "nrlmsis2psf",
-        ("does not download atmosphere data", "replacing that file"),
+        ("does not download atmosphere data", "multiple input tables require --output"),
     ),
     (
         "atris-psf-to-gdml",
         "psf2gdml",
-        ("uses fixed filenames", "does not run atris"),
+        ("output defaults to the input basename", "does not run atris"),
     ),
     (
         "atris-generate-macros",
@@ -69,7 +69,7 @@ ENTRY_POINT_HELP = (
         "nrlmsis2psf",
         ("does not download atmosphere data",),
     ),
-    ("psf2gdml", "psf2gdml", ("uses fixed filenames",)),
+    ("psf2gdml", "psf2gdml", ("output defaults to the input basename",)),
     ("atrismacrogen", "atrismacrogen", ("refuses to overwrite",)),
     ("postprocess", "postprocess", ("does not gather chunk histograms",)),
     ("bin2ascii", "bin2asci", ("binary input is retained",)),

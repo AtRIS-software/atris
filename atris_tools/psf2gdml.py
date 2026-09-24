@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+from pathlib import Path
 
 import numpy as np
 
@@ -216,19 +217,24 @@ def gdml_compile(materials, world, geometry, structure, filename):
     f.write(finalfile)
     f.close()
 
-def psf2gdml():
-    materials, geometry, structure, world = line_processor("simulation.psf")
+def psf2gdml(input_path, output_path=None):
+    input_path = Path(input_path)
+    output_path = (
+        Path(output_path) if output_path else input_path.with_suffix(".gdml")
+    )
+    materials, geometry, structure, world = line_processor(input_path)
     gdml_compile(
         materials,
         world + 100,
         geometry,
         structure,
-        "simulation.gdml",
+        output_path,
     )
+    return output_path
 
 
 def main():
-    """Convert simulation.psf in the current directory to simulation.gdml."""
+    """Convert an AtRIS PSF file to GDML."""
     parser = argparse.ArgumentParser(
         formatter_class=HelpFormatter,
         description=(
@@ -236,14 +242,26 @@ def main():
             "geometry and material description read by Geant4."
         ),
         epilog=(
-            "This converter uses fixed filenames: it reads simulation.psf and "
-            "writes simulation.gdml in the current directory. It does not "
-            "download or generate an atmosphere and does not run AtRIS. An "
-            "existing simulation.gdml is replaced."
+            "The output defaults to the input basename with a .gdml suffix. "
+            "An existing output file is replaced. This command does not "
+            "download or generate an atmosphere and does not run AtRIS."
         ),
     )
-    parser.parse_args()
-    psf2gdml()
+    parser.add_argument(
+        "psf_file",
+        type=Path,
+        metavar="PSF_FILE",
+        help="PSF model to convert.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        metavar="GDML_FILE",
+        help="GDML file to write (default: input basename with .gdml suffix).",
+    )
+    args = parser.parse_args()
+    psf2gdml(args.psf_file, args.output)
 
 
 if __name__ == "__main__":

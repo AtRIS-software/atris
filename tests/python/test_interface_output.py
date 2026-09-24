@@ -56,11 +56,34 @@ def test_read_binary_rejects_incomplete_record(tmp_path):
 
 def test_binary_to_ascii_uses_shared_reader(tmp_path, monkeypatch):
     SAMPLE_RECORDS.tofile(tmp_path / "protons.binary")
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["atris-bin-to-ascii", "protons"])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["atris-bin-to-ascii", str(tmp_path / "protons.binary")],
+    )
 
     bin2asci.main()
 
     np.testing.assert_array_equal(
         read_ascii(tmp_path / "protons.asci"), SAMPLE_RECORDS
     )
+
+
+def test_binary_to_ascii_accepts_output_path(tmp_path, monkeypatch):
+    input_path = tmp_path / "protons.binary"
+    output_path = tmp_path / "particles.txt"
+    SAMPLE_RECORDS.tofile(input_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "atris-bin-to-ascii",
+            str(input_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    bin2asci.main()
+
+    np.testing.assert_array_equal(read_ascii(output_path), SAMPLE_RECORDS)

@@ -47,7 +47,7 @@ Convert the atmosphere to the Planet Specification Format file
 `simulation.psf`:
 
 ```bash
-nrlmsis2psf nrlmsis_output.txt
+nrlmsis2psf nrlmsis_output.txt --output simulation.psf
 ```
 
 The PSF describes the atmosphere's spherical layers, temperatures, densities,
@@ -55,7 +55,7 @@ pressures, compositions, and detector identifiers. Convert it to the Geant4
 geometry `simulation.gdml`:
 
 ```bash
-psf2gdml
+psf2gdml simulation.psf
 ```
 
 ## Prepare the particle inputs

@@ -6,6 +6,7 @@ from xml.etree import ElementTree
 import numpy as np
 import pytest
 
+import atris_tools.psf2gdml as psf2gdml_module
 from atris_tools.atrismacrogen import macroGenManager
 from atris_tools.psf2gdml import psf2gdml
 
@@ -85,9 +86,8 @@ def test_macro_generation_refuses_existing_inputs_before_writing(tmp_path):
 
 def test_psf_conversion_preserves_reviewed_layer_geometry(tmp_path, monkeypatch):
     shutil.copyfile(FIXTURE / "simulation.psf", tmp_path / "simulation.psf")
-    monkeypatch.chdir(tmp_path)
 
-    psf2gdml()
+    psf2gdml(tmp_path / "simulation.psf")
 
     generated = ElementTree.parse(tmp_path / "simulation.gdml").getroot()
     reviewed = ElementTree.parse(FIXTURE / "simulation.gdml").getroot()
@@ -107,3 +107,34 @@ def test_psf_conversion_preserves_reviewed_layer_geometry(tmp_path, monkeypatch)
         auxiliary.attrib["auxvalue"]
         for auxiliary in generated.findall("./structure/volume/auxiliary")
     ] == ["0", "1"]
+
+
+def test_psf_conversion_accepts_named_input(tmp_path, monkeypatch):
+    input_path = tmp_path / "mercury.psf"
+    shutil.copyfile(FIXTURE / "simulation.psf", input_path)
+    monkeypatch.setattr(
+        "sys.argv", ["atris-psf-to-gdml", str(input_path)]
+    )
+
+    psf2gdml_module.main()
+
+    assert (tmp_path / "mercury.gdml").is_file()
+
+
+def test_psf_conversion_accepts_output_path(tmp_path, monkeypatch):
+    input_path = tmp_path / "mercury.psf"
+    output_path = tmp_path / "geometry.gdml"
+    shutil.copyfile(FIXTURE / "simulation.psf", input_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "atris-psf-to-gdml",
+            str(input_path),
+            "--output",
+            str(output_path),
+        ],
+    )
+
+    psf2gdml_module.main()
+
+    assert output_path.is_file()

@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 import numpy as np
 
@@ -14,34 +15,36 @@ def main():
             "binary to the historical five-column ASCII format."
         ),
         epilog=(
-            "PREFIX.binary is read and PREFIX.asci is written, replacing an "
-            "existing ASCII file. The binary input is retained. This command "
-            "does not gather chunks, post-process response histograms, or make "
-            "plots; the binary representation remains faster and smaller for "
-            "normal analysis."
+            "The output defaults to the input basename with an .asci suffix, "
+            "replacing an existing file. The binary input is retained. This "
+            "command does not gather chunks, post-process response histograms, "
+            "or make plots; the binary representation remains faster and "
+            "smaller for normal analysis."
         ),
     )
     parser.add_argument(
-        "prefix",
-        metavar="PREFIX",
-        help="Input and output path without the .binary or .asci suffix.",
+        "binary_file",
+        type=Path,
+        metavar="BINARY_FILE",
+        help="AtRIS mode-0 binary file to convert.",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        metavar="ASCII_FILE",
+        help="ASCII file to write (default: input basename with .asci suffix).",
     )
     args = parser.parse_args()
 
-    docstr  = "Welcome to bin2ascii, a script which converts your 1.binary and 2.binary data\n"
-    docstr += "For data analysis we recomend working with the binary data. Please examine the\n"
-    docstr += "code of this script to se how. Binary data reads in approx 30 times faster and\n"
-    docstr += "consumes only 1/3 of the storage space\n"
-    docstr += "use:' python binary2asci.py prefix', where prefix corresponds to the name part\n"
-    docstr += "that comes before '.binary'\n"
-    print(docstr)
-    prefix  = args.prefix
+    input_path = args.binary_file
+    output_path = args.output or input_path.with_suffix(".asci")
     print("### AtRIS: reading binary data....", end="")
-    d = records_to_columns(read_binary(prefix + ".binary"))
+    d = records_to_columns(read_binary(input_path))
     print(".........done.")
     print("### AtRIS: now saving the data....", end="")
     fmt = "%i %i %i %f %f"
-    np.savetxt(prefix+".asci", d,fmt=fmt)
+    np.savetxt(output_path, d, fmt=fmt)
     print(".........done. Thank you for using this script")
     print("additional debuging")
     print("col 1:", np.min(d[:,0]), np.max(d[:,0]))
