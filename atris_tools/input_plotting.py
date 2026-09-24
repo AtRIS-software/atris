@@ -15,7 +15,6 @@ PHANTOM_ENERGY_EDGES_MEV = 10.0 ** np.linspace(-6.0, 7.0, 651)
 PHANTOM_ENERGIES_MEV = (
     PHANTOM_ENERGY_EDGES_MEV[:-1] + PHANTOM_ENERGY_EDGES_MEV[1:]
 ) / 2.0
-PROFILE_MARKER_LIMIT = 50
 MASS_FRACTION_PLOT_MINIMUM = 1.0e-12
 LENGTH_TO_KM = {
     "mm": 1.0e-6,
@@ -94,6 +93,11 @@ ELEMENT_SYMBOLS = (
     "Co",
     "Ni",
 )
+ELEMENT_ATOMIC_NUMBERS = {
+    symbol: atomic_number
+    for atomic_number, symbol in enumerate(ELEMENT_SYMBOLS)
+    if atomic_number > 0
+}
 
 
 def log_norm(data):
@@ -153,6 +157,17 @@ def particle_symbol(pdg_code):
             )
         return r"$^{%i}\mathrm{%s}$" % (mass_number, element)
     return str(pdg_code)
+
+
+def element_label(reference):
+    """Return a chemical symbol without Geant4's built-in name prefix."""
+    return reference.removeprefix("G4_")
+
+
+def element_sort_key(reference):
+    """Order recognized elements by atomic number, then custom references."""
+    label = element_label(reference)
+    return (ELEMENT_ATOMIC_NUMBERS.get(label, float("inf")), label)
 
 
 def _particle_groups(particle_codes):
@@ -251,9 +266,25 @@ def surface_radius(layers):
     return radius
 
 
-def shell_coordinates(layers, detector_ids=None, location="center"):
+def non_termination_layers(layers):
+    """Return every modeled shell between AtRIS's two termination volumes."""
+    outer_termination_id = max(layer["detector_id"] for layer in layers)
+    return [
+        layer
+        for layer in layers
+        if layer["detector_id"] not in (0, outer_termination_id)
+    ]
+
+
+def shell_coordinates(
+    layers, detector_ids=None, location="center", reference_radius=None
+):
     """Calculate signed physical coordinates for detector shells."""
-    radius = surface_radius(layers)
+    radius = (
+        surface_radius(layers)
+        if reference_radius is None
+        else reference_radius
+    )
 
     if detector_ids is not None:
         by_id = {layer["detector_id"]: layer for layer in layers}
@@ -284,9 +315,12 @@ def shell_coordinates(layers, detector_ids=None, location="center"):
     return detector_ids, positions, edges
 
 
-def setup_shell_axis(axis, positions, axis_name="y"):
+def setup_shell_axis(axis, positions, axis_name="y", symlog=True):
     """Label and scale a shell axis after its data have been drawn."""
     getattr(axis, "set_" + axis_name + "label")("Distance from surface [km]")
+    if not symlog:
+        getattr(axis, "set_" + axis_name + "scale")("linear")
+        return
     values = np.abs(positions)
     nonzero = values[np.isfinite(values) & (values > 0)]
     if nonzero.size:
@@ -299,7 +333,7 @@ def _setting(settings, command, default="not set"):
     return settings.get(command, default)
 
 
-def _source_summary(settings):
+def _source_summary(settings, layers, energy_count):
     position = " ".join(
         part
         for part in (
@@ -310,124 +344,220 @@ def _source_summary(settings):
     )
     radius = _setting(settings, "/gps/pos/radius")
     direction = _setting(settings, "/gps/ang/type")
+    if position == "Surface Sphere" and direction == "cos":
+        direction = "inward cosine law"
     theta = "%s to %s" % (
         _setting(settings, "/gps/ang/mintheta"),
         _setting(settings, "/gps/ang/maxtheta"),
     )
-    return "\n".join(
+    lines = [
+        "Particle: " + _setting(settings, "/gps/particle"),
+        "Position: " + position,
+    ]
+
+    radius_fields = settings.get("/gps/pos/radius", "").split()
+    radius_km = None
+    if len(radius_fields) == 2 and radius_fields[1] in LENGTH_TO_KM:
+        radius_km = float(radius_fields[0]) * LENGTH_TO_KM[radius_fields[1]]
+    if radius_km is not None:
+        planet_radius_km = surface_radius(layers)
+        lines.append("Planet surface radius: %.3f km" % planet_radius_km)
+        modeled_layers = non_termination_layers(layers)
+        if modeled_layers:
+            model_radius_km = max(layer["rmax"] for layer in modeled_layers)
+            lines.append(
+                "Modeled shell outer radius: %.3f km" % model_radius_km,
+            )
+            lines.append("Modeled layers: %i" % len(modeled_layers))
+        lines.extend(
+            (
+                "Source sphere radius: " + radius,
+                "Altitude above surface: %.3f km"
+                % (radius_km - planet_radius_km),
+            )
+        )
+        if modeled_layers:
+            clearance_m = (radius_km - model_radius_km) * 1000
+            lines.append("Model clearance: %.3f m" % clearance_m)
+    else:
+        lines.append("Source sphere radius: " + radius)
+
+    lines.append("Configured energies: %i" % energy_count)
+    lines.extend(
         (
-            "Particle: " + _setting(settings, "/gps/particle"),
-            "Position: " + position,
-            "Radius: " + radius,
             "Direction: " + direction,
-            "Theta: " + theta,
+            "Incidence angle: " + theta,
             "Particles per event: " + _setting(settings, "/gps/number"),
             "Events: " + _setting(settings, "/run/beamOn"),
             "Threads in macro: " + _setting(settings, "/run/numberOfThreads"),
-            "Production cut: " + _setting(settings, "/run/setCut"),
+            "Secondary production range cut: "
+            + _setting(settings, "/run/setCut"),
             "Random seeds: " + _setting(settings, "/random/setSeeds"),
+            "Termination shells: excluded from y-axis limits",
         )
+    )
+    return "\n".join(lines)
+
+
+def _mark_model_bounds(axis, edges):
+    axis.axhline(edges[0], color="black", zorder=10)
+    axis.axhline(edges[-1], color="black", zorder=10)
+    lower_limit, upper_limit = axis.get_ylim()
+    axis.text(
+        0.5,
+        (lower_limit + edges[0]) / 2.0,
+        "Ground",
+        transform=axis.get_yaxis_transform(),
+        ha="center",
+        va="center",
+        zorder=10,
+    )
+    axis.text(
+        0.5,
+        (edges[-1] + upper_limit) / 2.0,
+        "Space",
+        transform=axis.get_yaxis_transform(),
+        ha="center",
+        va="center",
+        zorder=10,
     )
 
 
-def _plot_profile(axis, values, positions, title, xlabel, logarithmic=False):
-    marker = "o" if len(positions) <= PROFILE_MARKER_LIMIT else None
-    axis.plot(values, positions, marker=marker)
-    setup_shell_axis(axis, positions)
-    axis.set_title(title)
-    axis.set_xlabel(xlabel)
-    if logarithmic and np.any(np.asarray(values) > 0):
+def _plot_shell_profiles(
+    axis,
+    temperature_axis,
+    density,
+    pressure,
+    temperature,
+    positions,
+    edges,
+    model_edges,
+):
+    _mark_model_bounds(temperature_axis, model_edges)
+    temperature_axis.set_ylim(temperature_axis.get_ylim())
+    density_curve = axis.stairs(
+        density,
+        edges,
+        orientation="horizontal",
+        color="C0",
+    )
+    pressure_curve = axis.stairs(
+        pressure,
+        edges,
+        orientation="horizontal",
+        color="C1",
+    )
+    temperature_curve = temperature_axis.stairs(
+        temperature,
+        edges,
+        orientation="horizontal",
+        color="C2",
+    )
+    setup_shell_axis(axis, positions, symlog=False)
+    axis.set_xlabel("Density [g/cm3] and pressure [Pa]")
+    temperature_axis.set_xlabel("Temperature [K]")
+    if np.any(np.asarray(density) > 0) or np.any(np.asarray(pressure) > 0):
         axis.set_xscale("log")
+    axis.minorticks_on()
+    temperature_axis.minorticks_on()
     axis.grid(alpha=0.25)
+    temperature_axis.legend(
+        [density_curve, pressure_curve, temperature_curve],
+        ["Density", "Pressure", "Temperature"],
+    )
 
 
 def plot_species_inputs(simname):
     settings, energy_points = read_macro(simname + ".mac")
     energy_bins = np.atleast_1d(np.loadtxt(simname + ".bins"))
-    layers = read_layers(simname + ".gdml")
-    _, positions, _ = shell_coordinates(layers)
+    geometry_layers = read_layers(simname + ".gdml")
+    layers = non_termination_layers(geometry_layers)
+    radius = surface_radius(geometry_layers)
+    _, positions, model_edges = shell_coordinates(
+        layers, reference_radius=radius
+    )
+    _, _, edges = shell_coordinates(
+        geometry_layers, reference_radius=radius
+    )
 
-    figure, axes = plt.subplots(ncols=3, nrows=2, figsize=(18, 10))
+    figure = plt.figure(figsize=(18, 10))
+    grid = figure.add_gridspec(ncols=3, nrows=2)
+    shell_axis = figure.add_subplot(grid[:, 0])
+    composition_axis = figure.add_subplot(grid[:, 1], sharey=shell_axis)
+    settings_axis = figure.add_subplot(grid[0, 2])
+    energy_axis = figure.add_subplot(grid[1, 2])
+    temperature_axis = shell_axis.twiny()
     species = simname.capitalize()
+    figure.suptitle(species + " simulation inputs")
 
     if energy_points.size:
-        axes[0, 0].stairs(
+        energy_axis.bar(
+            energy_points[:-1, 0],
             energy_points[1:, 1],
-            energy_points[:, 0],
-            baseline=0.0,
-            label="Macro weight",
+            width=np.diff(energy_points[:, 0]),
+            align="edge",
+            alpha=0.25,
+            edgecolor="C0",
+            linewidth=0.5,
         )
-    axes[0, 0].plot(
-        energy_bins,
-        np.zeros(energy_bins.shape),
-        linestyle="none",
-        marker="|",
-        markersize=10,
-        label="Output energy bin",
-    )
-    axes[0, 0].set_title(species + " configured energies")
-    axes[0, 0].set_xlabel("Primary kinetic energy [MeV]")
-    axes[0, 0].set_ylabel("Configured weight")
-    axes[0, 0].set_xscale("log")
-    axes[0, 0].legend()
-    axes[0, 0].grid(alpha=0.25)
+    energy_axis.set_title("Configured energies")
+    energy_axis.set_xlabel("Primary kinetic energy [MeV]")
+    energy_axis.set_ylabel("Configured weight")
+    energy_axis.set_xscale("log")
+    energy_axis.minorticks_on()
+    energy_axis.grid(alpha=0.25)
 
-    _plot_profile(
-        axes[0, 1],
-        [layer["density"] for layer in layers],
+    _plot_shell_profiles(
+        shell_axis,
+        temperature_axis,
+        [layer["density"] for layer in geometry_layers],
+        [layer["pressure"] for layer in geometry_layers],
+        [layer["temperature"] for layer in geometry_layers],
         positions,
-        species + " shell density",
-        "Density [g/cm3]",
-        logarithmic=True,
-    )
-    _plot_profile(
-        axes[0, 2],
-        [layer["pressure"] for layer in layers],
-        positions,
-        species + " shell pressure",
-        "Pressure [Pa]",
-        logarithmic=True,
-    )
-    _plot_profile(
-        axes[1, 0],
-        [layer["temperature"] for layer in layers],
-        positions,
-        species + " shell temperature",
-        "Temperature [K]",
+        edges,
+        model_edges,
     )
 
     elements = sorted(
         {
             element
-            for layer in layers
+            for layer in geometry_layers
             for element in layer["fractions"]
-        }
+        },
+        key=element_sort_key,
     )
+    _mark_model_bounds(composition_axis, model_edges)
+    composition_axis.set_ylim(composition_axis.get_ylim())
     for element in elements:
         fractions = np.array(
-            [layer["fractions"].get(element, 0.0) for layer in layers]
+            [
+                layer["fractions"].get(element, 0.0)
+                for layer in geometry_layers
+            ]
         )
         fractions[fractions < MASS_FRACTION_PLOT_MINIMUM] = np.nan
-        marker = "o" if len(layers) <= PROFILE_MARKER_LIMIT else None
-        axes[1, 1].plot(
-            fractions, positions, marker=marker, label=element
+        composition_axis.stairs(
+            fractions,
+            edges,
+            orientation="horizontal",
+            label=element_label(element),
         )
-    setup_shell_axis(axes[1, 1], positions)
-    axes[1, 1].set_title(species + " shell composition")
-    axes[1, 1].set_xlabel(
+    composition_axis.tick_params(axis="y", labelleft=False)
+    composition_axis.set_xlabel(
         "Mass fraction (values below %.0e omitted)" % MASS_FRACTION_PLOT_MINIMUM
     )
-    axes[1, 1].set_xscale("log")
-    axes[1, 1].legend()
-    axes[1, 1].grid(alpha=0.25)
+    composition_axis.set_xscale("log")
+    composition_axis.minorticks_on()
+    composition_axis.legend()
+    composition_axis.grid(alpha=0.25)
 
-    axes[1, 2].axis("off")
-    axes[1, 2].set_title(species + " source and run settings")
-    axes[1, 2].text(
+    settings_axis.axis("off")
+    settings_axis.set_title("Source and run settings")
+    settings_axis.text(
         0.0,
         1.0,
-        _source_summary(settings),
-        transform=axes[1, 2].transAxes,
+        _source_summary(settings, geometry_layers, energy_bins.size),
+        transform=settings_axis.transAxes,
         va="top",
         family="monospace",
     )

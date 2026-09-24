@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import numpy as np
 
 from atris_tools import input_plotting
@@ -65,6 +67,20 @@ def test_read_macro_and_atmosphere(tmp_path, gdml_text):
     np.testing.assert_allclose(edges, [0.0, 1.0, 3.0])
 
 
+def test_non_termination_layers_accept_every_intermediate_material_type():
+    layers = [
+        {"detector_id": 0, "state": "solid"},
+        {"detector_id": 1, "state": "solid"},
+        {"detector_id": 2, "state": "liquid"},
+        {"detector_id": 3, "state": "gas"},
+        {"detector_id": 4, "state": "solid"},
+    ]
+
+    selected = input_plotting.non_termination_layers(layers)
+
+    assert [layer["detector_id"] for layer in selected] == [1, 2, 3]
+
+
 def test_particle_name_translates_standard_particles_and_nuclei():
     assert input_plotting.particle_name(22) == "photon"
     assert input_plotting.particle_name(-11) == "positron"
@@ -77,6 +93,131 @@ def test_particle_symbol_uses_compact_pdg_notation():
     assert input_plotting.particle_symbol(12) == r"$\nu_e$"
     assert input_plotting.particle_symbol(-11) == r"$e^{+}$"
     assert input_plotting.particle_symbol(1000020040) == r"$^{4}\mathrm{He}$"
+
+
+def test_elements_are_labelled_and_sorted_by_atomic_number():
+    references = ["G4_Si", "custom", "G4_O", "G4_H", "G4_He"]
+
+    ordered = sorted(references, key=input_plotting.element_sort_key)
+
+    assert ordered == ["G4_H", "G4_He", "G4_O", "G4_Si", "custom"]
+    assert [input_plotting.element_label(reference) for reference in ordered] == [
+        "H",
+        "He",
+        "O",
+        "Si",
+        "custom",
+    ]
+
+
+def test_shell_profiles_share_density_pressure_axis_and_twin_temperature_axis():
+    axis = Mock()
+    temperature_axis = Mock()
+    temperature_axis.get_ylim.return_value = (-0.15, 3.15)
+    density = np.array([1.0, 2.0])
+    pressure = np.array([10.0, 20.0])
+    temperature = np.array([250.0, 300.0])
+    positions = np.array([0.5, 2.0])
+    edges = np.array([0.0, 1.0, 3.0])
+
+    input_plotting._plot_shell_profiles(
+        axis,
+        temperature_axis,
+        density,
+        pressure,
+        temperature,
+        positions,
+        edges,
+        edges,
+    )
+
+    assert axis.stairs.call_count == 2
+    np.testing.assert_array_equal(axis.stairs.call_args_list[0].args[0], density)
+    np.testing.assert_array_equal(axis.stairs.call_args_list[1].args[0], pressure)
+    np.testing.assert_array_equal(
+        temperature_axis.stairs.call_args.args[0], temperature
+    )
+    for call in axis.stairs.call_args_list + [temperature_axis.stairs.call_args]:
+        np.testing.assert_array_equal(call.args[1], edges)
+        assert call.kwargs["orientation"] == "horizontal"
+    axis.set_yscale.assert_called_once_with("linear")
+    axis.set_xscale.assert_called_once_with("log")
+    axis.minorticks_on.assert_called_once_with()
+    temperature_axis.minorticks_on.assert_called_once_with()
+    axis.legend.assert_not_called()
+    temperature_axis.legend.assert_called_once()
+    temperature_axis.set_ylim.assert_called_once_with((-0.15, 3.15))
+    assert [
+        call.args[0] for call in temperature_axis.axhline.call_args_list
+    ] == [0.0, 3.0]
+    assert [call.args[2] for call in temperature_axis.text.call_args_list] == [
+        "Ground",
+        "Space",
+    ]
+    assert [call.args[1] for call in temperature_axis.text.call_args_list] == [
+        -0.075,
+        3.075,
+    ]
+    assert all(
+        call.kwargs == {"color": "black", "zorder": 10}
+        for call in temperature_axis.axhline.call_args_list
+    )
+    method_names = [call[0] for call in temperature_axis.method_calls]
+    assert max(
+        index for index, name in enumerate(method_names) if name == "axhline"
+    ) < method_names.index("set_ylim")
+    assert method_names.index("set_ylim") < method_names.index("stairs")
+
+
+def test_source_summary_explains_radius_and_atmosphere_clearance():
+    settings = {
+        "/gps/particle": "proton",
+        "/gps/pos/type": "Surface",
+        "/gps/pos/shape": "Sphere",
+        "/gps/pos/radius": "7421.001 km",
+        "/gps/ang/type": "cos",
+        "/gps/ang/mintheta": "0 deg",
+        "/gps/ang/maxtheta": "90 deg",
+        "/run/setCut": "100 m",
+    }
+    layers = [
+        {
+            "detector_id": 0,
+            "state": "solid",
+            "rmin": 0.0,
+            "rmax": 6370.98,
+        },
+        {
+            "detector_id": 1,
+            "state": "solid",
+            "rmin": 6370.98,
+            "rmax": 6371.0,
+        },
+        {
+            "detector_id": 2,
+            "state": "gas",
+            "rmin": 6371.0,
+            "rmax": 7421.0,
+        },
+        {
+            "detector_id": 3,
+            "state": "solid",
+            "rmin": 7421.001,
+            "rmax": 7421.021,
+        },
+    ]
+
+    summary = input_plotting._source_summary(settings, layers, 121)
+
+    assert "Planet surface radius: 6371.000 km" in summary
+    assert "Modeled shell outer radius: 7421.000 km" in summary
+    assert "Modeled layers: 2" in summary
+    assert "Source sphere radius: 7421.001 km" in summary
+    assert "Altitude above surface: 1050.001 km" in summary
+    assert "Model clearance: 1.000 m" in summary
+    assert "Configured energies: 121" in summary
+    assert "Direction: inward cosine law" in summary
+    assert "Secondary production range cut: 100 m" in summary
 
 
 def test_particle_groups_include_every_particle_once():
