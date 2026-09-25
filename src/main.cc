@@ -4,7 +4,6 @@
 #include "G4UImanager.hh"
 #include "G4GDMLParser.hh"
 
-#include "BinaryOutput.hh"
 #include "DetectorConstruction.hh"
 #include "UserActionInitialization.hh"
 #include "Randomize.hh"
@@ -24,8 +23,6 @@
 G4String outputFileName;
 G4int    mode = -1;
 G4int    nrofdetectors=0;
-FILE*    tuples1;
-
 // For holding phantom responses
 G4int nrphantoms;
 std::vector<G4int> useornot(4427,0);
@@ -108,7 +105,7 @@ int main(int argc,char** argv){
 	G4cout << "\t\t "<< prefix <<".equi2\t\t::       mode -1 custom equivalent dose rate output using second phantom" << G4endl;
 	G4cout << "\t\t "<< prefix <<".rates\t\t::       mode -1 custom count rate output using first phantom" << G4endl;
 	G4cout << "\t\t "<< prefix <<".rates2\t\t::      mode -1 custom count rate output using second phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<"0.binary\t\t::     mode 0 binary output (all interfaces)" << G4endl;
+	G4cout << "\t\t "<< prefix <<".root\t\t::       mode 0/1 ROOT ntuple output" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h1_h1.1.csv\t::   source energy distribution" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h2_h2.dir.csv\t:: source direction distribution" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h2_h2.pos.csv\t:: source position distribution" << G4endl;
@@ -167,22 +164,9 @@ int main(int argc,char** argv){
 		}
 		return -1;
 	}
-	if (mode == 0){
-		G4String bFN = outputFileName + (G4String) ".binary";
-		G4cout << "### AtRIS: opening file:" << bFN << G4endl;
-		tuples1 = std::fopen(bFN,"wb");
-		if (
-			tuples1 == nullptr
-			or not atris::WriteBinaryHeader(
-				tuples1,
-				atris::BinaryRecordType::Interface,
-				sizeof(atris::InterfaceRecord)
-			)
-		) {
-			G4cerr << "### AtRIS: unable to open interface output: " << bFN << G4endl;
-			delete runManager;
-			return 1;
-		}
+	if (mode == 0) {
+		G4cout << "### AtRIS: mode 0 writes interface ntuples to "
+		       << outputFileName << ".root" << G4endl;
 	}
 	if (mode == 1) {
 		G4cout << "### AtRIS: mode 1 writes interface and transport-step ntuples to "
@@ -216,7 +200,6 @@ int main(int argc,char** argv){
 	} else {
 		G4cerr << "### AtRIS: macro execution failed with Geant4 status " << commandStatus << G4endl;
 	}
-	if (mode == 0) {std::fclose(tuples1);}
 	delete runManager;
 	if (commandStatus == 0) {
 		G4cout << "### AtRIS: Run completed successfully." << G4endl;

@@ -28,8 +28,8 @@ established before removing them.
 
 The repository now contains an initial `atris_tools` package. It provides
 command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
-macro generation, chunk scattering and gathering, post-processing, and binary
-conversion. These commands are also importable as Python modules.
+macro generation, chunk scattering and gathering, post-processing, and
+plotting. These commands are also importable as Python modules.
 
 The package uses `atris-*` command names for these operations. Existing
 standalone command names remain available for compatibility and to preserve the
@@ -42,18 +42,14 @@ prepares its inputs and manages the surrounding workflow.
 
 ## Simulation output
 
-Mode 0 interface files use the native AtRIS binary format. Each file begins
-with a 32-byte header containing the `ATRISBIN` identifier, format and schema
-versions, record type, byte-order marker, header size, and record size. The
-interface records retain the historical five fields. `atris-dump` and
-`atris-bin-to-ascii` provide compatibility tools for this format.
-
-Mode 1 uses Geant4's ROOT analysis backend instead of a custom binary format.
-Its `interfaces` and `steps` ntuples are stored together in `<name>.root`, and
-Geant4 merges the worker-thread ntuples. The step columns contain event and
-track identifiers, particle and detector identifiers, pre- and post-step
-positions and energies, energy deposition, step length, time, primary energy,
-and process names. The Python tools read these ntuples with Uproot in bounded
+Modes 0 and 1 use Geant4's ROOT analysis backend. Mode 0 stores the
+`interfaces` ntuple in `<name>.root`; mode 1 stores `interfaces` and `steps`
+together in the same file. Geant4 merges worker-thread ntuples. The interface
+columns contain particle, interface, angle, crossing-energy, and primary-energy
+values. The step columns contain event and track identifiers, particle and
+detector identifiers, pre- and post-step positions and energies, energy
+deposition, step length, time, primary energy, and process names. The Python
+tools read this output with Uproot and process the larger step table in bounded
 chunks.
 
 Some modules still retain names and implementation details from the original

@@ -576,8 +576,8 @@ def main():
             "products already present in a run directory."
         ),
         epilog=(
-            "Recognized products include prepared macros and geometry, binary "
-            "or ASCII mode-0 interface records, mode-1 step traces, convergence "
+            "Recognized products include prepared macros and geometry, ROOT "
+            "interface and step records, convergence "
             "tables, and post-processed proton and alpha responses. Missing "
             "product groups are skipped so partial runs can still be inspected. "
             "Existing PNG files with the generated names are replaced. This "
@@ -615,8 +615,6 @@ def main():
         except Exception as error:
             errors.append("inputs: " + str(error))
         for simulation in ("protons", "alphas"):
-            binary_path = Path(simulation + ".binary")
-            ascii_path = Path(simulation + ".ascii")
             root_path = Path(simulation + ".root")
             root_interfaces = False
             root_steps = False
@@ -626,12 +624,12 @@ def main():
                     root_steps = has_ntuple(root_path, "steps")
                 except Exception as error:
                     errors.append("%s ROOT output: %s" % (simulation, error))
-            if binary_path.is_file() or ascii_path.is_file() or root_interfaces:
+            if root_interfaces:
                 try:
                     plotted.append(plot_interface_output(simulation))
                 except Exception as error:
                     errors.append(
-                        "%s mode-0 output: %s" % (simulation, error)
+                        "%s interface output: %s" % (simulation, error)
                     )
             if root_steps:
                 try:

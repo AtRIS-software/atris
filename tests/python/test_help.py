@@ -56,16 +56,6 @@ ENTRY_POINT_HELP = (
         ("missing product groups are skipped", "does not run atris"),
     ),
     (
-        "atris-bin-to-ascii",
-        "bin2ascii",
-        ("binary input is retained", "does not gather chunks"),
-    ),
-    (
-        "atris-dump",
-        "dump",
-        ("standard output", "input file is not modified"),
-    ),
-    (
         "nrlmsis2psf",
         "nrlmsis2psf",
         ("does not download atmosphere data",),
@@ -73,7 +63,6 @@ ENTRY_POINT_HELP = (
     ("psf2gdml", "psf2gdml", ("output defaults to the input basename",)),
     ("atrismacrogen", "atrismacrogen", ("refuses to overwrite",)),
     ("postprocess", "postprocess", ("does not gather chunk histograms",)),
-    ("bin2ascii", "bin2ascii", ("binary input is retained",)),
 )
 
 MODERN_ENTRY_POINTS = tuple(

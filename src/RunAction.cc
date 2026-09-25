@@ -63,11 +63,12 @@ void RunAction::BeginOfRunAction(const G4Run*)
   G4cout << "### AtRIS: executing BeginOfRunAction" << G4endl;
   G4cout << "=== MASTER: " << IsMaster() << G4endl;
   G4AnalysisManager* analysis = G4AnalysisManager::Instance();
-  analysis->SetDefaultFileType(mode == 1 ? "root" : "csv");
-  if (mode == 1) analysis->SetNtupleMerging(true);
+  const G4bool writesNtuples = mode == 0 || mode == 1;
+  analysis->SetDefaultFileType(writesNtuples ? "root" : "csv");
+  if (writesNtuples) analysis->SetNtupleMerging(true);
   fHisto = new HistoManager();
   if (analysis->IsActive()) {
-    analysis->SetFileName(outputFileName + (mode == 1 ? ".root" : ""));
+    analysis->SetFileName(outputFileName + (writesNtuples ? ".root" : ""));
     analysis->OpenFile();
   }
 }

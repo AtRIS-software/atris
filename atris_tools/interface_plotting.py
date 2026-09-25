@@ -166,10 +166,9 @@ def plot_interface_output(simname):
     )
 
     species = simname.capitalize()
-    mode = "mode-1" if source_path.suffix == ".root" else "mode-0"
     figure.suptitle(
-        "%s %s interface output: %i boundary crossings from %s"
-        % (species, mode, records.size, source_path.name)
+        "%s interface output: %i boundary crossings from %s"
+        % (species, records.size, source_path.name)
     )
     filename = simname + ".interfaces.png"
     figure.savefig(filename)

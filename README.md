@@ -86,21 +86,11 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 ```
 
 Mode `-1` (`response`) writes the standard histogram output. Mode `0`
-(`profile`) adds particle records at layer interfaces in `<name>.binary`. Mode
-`1` (`shower`) writes interface and transport-step ntuples to `<name>.root`
-through Geant4's ROOT analysis backend; this can produce much more data than
-the other modes. All three modes write the standard histogram CSV files.
-
-Inspect a mode-0 binary file as a CSV stream with `atris-dump`:
-
-```bash
-atris-dump protons.binary | head
-```
-
-`head` closes the pipe after its requested number of lines. The dumper then
-stops reading; the command does not modify the binary file. Mode-1 files use
-the standard ROOT format and can be inspected with ROOT-compatible tools;
-`atris-plot` reads them with Uproot.
+(`profile`) adds a particle-interface ntuple in `<name>.root`. Mode `1`
+(`shower`) adds a transport-step ntuple to the same ROOT file; this can produce
+much more data than the other modes. Geant4 writes and merges these ntuples
+through its ROOT analysis backend. All three modes write the standard
+histogram CSV files, and `atris-plot` reads the ROOT output with Uproot.
 
 Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 

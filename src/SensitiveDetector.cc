@@ -18,8 +18,6 @@
 #include "G4Run.hh"
 #include "G4AnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
-#include "G4AutoLock.hh"
-#include "BinaryOutput.hh"
 #include "NtupleSchema.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
@@ -29,16 +27,11 @@
 #include <vector>
 extern G4int mode;                      // from src/main.cc
 extern G4int nrofdetectors;             // from src/main.cc
-extern FILE * tuples1;                  // 
 extern std::vector<G4int> useornot;     // 
 extern std::vector<std::vector<G4double>> abso;      //
 extern std::vector<std::vector<G4double>> rate;      //
 extern G4int nrphantoms;
 extern std::map<G4int, G4int> heavy;    //
-
-namespace {
-G4Mutex binaryOutputMutex;
-}
 
 namespace atris {
 
@@ -168,9 +161,9 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	G4double ioni  = edep - nioni;
 	analysis->FillH2(2,einp,detid,ioni/MeV);
 	// mode -1:      dose rate determination
-	// mode 0:   	 output binary data for all atmospheric sheets, at sheet interface
+	// mode 0:   	 output data for all atmospheric sheets, at sheet interface
 	//         	 purpose: altitude particle profiles
-	// mode 1: 	 output binary data at each step
+	// mode 1: 	 output data at each step
 	//           	 purpose: shower visualization
 
 	//before the step, the particle should have been at the boundary. 
@@ -238,17 +231,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			}
 		}
 
-		if (mode == 0) {
-			const InterfaceRecord record = {
-				static_cast<std::int32_t>(partPDG),
-				static_cast<std::uint16_t>(diid),
-				static_cast<std::uint16_t>(std::round(inclination/deg)),
-				static_cast<float>(pre->GetKineticEnergy()),
-				static_cast<float>(einp),
-			};
-			G4AutoLock lock(&binaryOutputMutex);
-			std::fwrite(&record, sizeof(record), 1, tuples1);
-		} else if (mode == 1) {
+		if (mode == 0 || mode == 1) {
 			analysis->FillNtupleIColumn(interfaceNtupleId, interfacePdg, partPDG);
 			analysis->FillNtupleIColumn(interfaceNtupleId, interfaceId, diid);
 			analysis->FillNtupleIColumn(

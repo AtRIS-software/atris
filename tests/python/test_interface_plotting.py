@@ -1,16 +1,14 @@
 import logging
 
 import numpy as np
-import pytest
+import uproot
 
 from atris_tools import plotting
-from atris_tools.binary_output import INTERFACE_RECORDS, write_header
-from atris_tools.interface_output import BINARY_DTYPE, records_to_columns
+from atris_tools.interface_output import INTERFACE_DTYPE
 
 
-@pytest.mark.parametrize("extension", ["binary", "ascii"])
-def test_plot_interface_output_reads_binary_or_ascii_and_ignores_invalid_energy(
-    tmp_path, monkeypatch, caplog, extension, gdml_text
+def test_plot_interface_output_reads_root_and_ignores_invalid_energy(
+    tmp_path, monkeypatch, caplog, gdml_text
 ):
     records = np.array(
         [
@@ -20,15 +18,29 @@ def test_plot_interface_output_reads_binary_or_ascii_and_ignores_invalid_energy(
             (11, 3, 45, 1.0, 10.0),
             (2212, 4, 0, 0.0, 100.0),
         ],
-        dtype=BINARY_DTYPE,
+        dtype=INTERFACE_DTYPE,
     )
-    path = tmp_path / ("protons." + extension)
-    if extension == "binary":
-        with path.open("wb") as stream:
-            write_header(stream, INTERFACE_RECORDS, BINARY_DTYPE.itemsize)
-            records.tofile(stream)
-    else:
-        np.savetxt(path, records_to_columns(records))
+    path = tmp_path / "protons.root"
+    with uproot.recreate(path) as root_file:
+        root_file.mktree(
+            "interfaces",
+            {
+                "pdg": "int32",
+                "interface_id": "int32",
+                "angle_degrees": "int32",
+                "kinetic_energy_MeV": "float64",
+                "primary_energy_MeV": "float64",
+            },
+        )
+        root_file["interfaces"].extend(
+            {
+                "pdg": records["pdg"],
+                "interface_id": records["interface"],
+                "angle_degrees": records["angle"],
+                "kinetic_energy_MeV": records["kinetic_energy"],
+                "primary_energy_MeV": records["source_energy"],
+            }
+        )
     (tmp_path / "protons.gdml").write_text(gdml_text)
     monkeypatch.chdir(tmp_path)
 
@@ -38,6 +50,6 @@ def test_plot_interface_output_reads_binary_or_ascii_and_ignores_invalid_energy(
     assert filename == "protons.interfaces.png"
     assert (tmp_path / filename).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
     assert (
-        "protons.%s: ignoring 1 non-positive or non-finite energy records"
-        % extension
-    ) in caplog.messages
+        "protons.root: ignoring 1 non-positive or non-finite energy records"
+        in caplog.messages
+    )

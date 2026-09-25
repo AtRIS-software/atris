@@ -43,7 +43,7 @@ void HistoManager::Book()
 	analysis->SetVerboseLevel(0);
 	analysis->SetActivation(true);     //enable inactivation of histos, nTuples
 	auto setH1FileName = [analysis](G4int histogramId, const G4String& name) {
-		if (mode == 1) {
+		if (mode == 0 || mode == 1) {
 			analysis->SetH1FileName(
 				histogramId,
 				outputFileName + "_h1_" + name + ".csv"
@@ -51,7 +51,7 @@ void HistoManager::Book()
 		}
 	};
 	auto setH2FileName = [analysis](G4int histogramId, const G4String& name) {
-		if (mode == 1) {
+		if (mode == 0 || mode == 1) {
 			analysis->SetH2FileName(
 				histogramId,
 				outputFileName + "_h2_" + name + ".csv"
@@ -106,7 +106,7 @@ void HistoManager::Book()
 
 	}
 
-	if (mode != 1) return;
+	if (mode != 0 && mode != 1) return;
 
 	id = analysis->CreateNtuple(
 		"interfaces",
@@ -118,6 +118,7 @@ void HistoManager::Book()
 	analysis->CreateNtupleDColumn(id, "kinetic_energy_MeV");
 	analysis->CreateNtupleDColumn(id, "primary_energy_MeV");
 	analysis->FinishNtuple(id);
+	if (mode != 1) return;
 
 	id = analysis->CreateNtuple("steps", "Particle transport steps");
 	analysis->CreateNtupleIColumn(id, "event_id");

@@ -27,15 +27,12 @@ atris-run = "atris_tools.run_chunks:main"
 atris-gather = "atris_tools.gather:main"
 atris-postprocess = "atris_tools.postprocess:main"
 atris-plot = "atris_tools.plotting:main"
-atris-dump = "atris_tools.dump:main"
-atris-bin-to-ascii = "atris_tools.bin2ascii:main"
 
 # Legacy command names.
 nrlmsis2psf = "atris_tools.nrlmsis2psf:main"
 psf2gdml = "atris_tools.psf2gdml:main"
 atrismacrogen = "atris_tools.atrismacrogen:main"
 postprocess = "atris_tools.postprocess:main"
-bin2ascii = "atris_tools.bin2ascii:main"
 
 [tool.setuptools]
 packages = ["atris_tools"]
