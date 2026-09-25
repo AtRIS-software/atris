@@ -319,13 +319,13 @@ def test_incomplete_entry_numbers_uses_completion_markers(tmp_path):
     assert incomplete_entry_numbers(tmp_path) == [2]
 
 
-@pytest.mark.parametrize("value", ("response", "interface", "legacy-ascii"))
+@pytest.mark.parametrize("value", ("response", "profile", "shower"))
 def test_output_modes_use_named_values(value):
     assert normalize_output_mode(value) == value
 
 
 def test_output_mode_rejects_unknown_names():
-    with pytest.raises(ValueError, match="response, interface, or legacy-ascii"):
+    with pytest.raises(ValueError, match="response, profile, or shower"):
         normalize_output_mode("unknown")
 
 
@@ -333,8 +333,8 @@ def test_output_mode_rejects_unknown_names():
     ("mode", "value"),
     [
         ("response", "-1"),
-        ("interface", "0"),
-        ("legacy-ascii", "1"),
+        ("profile", "0"),
+        ("shower", "1"),
     ],
 )
 def test_run_chunks_translates_named_modes_for_atris(

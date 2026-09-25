@@ -85,10 +85,11 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 2              number of numbered phantom pairs to load
 ```
 
-Mode `-1` writes the standard histogram output. Mode `0` adds particle records
-at layer interfaces in `<name>.binary`. Mode `1` writes the same interface file
-and adds one transport-step record per step in `<name>.steps.binary`; this can
-produce much more data than the other modes.
+Mode `-1` (`response`) writes the standard histogram output. Mode `0`
+(`profile`) adds particle records at layer interfaces in `<name>.binary`. Mode
+`1` (`shower`) writes the same interface file and adds one transport-step record
+per step in `<name>.steps.binary`; this can produce much more data than the
+other modes.
 
 Inspect either binary format as a CSV stream with `atris-dump`:
 

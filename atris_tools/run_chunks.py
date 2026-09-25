@@ -18,11 +18,11 @@ from .phantoms import read_phantoms
 
 logger = logging.getLogger(__name__)
 
-OUTPUT_MODES = ("response", "interface", "legacy-ascii")
+OUTPUT_MODES = ("response", "profile", "shower")
 OUTPUT_MODE_VALUES = {
     "response": "-1",
-    "interface": "0",
-    "legacy-ascii": "1",
+    "profile": "0",
+    "shower": "1",
 }
 
 
@@ -30,9 +30,7 @@ def normalize_output_mode(value):
     """Validate and return a named AtRIS output mode."""
     value = str(value)
     if value not in OUTPUT_MODES:
-        raise ValueError(
-            "output mode must be response, interface, or legacy-ascii"
-        )
+        raise ValueError("output mode must be response, profile, or shower")
     return value
 
 
@@ -277,11 +275,10 @@ def main():
             "sequentially. Worker coordinates select a collision-free shard; "
             "they do not launch workers or control Geant4 threads. A deadline "
             "is checked only before a chunk starts and never interrupts a "
-            "running chunk. Failed chunks are left incomplete. The response mode "
-            "writes the normal "
-            "histogram workflow; interface additionally writes particle "
-            "crossings, and legacy-ascii retains the historical "
-            "ASCII mode. This command does not gather or post-process results."
+            "running chunk. Failed chunks are left incomplete. Response writes "
+            "the normal histogram workflow; profile adds particle crossings at "
+            "atmospheric-layer interfaces; shower also records every transport "
+            "step. This command does not gather or post-process results."
         ),
     )
     parser.add_argument(
@@ -306,8 +303,8 @@ def main():
         default="response",
         help=(
             "AtRIS output mode: response writes the normal histograms; "
-            "interface also writes binary interface records; legacy-ascii "
-            "selects the historical ASCII mode (default: response)."
+            "profile also writes binary interface records; shower writes "
+            "interface and binary transport-step records (default: response)."
         ),
     )
     chunk_options = parser.add_argument_group("Chunk plan and worker options")
