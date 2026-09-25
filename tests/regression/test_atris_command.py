@@ -15,6 +15,8 @@ import pytest
 import uproot
 
 from atris_tools.interface_output import read_root
+from atris_tools.gather import gather_simulation
+from atris_tools.response_histograms import ResponseHistogramReader
 from atris_tools.root_output import has_ntuple
 from atris_tools.step_output import process_name, read_step_records
 
@@ -273,6 +275,54 @@ def test_seeded_mode_one_writes_root_file_inside_chunks(tmp_path, atris_command)
     assert not list((tmp_path / "chunks").glob("*.csv"))
     with uproot.open(root_path) as root_file:
         assert "h1.1" in root_file
+
+
+@pytest.mark.regression
+def test_csv_and_root_response_histograms_gather_equivalently(
+    tmp_path, atris_command
+):
+    outputs = {}
+    entry = ("protons", "123456", "654321")
+    simulation = "chunks/protons_123456_654321"
+    for mode, directory_name in (("-1", "csv"), ("0", "root")):
+        run_directory = tmp_path / directory_name
+        run_directory.mkdir()
+        prepare_run(run_directory, chunked=True)
+        shutil.copyfile(
+            FIXTURE / "simulation.psf",
+            run_directory / "simulation.psf",
+        )
+        shutil.copyfile(
+            FIXTURE / "phantoms.txt",
+            run_directory / "phantoms.txt",
+        )
+
+        result = run_atris(
+            atris_command,
+            run_directory,
+            simulation,
+            mode=mode,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        (run_directory / "chunks" / (simulation.split("/")[1] + ".COMPLETE")).touch()
+        gather_simulation(run_directory, [entry], "protons")
+
+        with ResponseHistogramReader(run_directory / "protons") as histograms:
+            outputs[mode] = {
+                name: (histograms.axes(name), histograms.data(name))
+                for name in histograms.names()
+            }
+
+    assert outputs["-1"].keys() == outputs["0"].keys()
+    for name in outputs["-1"]:
+        csv_axes, csv_data = outputs["-1"][name]
+        root_axes, root_data = outputs["0"][name]
+        for csv_axis, root_axis in zip(csv_axes, root_axes):
+            np.testing.assert_allclose(csv_axis, root_axis, rtol=1e-6)
+        if name == "h1.1":
+            np.testing.assert_allclose(csv_data[:, 0], root_data[:, 0])
+        else:
+            np.testing.assert_allclose(csv_data[:, 1], root_data[:, 1])
 
 
 @pytest.mark.regression

@@ -17,6 +17,15 @@ from .cli import (
     configure_logging,
 )
 from .postprocess import process_psf
+from .response_histograms import (
+    IONIZATION_HISTOGRAM,
+    PRIMARY_HISTOGRAM,
+    combine_root_histograms,
+    read_csv_histogram,
+    response_output_format,
+    root_histogram_data,
+    write_root_histograms,
+)
 
 
 PLANE_SUM_PREFIX = "#planes_Sxyw "
@@ -167,14 +176,7 @@ def log_chunk_progress(run_directory, entries, simulations):
 
 
 def read_histogram(path):
-    lines = path.read_text().splitlines()
-    column_index = next(
-        index for index, line in enumerate(lines) if not line.startswith("#")
-    )
-    header = lines[:column_index]
-    columns = lines[column_index]
-    data = np.loadtxt(path, delimiter=",", skiprows=column_index + 1)
-    return header, columns, np.atleast_2d(data)
+    return read_csv_histogram(path)
 
 
 def comparable_header(header):
@@ -361,12 +363,11 @@ def change_reference_count(completed_count):
     return completed_count - comparison_count
 
 
-def combine_ionization_histograms(
-    run_directory, source_paths, primary_snapshots
+def ionization_convergence_observer(
+    run_directory, completed_count, primary_snapshots
 ):
-    """Combine ionization files and calculate convergence after every chunk."""
+    """Return an observer that calculates convergence after every chunk."""
     geometry, detector_count = process_psf(run_directory / "simulation.psf")
-    completed_count = len(source_paths)
     references = {
         count: change_reference_count(count)
         for count in range(2, completed_count + 1)
@@ -461,6 +462,16 @@ def combine_ionization_histograms(
         if count in last_use:
             stored_responses[count] = current
 
+    return observe, rows
+
+
+def combine_ionization_histograms(
+    run_directory, source_paths, primary_snapshots
+):
+    """Combine ionization files and calculate convergence after every chunk."""
+    observe, rows = ionization_convergence_observer(
+        run_directory, len(source_paths), primary_snapshots
+    )
     header, columns, total, total_plane_sum, _ = combine_histograms(
         source_paths, observe=observe
     )
@@ -494,6 +505,65 @@ def log_ionization_change(simulation, row):
     )
 
 
+def gather_root_simulation(
+    run_directory, current_entries, prefixes, simulation
+):
+    """Gather response histograms from ROOT chunks, leaving ntuples sharded."""
+    source_paths = [Path(str(prefix) + ".root") for prefix in prefixes]
+    primary_snapshots = {}
+    convergence = []
+    convergence_observer = None
+
+    def observe(count, current, total):
+        nonlocal convergence_observer, convergence
+        primary_snapshots[count] = root_histogram_data(
+            total[PRIMARY_HISTOGRAM]
+        )
+        if IONIZATION_HISTOGRAM not in total:
+            return
+        if convergence_observer is None:
+            convergence_observer, convergence = ionization_convergence_observer(
+                run_directory,
+                len(source_paths),
+                primary_snapshots,
+            )
+        convergence_observer(
+            count,
+            root_histogram_data(current[IONIZATION_HISTOGRAM]),
+            root_histogram_data(total[IONIZATION_HISTOGRAM]),
+        )
+
+    histograms = combine_root_histograms(source_paths, observe=observe)
+    primary = histograms[PRIMARY_HISTOGRAM]
+    primary_events = primary["statistics"]["fEntries"]
+    if not np.isclose(primary["values"].sum(), primary_events):
+        raise ValueError(
+            "%s ROOT chunks contain weighted %s histograms; per-bin primary "
+            "counts are unavailable" % (simulation, PRIMARY_HISTOGRAM)
+        )
+
+    write_root_histograms(
+        run_directory / (simulation + ".root"),
+        histograms,
+    )
+    logger.info(
+        "Gathered %i completed %s runs containing %i primary events",
+        len(prefixes),
+        simulation,
+        round(primary_events),
+    )
+    if convergence:
+        write_convergence(
+            run_directory / (simulation + ".convergence.csv"), convergence
+        )
+        log_ionization_change(simulation, convergence[-1])
+    write_gathered_chunks(
+        run_directory / (simulation + ".gathered-chunks.txt"),
+        current_entries,
+    )
+    return len(prefixes)
+
+
 def gather_simulation(run_directory, entries, simulation):
     current_entries = complete_entries(run_directory, entries, simulation)
     chunks_directory = run_directory / "chunks"
@@ -512,6 +582,26 @@ def gather_simulation(run_directory, entries, simulation):
     )
 
     first_prefix = prefixes[0]
+    output_format = response_output_format(first_prefix)
+    if output_format is None:
+        raise FileNotFoundError(
+            "Completed run has no response histograms: " + str(first_prefix)
+        )
+    for prefix in prefixes[1:]:
+        current_format = response_output_format(prefix)
+        if current_format != output_format:
+            raise ValueError(
+                "Completed chunks mix %s and %s response output"
+                % (output_format.upper(), (current_format or "missing").upper())
+            )
+    if output_format == "root":
+        return gather_root_simulation(
+            run_directory,
+            current_entries,
+            prefixes,
+            simulation,
+        )
+
     histogram_paths = sorted(first_prefix.parent.glob(first_prefix.name + "_*.csv"))
     if not histogram_paths:
         raise FileNotFoundError("Completed run has no histogram files: " + str(first_prefix))
@@ -607,14 +697,15 @@ def main():
         formatter_class=HelpFormatter,
         description=(
             "Combine completed AtRIS chunk histograms into canonical aggregate "
-            "CSV files and update ionization-convergence histories."
+            "CSV or ROOT output and update ionization-convergence histories."
         ),
         epilog=(
             "Only chunks with .COMPLETE markers are included; partial files "
             "from failed or running chunks are ignored. Primary and ionization "
             "histograms are rebuilt to update the complete convergence history. "
-            "Other histograms reuse a validated aggregate and add only newly "
-            "completed chunks; changed inputs trigger a full rebuild. "
+            "Other CSV histograms reuse a validated aggregate and add only newly "
+            "completed chunks; ROOT response histograms are rebuilt together. "
+            "ROOT ntuples remain in their individual chunk files. "
             "This command does not run missing chunks, scale physical response "
             "files, or make plots. To select one species in the current "
             "directory, use an explicit dot, for example: atris-gather . "

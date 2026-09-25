@@ -156,14 +156,17 @@ command is interrupted, running it again skips chunks already marked
 `COMPLETE`.
 
 Gather whichever chunks have completed so far into ordinary proton and alpha
-CSV outputs in the run directory:
+response outputs in the run directory:
 
 ```bash
 atris-gather
 ```
 
-Running `atris-gather` again replaces those files with a new aggregate of all
-chunks complete at that time. It also reports the completed chunk count and,
+CSV chunks produce canonical CSV histograms; ROOT chunks produce one canonical
+ROOT file containing the response histograms. The larger ROOT ntuples remain
+in the individual chunk files. Running `atris-gather` again replaces the
+aggregate with all chunks complete at that time. It also reports the completed
+chunk count and,
 after two chunks have completed, the average completion interval and a rough
 time remaining based on recent `COMPLETE` marker timestamps. For each species
 with at least two completed chunks, it also reports how much the final group of
@@ -205,7 +208,8 @@ gather operation is active.
 
 ## Inspect the results
 
-Post-process the proton and alpha CSV files in the run directory:
+Post-process the canonical proton and alpha CSV or ROOT response histograms in
+the run directory:
 
 ```bash
 postprocess

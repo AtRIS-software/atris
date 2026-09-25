@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import uproot
 
 from atris_tools.gather import (
     change_reference_count,
@@ -36,6 +37,26 @@ def write_histogram(path, rows, *, plane_sum=1.0, title="kinetic energy"):
     ]
     lines.extend(",".join(str(value) for value in row) for row in rows)
     Path(path).write_text("\n".join(lines) + "\n")
+
+
+def write_root_histograms(path, primary, direction, ionization=None):
+    energy_edges = np.array([1.0, 10.0, 100.0])
+    phi_edges = np.array([0.0, 1.0, 2.0])
+    cosine_edges = np.array([0.0, 0.5, 1.0])
+    with uproot.recreate(path) as root_file:
+        root_file["h1.1"] = (np.asarray(primary, dtype=float), energy_edges)
+        root_file["h2.dir"] = (
+            np.asarray(direction, dtype=float),
+            phi_edges,
+            cosine_edges,
+        )
+        if ionization is not None:
+            root_file["h2.ion"] = (
+                np.asarray(ionization, dtype=float),
+                energy_edges,
+                np.array([-0.5, 0.5, 1.5, 2.5]),
+            )
+        root_file["interfaces"] = {"event_id": np.array([1], dtype=np.int32)}
 
 
 def test_read_chunk_plan_reports_malformed_line_number(tmp_path):
@@ -366,3 +387,101 @@ def test_gather_simulation_with_no_complete_chunks_writes_nothing(tmp_path):
         tmp_path, [("alphas", "123456", "654321")], "alphas"
     ) == 0
     assert list(tmp_path.glob("alphas_*.csv")) == []
+
+
+def test_gather_simulation_combines_root_response_histograms_only(tmp_path):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [
+        ("protons", "111111", "222222"),
+        ("protons", "333333", "444444"),
+    ]
+    first = chunks / "protons_111111_222222"
+    second = chunks / "protons_333333_444444"
+    write_root_histograms(
+        Path(str(first) + ".root"),
+        [2, 3],
+        [[1, 2], [3, 4]],
+    )
+    write_root_histograms(
+        Path(str(second) + ".root"),
+        [5, 7],
+        [[10, 20], [30, 40]],
+    )
+    Path(str(first) + ".COMPLETE").touch()
+    Path(str(second) + ".COMPLETE").touch()
+
+    assert gather_simulation(tmp_path, entries, "protons") == 2
+
+    with uproot.open(tmp_path / "protons.root") as root_file:
+        assert set(root_file.keys(cycle=False)) == {"h1.1", "h2.dir"}
+        np.testing.assert_array_equal(root_file["h1.1"].values(), [7, 10])
+        np.testing.assert_array_equal(
+            root_file["h2.dir"].values(),
+            [[11, 22], [33, 44]],
+        )
+        assert root_file["h1.1"].member("fEntries") == 17
+
+
+def test_gather_simulation_rejects_mixed_response_formats(tmp_path):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [
+        ("protons", "111111", "222222"),
+        ("protons", "333333", "444444"),
+    ]
+    first = chunks / "protons_111111_222222"
+    second = chunks / "protons_333333_444444"
+    write_root_histograms(
+        Path(str(first) + ".root"),
+        [2, 3],
+        [[1, 2], [3, 4]],
+    )
+    write_histogram(
+        Path(str(second) + "_h1_h1.1.csv"),
+        [[0, 0, 0, 0, 0], [5, 5, 5, 5, 5]],
+    )
+    Path(str(first) + ".COMPLETE").touch()
+    Path(str(second) + ".COMPLETE").touch()
+
+    with pytest.raises(ValueError, match=r"mix (CSV and ROOT|ROOT and CSV)"):
+        gather_simulation(tmp_path, entries, "protons")
+
+
+def test_gather_root_histograms_writes_convergence(tmp_path, monkeypatch):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    entries = [
+        ("protons", "111111", "222222"),
+        ("protons", "333333", "444444"),
+    ]
+    geometry = {"volume/cm3": np.ones(3)}
+    monkeypatch.setattr(
+        "atris_tools.gather.process_psf", lambda path: (geometry, 3)
+    )
+    for entry, value in zip(entries, (1.0, 3.0)):
+        prefix = chunks / ("%s_%s_%s" % entry)
+        write_root_histograms(
+            Path(str(prefix) + ".root"),
+            [2, 2],
+            [[1, 2], [3, 4]],
+            np.full((2, 3), value),
+        )
+        Path(str(prefix) + ".COMPLETE").touch()
+
+    gather_simulation(tmp_path, entries, "protons")
+
+    convergence = np.atleast_2d(
+        np.loadtxt(
+            tmp_path / "protons.convergence.csv",
+            delimiter=",",
+            skiprows=1,
+        )
+    )
+    assert convergence.shape == (1, 9)
+    assert convergence[0, 0] == 2
+    with uproot.open(tmp_path / "protons.root") as root_file:
+        np.testing.assert_array_equal(
+            root_file["h2.ion"].values(),
+            np.full((2, 3), 4.0),
+        )
