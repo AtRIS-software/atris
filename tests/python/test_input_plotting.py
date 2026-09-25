@@ -117,7 +117,6 @@ def test_shell_profiles_share_density_pressure_axis_and_twin_temperature_axis():
     density = np.array([1.0, 2.0])
     pressure = np.array([10.0, 20.0])
     temperature = np.array([250.0, 300.0])
-    positions = np.array([0.5, 2.0])
     edges = np.array([0.0, 1.0, 3.0])
 
     input_plotting._plot_shell_profiles(
@@ -126,7 +125,6 @@ def test_shell_profiles_share_density_pressure_axis_and_twin_temperature_axis():
         density,
         pressure,
         temperature,
-        positions,
         edges,
         edges,
     )

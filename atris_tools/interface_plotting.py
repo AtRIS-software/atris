@@ -8,6 +8,8 @@ import numpy as np
 
 from .input_plotting import (
     log_norm,
+    mark_model_regions,
+    model_shell_edges,
     particle_symbol,
     positive_log_edges,
     read_layers,
@@ -52,10 +54,11 @@ def plot_interface_output(simname):
     figure, axes = plt.subplots(
         ncols=2, nrows=2, figsize=(12, 11), layout="constrained"
     )
-    species_axis = axes[0, 0]
-    crossings_axis = axes[0, 1]
-    energy_transfer_axis = axes[1, 0]
-    altitude_energy_axis = axes[1, 1]
+    crossings_axis = axes[0, 0]
+    altitude_energy_axis = axes[0, 1]
+    species_axis = axes[1, 0]
+    energy_transfer_axis = axes[1, 1]
+    altitude_energy_axis.sharey(crossings_axis)
     particle_codes, particle_counts = np.unique(
         records["pdg"], return_counts=True
     )
@@ -79,13 +82,15 @@ def plot_interface_output(simname):
     interfaces = records["interface"]
     geometry_path = Path(simname + ".gdml")
     layers = read_layers(geometry_path)
-    interface_ids, plot_positions, plot_edges = shell_coordinates(
+    model_edges = model_shell_edges(layers)
+    interface_ids, _, plot_edges = shell_coordinates(
         layers,
         location="outer",
     )
     interface_edges = np.concatenate(
         ([interface_ids[0] - 0.5], interface_ids + 0.5)
     )
+    mark_model_regions(crossings_axis, model_edges)
     for mask, label in (
         (records["angle"] < 90, "Upward"),
         (records["angle"] >= 90, "Downward"),
@@ -94,14 +99,16 @@ def plot_interface_output(simname):
             np.count_nonzero(mask & (interfaces == interface_id))
             for interface_id in interface_ids
         ]
-        crossings_axis.step(plot_positions, counts, where="mid", label=label)
-    setup_shell_axis(
-        crossings_axis,
-        plot_positions,
-        axis_name="x",
-    )
+        crossings_axis.stairs(
+            counts,
+            plot_edges,
+            orientation="horizontal",
+            label=label,
+        )
+    setup_shell_axis(crossings_axis)
     crossings_axis.set_title("Crossings by distance from surface")
-    crossings_axis.set_ylabel("Boundary crossings")
+    crossings_axis.set_xlabel("Boundary crossings")
+    crossings_axis.set_xscale("log")
     crossings_axis.legend()
 
     kinetic_edges = positive_log_edges(kinetic_energy)
@@ -110,27 +117,24 @@ def plot_interface_output(simname):
         kinetic_energy,
         bins=(interface_edges, kinetic_edges),
     )
+    mark_model_regions(altitude_energy_axis, model_edges)
     mesh = altitude_energy_axis.pcolormesh(
-        plot_edges,
         kinetic_edges,
-        interface_energy.T,
+        plot_edges,
+        interface_energy,
         cmap="Blues",
         norm=log_norm(interface_energy),
         shading="flat",
         rasterized=True,
     )
-    setup_shell_axis(
-        altitude_energy_axis,
-        plot_positions,
-        axis_name="x",
-    )
+    altitude_energy_axis.tick_params(axis="y", labelleft=False)
+    altitude_energy_axis.minorticks_on()
     altitude_energy_axis.set_title("Kinetic energy by distance from surface")
-    altitude_energy_axis.set_ylabel("Kinetic energy [MeV]")
-    altitude_energy_axis.set_yscale("log")
+    altitude_energy_axis.set_xlabel("Kinetic energy [MeV]")
+    altitude_energy_axis.set_xscale("log")
     figure.colorbar(
         mesh,
         ax=altitude_energy_axis,
-        orientation="horizontal",
         label="Boundary crossings",
     )
 

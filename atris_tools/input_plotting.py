@@ -315,18 +315,21 @@ def shell_coordinates(
     return detector_ids, positions, edges
 
 
-def setup_shell_axis(axis, positions, axis_name="y", symlog=True):
-    """Label and scale a shell axis after its data have been drawn."""
-    getattr(axis, "set_" + axis_name + "label")("Distance from surface [km]")
-    if not symlog:
-        getattr(axis, "set_" + axis_name + "scale")("linear")
-        return
-    values = np.abs(positions)
-    nonzero = values[np.isfinite(values) & (values > 0)]
-    if nonzero.size:
-        getattr(axis, "set_" + axis_name + "scale")(
-            "symlog", linthresh=np.min(nonzero)
-        )
+def model_shell_edges(layers):
+    """Return the distance bounds of the model between termination shells."""
+    radius = surface_radius(layers)
+    _, _, edges = shell_coordinates(
+        non_termination_layers(layers),
+        reference_radius=radius,
+    )
+    return edges
+
+
+def setup_shell_axis(axis):
+    """Format a vertical distance-from-surface axis."""
+    axis.set_ylabel("Distance from surface [km]")
+    axis.set_yscale("linear")
+    axis.minorticks_on()
 
 
 def _setting(settings, command, default="not set"):
@@ -398,28 +401,25 @@ def _source_summary(settings, layers, energy_count):
     return "\n".join(lines)
 
 
-def _mark_model_bounds(axis, edges):
-    axis.axhline(edges[0], color="black", zorder=10)
-    axis.axhline(edges[-1], color="black", zorder=10)
+def mark_model_regions(axis, edges):
+    """Draw model boundaries and lock the distance axis before plotting data."""
+    for edge in (edges[0], edges[-1]):
+        axis.axhline(edge, color="black", zorder=10)
     lower_limit, upper_limit = axis.get_ylim()
-    axis.text(
-        0.5,
-        (lower_limit + edges[0]) / 2.0,
-        "Ground",
-        transform=axis.get_yaxis_transform(),
-        ha="center",
-        va="center",
-        zorder=10,
-    )
-    axis.text(
-        0.5,
-        (edges[-1] + upper_limit) / 2.0,
-        "Space",
-        transform=axis.get_yaxis_transform(),
-        ha="center",
-        va="center",
-        zorder=10,
-    )
+    axis.set_ylim((lower_limit, upper_limit))
+    for y, label in (
+        ((lower_limit + edges[0]) / 2.0, "Ground"),
+        ((edges[-1] + upper_limit) / 2.0, "Space"),
+    ):
+        axis.text(
+            0.5,
+            y,
+            label,
+            transform=axis.get_yaxis_transform(),
+            ha="center",
+            va="center",
+            zorder=10,
+        )
 
 
 def _plot_shell_profiles(
@@ -428,12 +428,10 @@ def _plot_shell_profiles(
     density,
     pressure,
     temperature,
-    positions,
     edges,
     model_edges,
 ):
-    _mark_model_bounds(temperature_axis, model_edges)
-    temperature_axis.set_ylim(temperature_axis.get_ylim())
+    mark_model_regions(temperature_axis, model_edges)
     density_curve = axis.stairs(
         density,
         edges,
@@ -452,12 +450,11 @@ def _plot_shell_profiles(
         orientation="horizontal",
         color="C2",
     )
-    setup_shell_axis(axis, positions, symlog=False)
+    setup_shell_axis(axis)
     axis.set_xlabel("Density [g/cm3] and pressure [Pa]")
     temperature_axis.set_xlabel("Temperature [K]")
     if np.any(np.asarray(density) > 0) or np.any(np.asarray(pressure) > 0):
         axis.set_xscale("log")
-    axis.minorticks_on()
     temperature_axis.minorticks_on()
     axis.grid(alpha=0.25)
     temperature_axis.legend(
@@ -470,11 +467,8 @@ def plot_species_inputs(simname):
     settings, energy_points = read_macro(simname + ".mac")
     energy_bins = np.atleast_1d(np.loadtxt(simname + ".bins"))
     geometry_layers = read_layers(simname + ".gdml")
-    layers = non_termination_layers(geometry_layers)
     radius = surface_radius(geometry_layers)
-    _, positions, model_edges = shell_coordinates(
-        layers, reference_radius=radius
-    )
+    model_edges = model_shell_edges(geometry_layers)
     _, _, edges = shell_coordinates(
         geometry_layers, reference_radius=radius
     )
@@ -512,7 +506,6 @@ def plot_species_inputs(simname):
         [layer["density"] for layer in geometry_layers],
         [layer["pressure"] for layer in geometry_layers],
         [layer["temperature"] for layer in geometry_layers],
-        positions,
         edges,
         model_edges,
     )
@@ -525,8 +518,7 @@ def plot_species_inputs(simname):
         },
         key=element_sort_key,
     )
-    _mark_model_bounds(composition_axis, model_edges)
-    composition_axis.set_ylim(composition_axis.get_ylim())
+    mark_model_regions(composition_axis, model_edges)
     for element in elements:
         fractions = np.array(
             [

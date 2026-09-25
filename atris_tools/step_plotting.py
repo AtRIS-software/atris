@@ -11,6 +11,8 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 from .input_plotting import (
+    mark_model_regions,
+    model_shell_edges,
     particle_symbol,
     positive_log_edges,
     read_layers,
@@ -107,13 +109,12 @@ def _plot_counts(axis, counts, title, xlabel, labels):
     axis.set_xscale("log")
 
 
-def plot_step_trace(simname, summary=None):
+def plot_step_trace(simname, summary):
     """Create a bounded-memory overview of an AtRIS mode-1 step trace."""
-    if summary is None:
-        summary = read_step_trace(simname + ".steps.binary")
     detector_ids = sorted(summary["detector_counts"])
     geometry_path = Path(simname + ".gdml")
     layers = read_layers(geometry_path)
+    model_edges = model_shell_edges(layers)
 
     figure, axes = plt.subplots(
         ncols=2, nrows=2, figsize=(13, 11), layout="constrained"
@@ -143,18 +144,19 @@ def plot_step_trace(simname, summary=None):
     deposits = np.asarray(
         [summary["detector_deposit"][value] for value in detector_ids]
     )
-    development_axis.plot(counts, plot_positions, color="#18788f", label="Steps")
-    setup_shell_axis(
-        development_axis,
-        plot_positions,
+    positive_deposit = deposits > 0
+    deposit_axis = development_axis.twiny() if np.any(positive_deposit) else None
+    boundary_axis = (
+        deposit_axis if deposit_axis is not None else development_axis
     )
+    mark_model_regions(boundary_axis, model_edges)
+    development_axis.plot(counts, plot_positions, color="#18788f", label="Steps")
+    setup_shell_axis(development_axis)
     development_axis.set_xscale("log")
     development_axis.set_xlabel("Recorded steps", color="#18788f")
     development_axis.tick_params(axis="x", colors="#18788f")
     development_axis.set_title("Shower development")
-    positive_deposit = deposits > 0
-    if np.any(positive_deposit):
-        deposit_axis = development_axis.twiny()
+    if deposit_axis is not None:
         deposit_axis.plot(
             deposits[positive_deposit],
             plot_positions[positive_deposit],
@@ -171,6 +173,7 @@ def plot_step_trace(simname, summary=None):
         if detector_id in detector_ids
     ]
     energy_axis = axes[1, 1]
+    mark_model_regions(energy_axis, model_edges)
     if sample:
         position_by_id = dict(zip(detector_ids, plot_positions))
         sample_positions = np.asarray(
@@ -208,10 +211,7 @@ def plot_step_trace(simname, summary=None):
             va="center",
             transform=energy_axis.transAxes,
         )
-    setup_shell_axis(
-        energy_axis,
-        plot_positions,
-    )
+    setup_shell_axis(energy_axis)
     energy_axis.set_title("Kinetic energy through the shells")
     energy_axis.set_xlabel("Post-step kinetic energy [MeV]")
 
@@ -292,11 +292,9 @@ def _local_shower_coordinates(segments):
     return (segments - origin) @ basis
 
 
-def plot_shower(simname, summary=None):
+def plot_shower(simname, summary):
     """Plot the mode-1 event with the largest number of recorded steps."""
     trace_path = Path(simname + ".steps.binary")
-    if summary is None:
-        summary = read_step_trace(trace_path)
     event_id, step_count = summary["event_counts"].most_common(1)[0]
     (
         segments,
@@ -356,7 +354,7 @@ def plot_shower(simname, summary=None):
     axis.set_xlim(0.0, radius_upper * 1.04 if radius_upper else 1.0)
     axis.set_ylim(*vertical_limits)
     axis.set_xlabel("Transverse radius r [km]")
-    axis.set_ylabel("Distance from surface z [km]")
+    setup_shell_axis(axis)
     axis.grid(alpha=0.25)
 
     legend_entries = [

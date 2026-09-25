@@ -19,6 +19,8 @@ from .cli import (
 )
 from .input_plotting import (
     log_norm,
+    mark_model_regions,
+    model_shell_edges,
     plot_inputs,
     read_layers,
     read_macro,
@@ -200,7 +202,8 @@ def _add_response_plot(
     layers,
     title,
 ):
-    _, positions, plot_edges = shell_coordinates(layers, detector_ids)
+    _, _, plot_edges = shell_coordinates(layers, detector_ids)
+    mark_model_regions(axis, model_shell_edges(layers))
     mesh = axis.pcolormesh(
         energy_edges,
         plot_edges,
@@ -209,7 +212,7 @@ def _add_response_plot(
         shading="flat",
         rasterized=True,
     )
-    setup_shell_axis(axis, positions)
+    setup_shell_axis(axis)
     axis.set_title(title)
     axis.set_xlabel("Primary kinetic energy [MeV]")
     axis.set_xscale("log")
