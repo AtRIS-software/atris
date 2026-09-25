@@ -61,7 +61,8 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	G4double poscost = std::cos(postheta);
 
 	// now we fil the histograms
-	analysis->FillH1(0,primary_vertex_energy,primary_vertex_energy);
+	// Unit weights preserve per-energy primary counts in CSV and ROOT output.
+	analysis->FillH1(0,primary_vertex_energy);
 	analysis->FillH2(0,dirphi,dircost);
 	analysis->FillH2(1,posphi,poscost);
 }
