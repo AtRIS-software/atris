@@ -68,7 +68,7 @@ void RunAction::BeginOfRunAction(const G4Run*)
   if (writesRoot) analysis->SetNtupleMerging(true);
   fHisto = new HistoManager();
   if (analysis->IsActive()) {
-    analysis->SetFileName(outputFileName + (writesRoot ? ".root" : ""));
+    analysis->SetFileName(outputFileName);
     analysis->OpenFile();
   }
 }
