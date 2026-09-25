@@ -42,15 +42,16 @@ prepares its inputs and manages the surrounding workflow.
 
 ## Simulation output
 
-Modes 0 and 1 use Geant4's ROOT analysis backend. Mode 0 stores the
-`interfaces` ntuple in `<name>.root`; mode 1 stores `interfaces` and `steps`
-together in the same file. Geant4 merges worker-thread ntuples. The interface
-columns contain particle, interface, angle, crossing-energy, and primary-energy
-values. The step columns contain event and track identifiers, particle and
-detector identifiers, pre- and post-step positions and energies, energy
-deposition, step length, time, primary energy, and process names. The Python
-tools read this output with Uproot and process the larger step table in bounded
-chunks.
+Modes 0 and 1 use Geant4's ROOT analysis backend for all output. Mode 0 stores
+the histograms and `interfaces` ntuple in `<name>.root`; mode 1 also stores the
+`steps` ntuple there. The single-file layout is a current implementation choice,
+not a required part of the format. Geant4 merges worker-thread objects. The
+interface columns contain particle, interface, angle, crossing-energy, and
+primary-energy values. The step columns contain event and track identifiers,
+particle and detector identifiers, pre- and post-step positions and energies,
+energy deposition, step length, time, primary energy, and process names. The
+Python tools read this output with Uproot and process the larger step table in
+bounded chunks.
 
 Some modules still retain names and implementation details from the original
 standalone scripts. Further cleanup should favor clear importable functions and

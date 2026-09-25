@@ -86,11 +86,11 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 ```
 
 Mode `-1` (`response`) writes the standard histogram output. Mode `0`
-(`profile`) adds a particle-interface ntuple in `<name>.root`. Mode `1`
-(`shower`) adds a transport-step ntuple to the same ROOT file; this can produce
-much more data than the other modes. Geant4 writes and merges these ntuples
-through its ROOT analysis backend. All three modes write the standard
-histogram CSV files, and `atris-plot` reads the ROOT output with Uproot.
+(`profile`) writes the histograms and a particle-interface ntuple to
+`<name>.root`. Mode `1` (`shower`) also includes a transport-step ntuple; this
+can produce much more data than the other modes. Geant4 writes and merges all
+of these objects through its ROOT analysis backend, and `atris-plot` reads the
+ROOT output with Uproot.
 
 Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 

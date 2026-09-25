@@ -165,11 +165,11 @@ int main(int argc,char** argv){
 		return -1;
 	}
 	if (mode == 0) {
-		G4cout << "### AtRIS: mode 0 writes interface ntuples to "
+		G4cout << "### AtRIS: mode 0 writes histograms and interface ntuples to "
 		       << outputFileName << ".root" << G4endl;
 	}
 	if (mode == 1) {
-		G4cout << "### AtRIS: mode 1 writes interface and transport-step ntuples to "
+		G4cout << "### AtRIS: mode 1 writes histograms, interface, and transport-step ntuples to "
 		       << outputFileName << ".root; output may be very large" << G4endl;
 	}
 

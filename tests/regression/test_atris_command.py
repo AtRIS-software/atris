@@ -12,6 +12,7 @@ import subprocess
 
 import numpy as np
 import pytest
+import uproot
 
 from atris_tools.interface_output import read_root
 from atris_tools.root_output import has_ntuple
@@ -35,6 +36,15 @@ EXPECTED_HISTOGRAM_SUFFIXES_WITHOUT_PHANTOMS = {
     "_h2_h2.dir.csv",
     "_h2_h2.ion.csv",
     "_h2_h2.pos.csv",
+}
+EXPECTED_ROOT_HISTOGRAMS = {
+    "h1.1",
+    "h2.dir",
+    "h2.dos0",
+    "h2.equi0",
+    "h2.ion",
+    "h2.pos",
+    "h2.rates0",
 }
 
 
@@ -123,7 +133,7 @@ def histogram_entries(path):
     ("mode", "creates_root", "creates_steps"),
     [
         pytest.param("-1", False, False, id="csv-response-mode"),
-        pytest.param("0", False, False, id="empty-root-interface-mode"),
+        pytest.param("0", True, False, id="root-interface-mode"),
         pytest.param("1", True, True, id="root-shower-mode"),
     ],
 )
@@ -140,17 +150,24 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
     assert "### AtRIS: simulation used 1 worker thread(s)" in result.stdout
     assert "### AtRIS: the simulation has completed" in result.stdout
 
-    written_suffixes = {
-        path.name[len("protons"):]
-        for path in tmp_path.glob("protons_*.csv")
-    }
-    assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
-    assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
     root_path = tmp_path / "protons.root"
     assert root_path.exists() is creates_root
     if creates_root:
-        assert has_ntuple(root_path, "interfaces")
-        assert has_ntuple(root_path, "steps") is creates_steps
+        assert not list(tmp_path.glob("protons_*.csv"))
+        with uproot.open(root_path) as root_file:
+            object_names = set(root_file.keys(cycle=False))
+            expected_objects = EXPECTED_ROOT_HISTOGRAMS | {"interfaces"}
+            if creates_steps:
+                expected_objects.add("steps")
+            assert object_names == expected_objects
+            assert int(root_file["h1.1"].member("fEntries")) == 2
+    else:
+        written_suffixes = {
+            path.name[len("protons"):]
+            for path in tmp_path.glob("protons_*.csv")
+        }
+        assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
+        assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
 
 
 @pytest.mark.regression
@@ -253,7 +270,9 @@ def test_seeded_mode_one_writes_root_file_inside_chunks(tmp_path, atris_command)
     root_path = tmp_path / (simulation + ".root")
     assert root_path.is_file()
     assert len(read_step_records(root_path)) == 1
-    assert (tmp_path / (simulation + "_h1_h1.1.csv")).is_file()
+    assert not list((tmp_path / "chunks").glob("*.csv"))
+    with uproot.open(root_path) as root_file:
+        assert "h1.1" in root_file
 
 
 @pytest.mark.regression
