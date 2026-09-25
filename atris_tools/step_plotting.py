@@ -20,7 +20,7 @@ from .input_plotting import (
     shell_coordinates,
     surface_radius,
 )
-from .step_output import process_name, read_step_records
+from .step_output import iterate_step_records, process_name
 
 
 ENERGY_SAMPLE_LIMIT = 100_000
@@ -45,37 +45,42 @@ def read_step_trace(filename, sample_limit=ENERGY_SAMPLE_LIMIT):
     first_event = None
     last_event = None
 
-    for row_index, row in enumerate(read_step_records(path)):
-        event_id = int(row["event_id"])
-        pdg = int(row["pdg"])
-        detector_id = int(row["detector_id"])
-        kinetic_energy = float(row["post_kinetic_energy_MeV"])
-        energy_deposit = float(row["energy_deposit_MeV"])
-        if not np.isfinite(kinetic_energy) or not np.isfinite(energy_deposit):
-            raise ValueError(
-                "%s has non-finite numeric data in record %i"
-                % (path.name, row_index)
+    for records in iterate_step_records(path):
+        for row in records:
+            event_id = int(row["event_id"])
+            pdg = int(row["pdg"])
+            detector_id = int(row["detector_id"])
+            kinetic_energy = float(row["post_kinetic_energy_MeV"])
+            energy_deposit = float(row["energy_deposit_MeV"])
+            if not np.isfinite(kinetic_energy) or not np.isfinite(energy_deposit):
+                raise ValueError(
+                    "%s has non-finite numeric data in record %i"
+                    % (path.name, row_count)
+                )
+
+            row_count += 1
+            first_event = (
+                event_id if first_event is None else min(first_event, event_id)
             )
+            last_event = (
+                event_id if last_event is None else max(last_event, event_id)
+            )
+            event_counts[event_id] += 1
+            particle_counts[pdg] += 1
+            process_counts[process_name(row["step_process"]) or "unknown"] += 1
+            detector_counts[detector_id] += 1
+            detector_deposit[detector_id] += energy_deposit
 
-        row_count += 1
-        first_event = event_id if first_event is None else min(first_event, event_id)
-        last_event = event_id if last_event is None else max(last_event, event_id)
-        event_counts[event_id] += 1
-        particle_counts[pdg] += 1
-        process_counts[process_name(row["step_process"]) or "unknown"] += 1
-        detector_counts[detector_id] += 1
-        detector_deposit[detector_id] += energy_deposit
-
-        if kinetic_energy <= 0 or sample_limit <= 0:
-            continue
-        positive_energy_rows += 1
-        sample_row = (detector_id, kinetic_energy)
-        if len(energy_sample) < sample_limit:
-            energy_sample.append(sample_row)
-            continue
-        replacement = random_generator.randrange(positive_energy_rows)
-        if replacement < sample_limit:
-            energy_sample[replacement] = sample_row
+            if kinetic_energy <= 0 or sample_limit <= 0:
+                continue
+            positive_energy_rows += 1
+            sample_row = (detector_id, kinetic_energy)
+            if len(energy_sample) < sample_limit:
+                energy_sample.append(sample_row)
+                continue
+            replacement = random_generator.randrange(positive_energy_rows)
+            if replacement < sample_limit:
+                energy_sample[replacement] = sample_row
 
     if not row_count:
         raise ValueError(path.name + " contains no step records")
@@ -245,24 +250,23 @@ def _read_event_steps(filename, event_id):
     parent_ids = []
     step_processes = []
     track_ids = set()
-    for row in read_step_records(filename):
-        if int(row["event_id"]) != event_id:
-            continue
-        pre_position = [
-            float(row["pre_x_km"]),
-            float(row["pre_y_km"]),
-            float(row["pre_z_km"]),
-        ]
-        post_position = [
-            float(row["post_x_km"]),
-            float(row["post_y_km"]),
-            float(row["post_z_km"]),
-        ]
-        particle_codes.append(int(row["pdg"]))
-        parent_ids.append(int(row["parent_id"]))
-        step_processes.append(process_name(row["step_process"]))
-        track_ids.add(int(row["track_id"]))
-        segments.append((pre_position, post_position))
+    for records in iterate_step_records(filename):
+        for row in records[records["event_id"] == event_id]:
+            pre_position = [
+                float(row["pre_x_km"]),
+                float(row["pre_y_km"]),
+                float(row["pre_z_km"]),
+            ]
+            post_position = [
+                float(row["post_x_km"]),
+                float(row["post_y_km"]),
+                float(row["post_z_km"]),
+            ]
+            particle_codes.append(int(row["pdg"]))
+            parent_ids.append(int(row["parent_id"]))
+            step_processes.append(process_name(row["step_process"]))
+            track_ids.add(int(row["track_id"]))
+            segments.append((pre_position, post_position))
     if not segments:
         raise ValueError("Event %i has no recorded steps" % event_id)
     return (
@@ -294,7 +298,7 @@ def _local_shower_coordinates(segments):
 
 def plot_shower(simname, summary):
     """Plot the mode-1 event with the largest number of recorded steps."""
-    trace_path = Path(simname + ".steps.binary")
+    trace_path = Path(simname + ".root")
     event_id, step_count = summary["event_counts"].most_common(1)[0]
     (
         segments,
@@ -394,7 +398,7 @@ def plot_shower(simname, summary):
 
 def plot_mode_one_output(simname):
     """Write aggregate and per-event plots for one mode-1 trace."""
-    summary = read_step_trace(simname + ".steps.binary")
+    summary = read_step_trace(simname + ".root")
     return [
         plot_step_trace(simname, summary),
         plot_shower(simname, summary),

@@ -1,10 +1,11 @@
-"""Read particle-interface records written by AtRIS output mode 0."""
+"""Read particle-interface records written by AtRIS output modes 0 and 1."""
 
 from pathlib import Path
 
 import numpy as np
 
 from .binary_output import INTERFACE_RECORDS, read_records
+from .root_output import has_ntuple, read_ntuple
 
 
 FIELD_NAMES = (
@@ -22,6 +23,13 @@ BINARY_DTYPE = np.dtype(
         ("kinetic_energy", np.float32),
         ("source_energy", np.float32),
     ]
+)
+ROOT_FIELDS = (
+    "pdg",
+    "interface_id",
+    "angle_degrees",
+    "kinetic_energy_MeV",
+    "primary_energy_MeV",
 )
 
 
@@ -50,8 +58,21 @@ def read_ascii(filename):
     return records
 
 
+def read_root(filename):
+    """Read interface records from one AtRIS mode-1 ROOT file."""
+    root_records = read_ntuple(filename, "interfaces", ROOT_FIELDS)
+    records = np.empty(root_records.size, dtype=BINARY_DTYPE)
+    for target, source in zip(FIELD_NAMES, ROOT_FIELDS):
+        records[target] = root_records[source]
+    return records
+
+
 def read_interface_output(prefix):
-    """Read binary output when available, otherwise its ASCII conversion."""
+    """Read available ROOT, binary, or historical ASCII interface output."""
+    root_path = Path(str(prefix) + ".root")
+    if root_path.is_file() and has_ntuple(root_path, "interfaces"):
+        return read_root(root_path), root_path
+
     binary_path = Path(str(prefix) + ".binary")
     if binary_path.is_file():
         return read_binary(binary_path), binary_path
@@ -61,7 +82,8 @@ def read_interface_output(prefix):
         return read_ascii(ascii_path), ascii_path
 
     raise FileNotFoundError(
-        "Neither %s nor %s exists" % (binary_path, ascii_path)
+        "No interface output found in %s, %s, or %s"
+        % (root_path, binary_path, ascii_path)
     )
 
 

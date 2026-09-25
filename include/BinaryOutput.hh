@@ -8,7 +8,6 @@ namespace atris {
 
 enum class BinaryRecordType : std::uint16_t {
 	Interface = 1,
-	Step = 2,
 };
 
 struct BinaryHeader {
@@ -30,33 +29,8 @@ struct InterfaceRecord {
 	float sourceEnergyMeV;
 };
 
-struct StepRecord {
-	std::int32_t eventId;
-	std::int32_t trackId;
-	std::int32_t parentId;
-	std::int32_t stepId;
-	std::int32_t pdg;
-	std::int32_t detectorId;
-	double preXKm;
-	double preYKm;
-	double preZKm;
-	double postXKm;
-	double postYKm;
-	double postZKm;
-	double preKineticEnergyMeV;
-	double postKineticEnergyMeV;
-	double energyDepositMeV;
-	double nonionizingEnergyDepositMeV;
-	double stepLengthM;
-	double globalTimeNs;
-	double primaryEnergyMeV;
-	char creatorProcess[64];
-	char stepProcess[64];
-};
-
 static_assert(sizeof(BinaryHeader) == 32, "Unexpected binary-header layout");
 static_assert(sizeof(InterfaceRecord) == 16, "Unexpected interface-record layout");
-static_assert(sizeof(StepRecord) == 256, "Unexpected step-record layout");
 
 inline bool WriteBinaryHeader(
 	FILE* output,

@@ -2,6 +2,7 @@ import sys
 
 import numpy as np
 import pytest
+import uproot
 
 from atris_tools import bin2ascii
 from atris_tools.binary_output import INTERFACE_RECORDS, write_header
@@ -10,6 +11,7 @@ from atris_tools.interface_output import (
     read_ascii,
     read_binary,
     read_interface_output,
+    read_root,
     records_to_columns,
 )
 
@@ -30,6 +32,29 @@ def write_binary(path, records=SAMPLE_RECORDS):
         records.tofile(stream)
 
 
+def write_root(path, records=SAMPLE_RECORDS):
+    with uproot.recreate(path) as root_file:
+        root_file.mktree(
+            "interfaces",
+            {
+                "pdg": "int32",
+                "interface_id": "int32",
+                "angle_degrees": "int32",
+                "kinetic_energy_MeV": "float64",
+                "primary_energy_MeV": "float64",
+            },
+        )
+        root_file["interfaces"].extend(
+            {
+                "pdg": records["pdg"],
+                "interface_id": records["interface"].astype(np.int32),
+                "angle_degrees": records["angle"].astype(np.int32),
+                "kinetic_energy_MeV": records["kinetic_energy"].astype(float),
+                "primary_energy_MeV": records["source_energy"].astype(float),
+            }
+        )
+
+
 def test_read_binary_and_ascii_return_the_same_records(tmp_path):
     binary_path = tmp_path / "protons.binary"
     ascii_path = tmp_path / "protons.ascii"
@@ -38,6 +63,23 @@ def test_read_binary_and_ascii_return_the_same_records(tmp_path):
 
     np.testing.assert_array_equal(read_binary(binary_path), SAMPLE_RECORDS)
     np.testing.assert_array_equal(read_ascii(ascii_path), SAMPLE_RECORDS)
+
+
+def test_read_root_returns_interface_records(tmp_path):
+    root_path = tmp_path / "protons.root"
+    write_root(root_path)
+
+    np.testing.assert_array_equal(read_root(root_path), SAMPLE_RECORDS)
+
+
+def test_read_interface_output_prefers_root(tmp_path):
+    write_root(tmp_path / "protons.root", SAMPLE_RECORDS[:1])
+    write_binary(tmp_path / "protons.binary")
+
+    records, source = read_interface_output(tmp_path / "protons")
+
+    np.testing.assert_array_equal(records, SAMPLE_RECORDS[:1])
+    assert source.name == "protons.root"
 
 
 def test_read_interface_output_prefers_binary(tmp_path):

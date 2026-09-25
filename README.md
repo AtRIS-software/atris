@@ -87,19 +87,20 @@ protons/alphas prefix for the .gdml, .mac, .bins, and output files
 
 Mode `-1` (`response`) writes the standard histogram output. Mode `0`
 (`profile`) adds particle records at layer interfaces in `<name>.binary`. Mode
-`1` (`shower`) writes the same interface file and adds one transport-step record
-per step in `<name>.steps.binary`; this can produce much more data than the
-other modes.
+`1` (`shower`) writes interface and transport-step ntuples to `<name>.root`
+through Geant4's ROOT analysis backend; this can produce much more data than
+the other modes. All three modes write the standard histogram CSV files.
 
-Inspect either binary format as a CSV stream with `atris-dump`:
+Inspect a mode-0 binary file as a CSV stream with `atris-dump`:
 
 ```bash
 atris-dump protons.binary | head
-atris-dump protons.steps.binary | head
 ```
 
 `head` closes the pipe after its requested number of lines. The dumper then
-stops reading; neither command modifies the binary file.
+stops reading; the command does not modify the binary file. Mode-1 files use
+the standard ROOT format and can be inspected with ROOT-compatible tools;
+`atris-plot` reads them with Uproot.
 
 Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 
@@ -248,12 +249,12 @@ power laws fitted to the most recent half of the completed chunks and
 extrapolated through the planned run. Both axes are logarithmic so their slopes
 can be compared directly.
 
-When a mode-1 binary step trace is present, `atris-plot` writes two images. An image
-such as `protons.steps.png` summarizes particle species, step-defining
-processes, shower development by atmospheric layer, and the kinetic-energy
-distribution through the atmosphere. `protons.shower.png` shows the event
-containing the most recorded steps in altitude and transverse radius, using
-linear axes. The altitude range is limited to the interaction region.
+When a mode-1 ROOT file is present, `atris-plot` writes two images. An image such
+as `protons.steps.png` summarizes particle species, step-defining processes,
+shower development by atmospheric layer, and the kinetic-energy distribution
+through the atmosphere. `protons.shower.png` shows the event containing the
+most recorded steps in altitude and transverse radius, using linear axes. The
+altitude range is limited to the interaction region.
 
 The previews below come from the reduced test configuration in this guide and
 are not scientific production results.

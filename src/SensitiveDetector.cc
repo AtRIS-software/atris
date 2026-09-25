@@ -16,21 +16,20 @@
 #include "DetectorConstruction.hh"
 #include "G4UIcmdWithAString.hh"
 #include "G4Run.hh"
-#include "G4CsvAnalysisManager.hh"
+#include "G4AnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
 #include "G4AutoLock.hh"
 #include "BinaryOutput.hh"
+#include "NtupleSchema.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
 #include "G4VProcess.hh"
 #include <cmath>
-#include <cstdio>
 #include <map>
 #include <vector>
 extern G4int mode;                      // from src/main.cc
 extern G4int nrofdetectors;             // from src/main.cc
 extern FILE * tuples1;                  // 
-extern FILE * stepTrace;
 extern std::vector<G4int> useornot;     // 
 extern std::vector<std::vector<G4double>> abso;      //
 extern std::vector<std::vector<G4double>> rate;      //
@@ -39,7 +38,6 @@ extern std::map<G4int, G4int> heavy;    //
 
 namespace {
 G4Mutex binaryOutputMutex;
-G4Mutex stepTraceMutex;
 }
 
 namespace atris {
@@ -85,7 +83,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	auto sourcedata   = G4GeneralParticleSourceData::Instance();
 	auto theGun       = sourcedata->GetCurrentSource();
 	G4double einp     = theGun->GetParticleEnergy();
-	G4CsvAnalysisManager* analysis = G4CsvAnalysisManager::Instance();
+	G4AnalysisManager* analysis = G4AnalysisManager::Instance();
 
 	G4int    detid = std::stoi(this->GetName());
 	G4double nioni = step->GetNonIonizingEnergyDeposit();
@@ -96,52 +94,68 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		const G4ThreeVector& prePosition = prePoint->GetPosition();
 		const G4ThreeVector& postPosition = postPoint->GetPosition();
 		const G4VProcess* creatorProcess = trk->GetCreatorProcess();
-		const G4VProcess* stepProcess = postPoint->GetProcessDefinedStep();
+		const G4VProcess* definingProcess = postPoint->GetProcessDefinedStep();
 		const G4String creatorName = creatorProcess
 			? creatorProcess->GetProcessName()
 			: "primary";
-		const G4String stepProcessName = stepProcess
-			? stepProcess->GetProcessName()
+		const G4String stepProcessName = definingProcess
+			? definingProcess->GetProcessName()
 			: "none";
 
-		StepRecord record = {
-			static_cast<std::int32_t>(event ? event->GetEventID() : -1),
-			static_cast<std::int32_t>(trk->GetTrackID()),
-			static_cast<std::int32_t>(trk->GetParentID()),
-			static_cast<std::int32_t>(trk->GetCurrentStepNumber()),
-			static_cast<std::int32_t>(trk->GetParticleDefinition()->GetPDGEncoding()),
-			static_cast<std::int32_t>(detid),
-			prePosition.x()/km,
-			prePosition.y()/km,
-			prePosition.z()/km,
-			postPosition.x()/km,
-			postPosition.y()/km,
-			postPosition.z()/km,
-			prePoint->GetKineticEnergy()/MeV,
-			postPoint->GetKineticEnergy()/MeV,
-			edep/MeV,
-			nioni/MeV,
-			step->GetStepLength()/m,
-			postPoint->GetGlobalTime()/ns,
-			einp/MeV,
-			{},
-			{}
-		};
-		std::snprintf(
-			record.creatorProcess,
-			sizeof(record.creatorProcess),
-			"%s",
-			creatorName.c_str()
+		analysis->FillNtupleIColumn(
+			stepNtupleId,
+			stepEventId,
+			event ? event->GetEventID() : -1
 		);
-		std::snprintf(
-			record.stepProcess,
-			sizeof(record.stepProcess),
-			"%s",
-			stepProcessName.c_str()
+		analysis->FillNtupleIColumn(stepNtupleId, stepTrackId, trk->GetTrackID());
+		analysis->FillNtupleIColumn(stepNtupleId, stepParentId, trk->GetParentID());
+		analysis->FillNtupleIColumn(
+			stepNtupleId,
+			stepId,
+			trk->GetCurrentStepNumber()
 		);
-
-		G4AutoLock lock(&stepTraceMutex);
-		std::fwrite(&record, sizeof(record), 1, stepTrace);
+		analysis->FillNtupleIColumn(
+			stepNtupleId,
+			stepPdg,
+			trk->GetParticleDefinition()->GetPDGEncoding()
+		);
+		analysis->FillNtupleIColumn(stepNtupleId, stepDetectorId, detid);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPreXKm, prePosition.x()/km);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPreYKm, prePosition.y()/km);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPreZKm, prePosition.z()/km);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPostXKm, postPosition.x()/km);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPostYKm, postPosition.y()/km);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPostZKm, postPosition.z()/km);
+		analysis->FillNtupleDColumn(
+			stepNtupleId,
+			stepPreKineticEnergyMeV,
+			prePoint->GetKineticEnergy()/MeV
+		);
+		analysis->FillNtupleDColumn(
+			stepNtupleId,
+			stepPostKineticEnergyMeV,
+			postPoint->GetKineticEnergy()/MeV
+		);
+		analysis->FillNtupleDColumn(stepNtupleId, stepEnergyDepositMeV, edep/MeV);
+		analysis->FillNtupleDColumn(
+			stepNtupleId,
+			stepNonionizingEnergyDepositMeV,
+			nioni/MeV
+		);
+		analysis->FillNtupleDColumn(
+			stepNtupleId,
+			stepLengthM,
+			step->GetStepLength()/m
+		);
+		analysis->FillNtupleDColumn(
+			stepNtupleId,
+			stepGlobalTimeNs,
+			postPoint->GetGlobalTime()/ns
+		);
+		analysis->FillNtupleDColumn(stepNtupleId, stepPrimaryEnergyMeV, einp/MeV);
+		analysis->FillNtupleSColumn(stepNtupleId, stepCreatorProcess, creatorName);
+		analysis->FillNtupleSColumn(stepNtupleId, stepProcess, stepProcessName);
+		analysis->AddNtupleRow(stepNtupleId);
 	}
 	if (detid == 0){
 		trk->SetTrackStatus(fStopAndKill);
@@ -224,7 +238,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			}
 		}
 
-		if ((mode == 0) or (mode == 1)) {
+		if (mode == 0) {
 			const InterfaceRecord record = {
 				static_cast<std::int32_t>(partPDG),
 				static_cast<std::uint16_t>(diid),
@@ -234,6 +248,25 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			};
 			G4AutoLock lock(&binaryOutputMutex);
 			std::fwrite(&record, sizeof(record), 1, tuples1);
+		} else if (mode == 1) {
+			analysis->FillNtupleIColumn(interfaceNtupleId, interfacePdg, partPDG);
+			analysis->FillNtupleIColumn(interfaceNtupleId, interfaceId, diid);
+			analysis->FillNtupleIColumn(
+				interfaceNtupleId,
+				interfaceAngleDegrees,
+				static_cast<G4int>(std::round(inclination/deg))
+			);
+			analysis->FillNtupleDColumn(
+				interfaceNtupleId,
+				interfaceKineticEnergyMeV,
+				pre->GetKineticEnergy()/MeV
+			);
+			analysis->FillNtupleDColumn(
+				interfaceNtupleId,
+				interfacePrimaryEnergyMeV,
+				einp/MeV
+			);
+			analysis->AddNtupleRow(interfaceNtupleId);
 		}
 	}
 

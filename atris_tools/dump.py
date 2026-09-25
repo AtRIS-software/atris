@@ -6,10 +6,9 @@ import os
 from pathlib import Path
 import sys
 
-from .binary_output import INTERFACE_RECORDS, STEP_RECORDS, read_header
+from .binary_output import INTERFACE_RECORDS, read_header
 from .cli import HelpFormatter, add_version_argument
 from .interface_output import BINARY_DTYPE, read_binary
-from .step_output import STEP_DTYPE, process_name, read_step_records
 
 
 def _field_value(record, name):
@@ -19,8 +18,6 @@ def _field_value(record, name):
         return int(value)
     if kind == "f":
         return float(value)
-    if kind == "S":
-        return process_name(value)
     return value
 
 
@@ -28,14 +25,10 @@ def read_binary_output(path):
     """Read an AtRIS binary file and identify its record type and fields."""
     header = read_header(path)
     record_type = header["record_type"] if header else INTERFACE_RECORDS
-    if record_type == INTERFACE_RECORDS:
-        records = read_binary(path)
-        names = BINARY_DTYPE.names
-    elif record_type == STEP_RECORDS:
-        records = read_step_records(path)
-        names = STEP_DTYPE.names
-    else:
-        raise ValueError(str(path) + " contains an unknown AtRIS record type")
+    if record_type != INTERFACE_RECORDS:
+        raise ValueError(str(path) + " does not contain interface records")
+    records = read_binary(path)
+    names = BINARY_DTYPE.names
     return record_type, records, names
 
 
@@ -54,8 +47,8 @@ def main():
     parser = argparse.ArgumentParser(
         formatter_class=HelpFormatter,
         description=(
-            "Dump an AtRIS interface or transport-step binary output file "
-            "as CSV text on standard output."
+            "Dump an AtRIS mode-0 interface binary file as CSV text on "
+            "standard output."
         ),
         epilog=(
             "The input file is not modified. Pipe the output to tools such as "
@@ -67,7 +60,7 @@ def main():
         "binary_file",
         type=Path,
         metavar="BINARY_FILE",
-        help="AtRIS .binary or .steps.binary file to dump.",
+        help="AtRIS mode-0 .binary file to dump.",
     )
     add_version_argument(parser)
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-"""Plot particle-interface records written by AtRIS output mode 0."""
+"""Plot particle-interface records written by AtRIS output modes 0 and 1."""
 
 import logging
 from pathlib import Path
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def plot_interface_output(simname):
-    """Plot particle boundary crossings recorded by AtRIS output mode 0."""
+    """Plot particle boundary crossings recorded by AtRIS."""
     records, source_path = read_interface_output(simname)
     if not records.size:
         raise ValueError(source_path.name + " contains no records")
@@ -166,9 +166,10 @@ def plot_interface_output(simname):
     )
 
     species = simname.capitalize()
+    mode = "mode-1" if source_path.suffix == ".root" else "mode-0"
     figure.suptitle(
-        "%s mode-0 output: %i boundary crossings from %s"
-        % (species, records.size, source_path.name)
+        "%s %s interface output: %i boundary crossings from %s"
+        % (species, mode, records.size, source_path.name)
     )
     filename = simname + ".interfaces.png"
     figure.savefig(filename)

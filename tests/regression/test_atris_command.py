@@ -13,6 +13,7 @@ import subprocess
 import numpy as np
 import pytest
 
+from atris_tools.interface_output import read_binary, read_root
 from atris_tools.step_output import process_name, read_step_records
 
 
@@ -64,9 +65,9 @@ def prepare_run(run_directory, *, chunked=False):
         (run_directory / "chunks").mkdir()
 
 
-def invoke_atris(command, run_directory, *arguments):
+def invoke_atris(command, run_directory, *arguments, threads="1"):
     environment = os.environ.copy()
-    environment["G4FORCENUMBEROFTHREADS"] = "1"
+    environment["G4FORCENUMBEROFTHREADS"] = threads
     return subprocess.run(
         [command, *arguments],
         cwd=run_directory,
@@ -86,6 +87,7 @@ def run_atris(
     physics="FTFP_BERT_HP",
     mode="-1",
     phantom_count="1",
+    threads="1",
 ):
     return invoke_atris(
         command,
@@ -94,6 +96,7 @@ def run_atris(
         simulation,
         str(mode),
         str(phantom_count),
+        threads=threads,
     )
 
 
@@ -110,15 +113,15 @@ def histogram_entries(path):
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    ("mode", "creates_interfaces", "creates_steps"),
+    ("mode", "creates_binary", "creates_root"),
     [
         pytest.param("-1", False, False, id="csv-response-mode"),
         pytest.param("0", True, False, id="binary-interface-mode"),
-        pytest.param("1", True, True, id="binary-step-mode"),
+        pytest.param("1", False, True, id="root-shower-mode"),
     ],
 )
 def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
-    tmp_path, atris_command, mode, creates_interfaces, creates_steps
+    tmp_path, atris_command, mode, creates_binary, creates_root
 ):
     prepare_run(tmp_path)
 
@@ -136,27 +139,35 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
     }
     assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
     assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
-    assert (tmp_path / "protons.binary").exists() is creates_interfaces
-    assert (tmp_path / "protons.steps.binary").exists() is creates_steps
+    assert (tmp_path / "protons.binary").exists() is creates_binary
+    assert (tmp_path / "protons.root").exists() is creates_root
+    assert not (tmp_path / "protons.steps.binary").exists()
     assert not (tmp_path / "protons.ascii").exists()
 
 
 @pytest.mark.regression
-def test_mode_one_writes_binary_step_trace_with_track_genealogy(
+def test_mode_one_writes_root_step_ntuple_with_track_genealogy(
     tmp_path, atris_command
 ):
     prepare_run(tmp_path)
 
-    result = run_atris(atris_command, tmp_path, "protons", mode="1")
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        "protons",
+        mode="1",
+        threads="2",
+    )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    records = read_step_records(tmp_path / "protons.steps.binary")
+    records = read_step_records(tmp_path / "protons.root")
     assert len(records)
     assert set(records["event_id"]) == {0, 1}
     assert np.all(records["track_id"] > 0)
     assert np.all(records["step_id"] > 0)
     assert all(process_name(value) for value in records["creator_process"])
     assert all(process_name(value) for value in records["step_process"])
+    assert not list(tmp_path.glob("protons_t*.root"))
 
 
 @pytest.mark.regression
@@ -173,9 +184,10 @@ def test_mode_one_contains_mode_zero_interface_records(tmp_path, atris_command):
 
     assert zero_result.returncode == 0, zero_result.stdout + zero_result.stderr
     assert one_result.returncode == 0, one_result.stdout + one_result.stderr
-    assert (mode_zero / "protons.binary").read_bytes() == (
-        mode_one / "protons.binary"
-    ).read_bytes()
+    np.testing.assert_array_equal(
+        read_binary(mode_zero / "protons.binary"),
+        read_root(mode_one / "protons.root"),
+    )
 
 
 @pytest.mark.regression
@@ -199,6 +211,20 @@ def test_seeded_prefix_uses_shared_chunk_inputs_and_seeded_output_prefix(
     assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
     assert histogram_entries(tmp_path / "chunks" / f"{prefix}_h1_h1.1.csv") == 1
     assert not (tmp_path / "protons_h1_h1.1.csv").exists()
+
+
+@pytest.mark.regression
+def test_seeded_mode_one_writes_root_file_inside_chunks(tmp_path, atris_command):
+    prepare_run(tmp_path, chunked=True)
+    simulation = "chunks/protons_123456_654321"
+
+    result = run_atris(atris_command, tmp_path, simulation, mode="1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    root_path = tmp_path / (simulation + ".root")
+    assert root_path.is_file()
+    assert len(read_step_records(root_path)) == 1
+    assert (tmp_path / (simulation + "_h1_h1.1.csv")).is_file()
 
 
 @pytest.mark.regression

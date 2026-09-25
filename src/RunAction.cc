@@ -6,7 +6,7 @@
 #include "G4SystemOfUnits.hh"
 #include "G4PhysicalConstants.hh"
 #include "HistoManager.hh"
-#include "G4CsvAnalysisManager.hh"
+#include "G4AnalysisManager.hh"
 #include "DetectorConstruction.hh"
 #include "G4UnitsTable.hh"
 #include <vector>
@@ -17,6 +17,7 @@
 
 
 extern G4String outputFileName;                       // from src/main.cc
+extern G4int mode;
 
 namespace atris {
 
@@ -61,10 +62,12 @@ void RunAction::BeginOfRunAction(const G4Run*)
 {
   G4cout << "### AtRIS: executing BeginOfRunAction" << G4endl;
   G4cout << "=== MASTER: " << IsMaster() << G4endl;
+  G4AnalysisManager* analysis = G4AnalysisManager::Instance();
+  analysis->SetDefaultFileType(mode == 1 ? "root" : "csv");
+  if (mode == 1) analysis->SetNtupleMerging(true);
   fHisto = new HistoManager();
-  G4CsvAnalysisManager* analysis = G4CsvAnalysisManager::Instance();
   if (analysis->IsActive()) {
-    analysis->SetFileName(outputFileName);
+    analysis->SetFileName(outputFileName + (mode == 1 ? ".root" : ""));
     analysis->OpenFile();
   }
 }
@@ -72,7 +75,7 @@ void RunAction::BeginOfRunAction(const G4Run*)
 void RunAction::EndOfRunAction(const G4Run*)
 {
   G4cout << "### AtRIS: executing EndOfRunAction" << G4endl;
-  auto analysis = G4CsvAnalysisManager::Instance();
+  auto analysis = G4AnalysisManager::Instance();
   if (analysis->IsActive()) {
     analysis->SetVerboseLevel(1);
     analysis->Write();

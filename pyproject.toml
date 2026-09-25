@@ -9,6 +9,7 @@ description = "Python preparation and post-processing tools for AtRIS"
 dependencies = [
     "colorlog",
     "numpy",
+    "uproot",
 ]
 
 [project.optional-dependencies]

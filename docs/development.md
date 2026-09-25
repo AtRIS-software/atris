@@ -40,20 +40,21 @@ macro generation, chunk management, numerical post-processing, and plotting.
 The C++ executable remains the scientific simulation core; the Python package
 prepares its inputs and manages the surrounding workflow.
 
-## Binary output
+## Simulation output
 
-Interface and transport-step files begin with the same 32-byte header. It
-contains the `ATRISBIN` identifier, format and schema versions, record type,
-byte-order marker, header size, and record size. Interface records retain the
-historical five fields. Step records contain the event and track identifiers,
-particle and detector identifiers, pre- and post-step positions and energies,
-energy deposition, step length, time, primary energy, and process names.
+Mode 0 interface files use the native AtRIS binary format. Each file begins
+with a 32-byte header containing the `ATRISBIN` identifier, format and schema
+versions, record type, byte-order marker, header size, and record size. The
+interface records retain the historical five fields. `atris-dump` and
+`atris-bin-to-ascii` provide compatibility tools for this format.
 
-The readers in `atris_tools.interface_output` and `atris_tools.step_output`
-memory-map these files. `atris-dump` identifies either record type from the
-header and writes CSV text to standard output. New formats must use a new
-format or schema version rather than silently changing an existing record
-layout.
+Mode 1 uses Geant4's ROOT analysis backend instead of a custom binary format.
+Its `interfaces` and `steps` ntuples are stored together in `<name>.root`, and
+Geant4 merges the worker-thread ntuples. The step columns contain event and
+track identifiers, particle and detector identifiers, pre- and post-step
+positions and energies, energy deposition, step length, time, primary energy,
+and process names. The Python tools read these ntuples with Uproot in bounded
+chunks.
 
 Some modules still retain names and implementation details from the original
 standalone scripts. Further cleanup should favor clear importable functions and

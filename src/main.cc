@@ -25,7 +25,6 @@ G4String outputFileName;
 G4int    mode = -1;
 G4int    nrofdetectors=0;
 FILE*    tuples1;
-FILE*    stepTrace;
 
 // For holding phantom responses
 G4int nrphantoms;
@@ -114,7 +113,6 @@ int main(int argc,char** argv){
 	G4cout << "\t\t "<< prefix <<"_h2_h2.dir.csv\t:: source direction distribution" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h2_h2.pos.csv\t:: source position distribution" << G4endl;
 	G4cout << "\t\t "<< prefix <<"_h2_h2.ion.csv\t:: resulting ionization histrogram" << G4endl;
-	G4cout << "\t\t "<< prefix <<".steps.binary\t:: mode 1 binary step output" << G4endl;
 	G4cout << "\t\t "<< prefix <<".log\t\t::         detailed log file" << G4endl;
 	G4cout << "\t\t "<< prefix <<".error\t\t::       error stream file" << G4endl;
 	*/
@@ -169,7 +167,7 @@ int main(int argc,char** argv){
 		}
 		return -1;
 	}
-	if ((mode == 0) or (mode == 1)){
+	if (mode == 0){
 		G4String bFN = outputFileName + (G4String) ".binary";
 		G4cout << "### AtRIS: opening file:" << bFN << G4endl;
 		tuples1 = std::fopen(bFN,"wb");
@@ -186,25 +184,9 @@ int main(int argc,char** argv){
 			return 1;
 		}
 	}
-	if (mode == 1){
-		G4String traceFileName = outputFileName + (G4String) ".steps.binary";
-		G4cout << "### AtRIS: opening step trace: " << traceFileName << G4endl;
-		G4cout << "### AtRIS: mode 1 writes one binary record per transport step; output may be very large" << G4endl;
-		stepTrace = std::fopen(traceFileName, "wb");
-		if (stepTrace == nullptr) {
-			G4cerr << "### AtRIS: unable to open step trace: " << traceFileName << G4endl;
-			delete runManager;
-			return 1;
-		}
-		if (not atris::WriteBinaryHeader(
-			stepTrace,
-			atris::BinaryRecordType::Step,
-			sizeof(atris::StepRecord)
-		)) {
-			G4cerr << "### AtRIS: unable to write step trace header: " << traceFileName << G4endl;
-			delete runManager;
-			return 1;
-		}
+	if (mode == 1) {
+		G4cout << "### AtRIS: mode 1 writes interface and transport-step ntuples to "
+		       << outputFileName << ".root; output may be very large" << G4endl;
 	}
 
 	// DEACT atris::PrimaryGeneratorAction *pga = new atris::PrimaryGeneratorAction;
@@ -234,8 +216,7 @@ int main(int argc,char** argv){
 	} else {
 		G4cerr << "### AtRIS: macro execution failed with Geant4 status " << commandStatus << G4endl;
 	}
-	if ((mode == 0) or (mode == 1)) {std::fclose(tuples1);}
-	if (mode == 1) {std::fclose(stepTrace);}
+	if (mode == 0) {std::fclose(tuples1);}
 	delete runManager;
 	if (commandStatus == 0) {
 		G4cout << "### AtRIS: Run completed successfully." << G4endl;

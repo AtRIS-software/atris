@@ -28,6 +28,7 @@ set(ATRIS_HEADERS
   include/BinaryOutput.hh
   include/DetectorConstruction.hh
   include/HistoManager.hh
+  include/NtupleSchema.hh
   include/PrimaryGeneratorAction.hh
   include/RunAction.hh
   include/SensitiveDetector.hh
