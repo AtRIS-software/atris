@@ -20,9 +20,11 @@ from .postprocess import process_psf
 from .response_histograms import (
     IONIZATION_HISTOGRAM,
     PRIMARY_HISTOGRAM,
-    combine_root_histograms,
     read_csv_histogram,
     response_output_format,
+)
+from .root_histograms import (
+    combine_root_histograms,
     root_histogram_data,
     write_root_histograms,
 )
