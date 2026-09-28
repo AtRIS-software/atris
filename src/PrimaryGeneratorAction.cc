@@ -9,7 +9,6 @@
 #include "G4UnitsTable.hh"
 #include <chrono>
 #include <ctime>
-#include <cstdio>
 
 extern G4int t0;
 
@@ -39,11 +38,6 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 			G4cout << "Starting primary particle generation" << G4endl;
 		}
 	}
-	if (current != 0 && current % 100 == 0){
-		std::fprintf(stdout, "AtRIS progress: event %d\n", current);
-		std::fflush(stdout);
-	}
-
 	// Calculate direction
 	G4ThreeVector dir = ParticleGenerator->GetParticleMomentumDirection();
 	G4double dirtheta = dir.theta(), dirphi=dir.phi();
