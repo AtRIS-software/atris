@@ -27,6 +27,7 @@ atris-run = "atris_tools.run_chunks:main"
 atris-gather = "atris_tools.gather:main"
 atris-postprocess = "atris_tools.postprocess:main"
 atris-plot = "atris_tools.plotting:main"
+atris-dump = "atris_tools.dump:main"
 
 # Legacy command names.
 nrlmsis2psf = "atris_tools.nrlmsis2psf:main"

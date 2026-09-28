@@ -56,6 +56,11 @@ ENTRY_POINT_HELP = (
         ("missing product groups are skipped", "does not run atris"),
     ),
     (
+        "atris-dump",
+        "dump",
+        ("standard output", "not modified"),
+    ),
+    (
         "nrlmsis2psf",
         "nrlmsis2psf",
         ("does not download atmosphere data",),

@@ -92,6 +92,16 @@ can produce much more data than the other modes. Geant4 writes and merges all
 of these objects through its ROOT analysis backend, and `atris-plot` reads the
 ROOT output with Uproot.
 
+Dump either ROOT ntuple as CSV without modifying the ROOT file:
+
+```bash
+atris-dump protons.root interfaces | head
+atris-dump protons.root steps | head
+```
+
+The `steps` ntuple exists only in mode `1` output. The dumper reads records
+incrementally, so `head` can stop a large dump after a few rows.
+
 Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 
 An existing macro containing `/run/numberOfThreads` retains that setting unless
