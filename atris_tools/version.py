@@ -55,7 +55,7 @@ def report_versions():
     try:
         result = subprocess.run(
             ["AtRIS", "--version"],
-            capture_output=True,
+            stdout=subprocess.PIPE,
             text=True,
             check=False,
         )
