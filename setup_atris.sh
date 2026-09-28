@@ -22,21 +22,22 @@ else
     atris_root="$(cd "$(dirname "${(%):-%x}")" && pwd)"
 fi
 
-# The default layout has one versioned Geant4 directory beside the AtRIS
-# checkout. Change this pattern if the Geant4 source and install are elsewhere.
-geant4_dir=("$atris_root"/../geant4-v[0-9][0-9].[0-9].[0-9])
-if [[ "${#geant4_dir[@]}" -ne 1 || ! -d "${geant4_dir[@]}" ]]
+# Keep a Geant4 environment that has already been loaded. Otherwise, locate
+# the sibling from the logical AtRIS path. Computing the parent as text
+# preserves layouts where AtRIS and Geant4 are sibling symlinks whose targets
+# live in different directories.
+geant4_setup=
+if [[ ! -d "${GEANT4_DATA_DIR:-}" && ! -d "${G4LEDATA:-}" ]]
 then
-    echo "Expected exactly one geant4-v<version> directory beside AtRIS." >&2
-    return 1
+    atris_parent="$(dirname "$atris_root")"
+    geant4_dir=("$atris_parent"/geant4-v[0-9][0-9].[0-9].[0-9])
+    if [[ "${#geant4_dir[@]}" -ne 1 || ! -d "${geant4_dir[@]}" ]]
+    then
+        echo "Expected exactly one geant4-v<version> directory beside AtRIS." >&2
+        return 1
+    fi
+    geant4_setup="${geant4_dir[@]}/install/bin/geant4.sh"
 fi
-
-# Return an existing directory's physical path without changing this shell's
-# working directory.
-canonicalise_dir() {
-    (cd -P "$1" && pwd -P)
-}
-geant4_dir=("$(canonicalise_dir "${geant4_dir[@]}")") || return 1
 
 # Helper function to print one command string, then execute that same string.
 run() {
@@ -66,8 +67,11 @@ then
     fi
 fi
 
-# Load the Geant4 environment from the adjacent installation.
-run "source \"${geant4_dir[@]}/install/bin/geant4.sh\""
+# Load Geant4 from the adjacent installation unless it was already available.
+if [[ -n "$geant4_setup" ]]
+then
+    run "source \"$geant4_setup\""
+fi
 
 # Check revisions quietly when both the local executable and tools exist.
 if [[ -x "$ATRIS_ROOT/build/AtRIS" ]] &&
@@ -76,5 +80,5 @@ then
     atris-run --version >/dev/null || echo "Warning: version check failed." >&2
 fi
 
-unset atris_root geant4_dir python_user_base
-unset -f canonicalise_dir run
+unset atris_root atris_parent geant4_dir geant4_setup python_user_base
+unset -f run
