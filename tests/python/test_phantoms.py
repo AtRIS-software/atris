@@ -1,3 +1,4 @@
+import logging
 import os
 
 import pytest
@@ -104,6 +105,96 @@ def test_stage_phantoms_copy_replaces_matching_links(tmp_path):
     assert counting.read_text() == "first counting\n"
 
 
+def test_stage_phantoms_updates_links_after_selection_changes(tmp_path):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+    stage_phantoms(run_directory, archive)
+
+    write_phantoms(run_directory, "0  second  3.5 4.5\n")
+    count = stage_phantoms(run_directory, archive)
+
+    assert count == 1
+    radiation = run_directory / "radiation_phantom0.txt"
+    counting = run_directory / "counting_phantom0.txt"
+    assert radiation.is_symlink()
+    assert counting.is_symlink()
+    assert radiation.resolve() == archive / "second_response.txt"
+    assert counting.resolve() == archive / "second_counting.txt"
+
+
+def test_stage_phantoms_copy_keeps_old_files_and_updates_links(tmp_path):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+    stage_phantoms(run_directory, archive, copy=True)
+
+    write_phantoms(run_directory, "0  second  3.5 4.5\n")
+    count = stage_phantoms(run_directory, archive, copy=True)
+
+    assert count == 1
+    assert (run_directory / "first_response.txt").is_file()
+    assert (run_directory / "first_counting.txt").is_file()
+    assert (run_directory / "second_response.txt").is_file()
+    assert (run_directory / "second_counting.txt").is_file()
+    assert os.readlink(run_directory / "radiation_phantom0.txt") == (
+        "second_response.txt"
+    )
+    assert os.readlink(run_directory / "counting_phantom0.txt") == (
+        "second_counting.txt"
+    )
+
+
+def test_stage_phantoms_removes_links_for_removed_rows(tmp_path):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory)
+    stage_phantoms(run_directory, archive)
+
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+    count = stage_phantoms(run_directory, archive)
+
+    assert count == 1
+    assert (run_directory / "radiation_phantom0.txt").is_symlink()
+    assert (run_directory / "counting_phantom0.txt").is_symlink()
+    assert not (run_directory / "radiation_phantom1.txt").exists()
+    assert not (run_directory / "counting_phantom1.txt").exists()
+
+
+def test_stage_phantoms_removes_old_links_when_replacement_is_missing(
+    tmp_path, caplog
+):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+    stage_phantoms(run_directory, archive)
+
+    write_phantoms(run_directory, "0  missing  3.5 4.5\n")
+    count = stage_phantoms(run_directory, archive)
+
+    assert count == 0
+    assert not (run_directory / "radiation_phantom0.txt").exists()
+    assert not (run_directory / "counting_phantom0.txt").exists()
+    assert "missing_response.txt" in caplog.messages[-1]
+
+
+def test_stage_phantoms_does_not_remove_regular_files_for_removed_rows(tmp_path):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+    stale_file = run_directory / "radiation_phantom1.txt"
+    stale_file.write_text("keep me\n")
+
+    stage_phantoms(run_directory, archive)
+
+    assert stale_file.read_text() == "keep me\n"
+
+
 def test_stage_phantoms_accepts_custom_files_in_run_directory(tmp_path):
     archive = make_archive(tmp_path)
     run_directory = tmp_path / "run"
@@ -133,7 +224,7 @@ def test_stage_phantoms_accepts_run_without_phantoms(tmp_path):
     assert list(run_directory.iterdir()) == []
 
 
-def test_stage_phantoms_refuses_all_destinations_before_writing(tmp_path):
+def test_stage_phantoms_logs_conflict_and_keeps_other_rows(tmp_path, caplog):
     archive = make_archive(tmp_path)
     run_directory = tmp_path / "run"
     run_directory.mkdir()
@@ -141,41 +232,129 @@ def test_stage_phantoms_refuses_all_destinations_before_writing(tmp_path):
     existing = run_directory / "counting_phantom1.txt"
     existing.write_text("keep me\n")
 
-    with pytest.raises(FileExistsError, match="Refusing to overwrite"):
-        stage_phantoms(run_directory, archive)
+    count = stage_phantoms(run_directory, archive)
 
+    assert count == 1
     assert existing.read_text() == "keep me\n"
-    assert not (run_directory / "radiation_phantom0.txt").exists()
+    assert (run_directory / "radiation_phantom0.txt").is_symlink()
+    assert (run_directory / "counting_phantom0.txt").is_symlink()
+    assert not (run_directory / "radiation_phantom1.txt").exists()
     assert (run_directory / "phantoms.txt").read_text() == metadata
+    assert "Refusing to overwrite" in caplog.messages[-1]
 
 
-def test_stage_phantoms_checks_all_sources_before_writing(tmp_path):
+def test_stage_phantoms_logs_missing_source_and_keeps_other_rows(tmp_path, caplog):
     archive = make_archive(tmp_path)
     run_directory = tmp_path / "run"
     run_directory.mkdir()
     metadata = write_phantoms(run_directory)
     (archive / "second_counting.txt").unlink()
 
-    with pytest.raises(FileNotFoundError, match="second_counting.txt"):
-        stage_phantoms(run_directory, archive)
+    count = stage_phantoms(run_directory, archive)
 
-    assert list(run_directory.iterdir()) == [run_directory / "phantoms.txt"]
+    assert count == 1
+    assert (run_directory / "radiation_phantom0.txt").is_symlink()
+    assert (run_directory / "counting_phantom0.txt").is_symlink()
+    assert not (run_directory / "radiation_phantom1.txt").exists()
+    assert not (run_directory / "counting_phantom1.txt").exists()
     assert (run_directory / "phantoms.txt").read_text() == metadata
+    assert "second_counting.txt" in caplog.messages[-1]
 
 
-def test_stage_phantoms_rejects_missing_file(tmp_path):
+def test_stage_phantoms_can_create_dummy_counting_response(tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    archive = make_archive(tmp_path)
+    (archive / "first_response.txt").write_text("22 2212\n")
+    (archive / "first_counting.txt").unlink()
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+
+    count = stage_phantoms(
+        run_directory,
+        archive,
+        accept_missing_counting=True,
+    )
+    count_again = stage_phantoms(
+        run_directory,
+        archive,
+        accept_missing_counting=True,
+    )
+
+    assert count == 1
+    assert count_again == 1
+    dummy = run_directory / "first_dummy_counting.txt"
+    lines = dummy.read_text().splitlines()
+    assert lines[0] == "22 2212"
+    assert len(lines) == 3
+    for line in lines[1:]:
+        values = line.split()
+        assert len(values) == 650
+        assert set(values) == {"1.000000e+00"}
+    counting = run_directory / "counting_phantom0.txt"
+    assert counting.is_symlink()
+    assert os.readlink(counting) == "first_dummy_counting.txt"
+    assert "dummy counting response with values of one" in caplog.messages[-1]
+
+
+def test_stage_phantoms_prefers_real_counting_response(tmp_path):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+
+    count = stage_phantoms(
+        run_directory,
+        archive,
+        accept_missing_counting=True,
+    )
+
+    assert count == 1
+    assert not (run_directory / "first_dummy_counting.txt").exists()
+    counting = run_directory / "counting_phantom0.txt"
+    assert counting.resolve() == archive / "first_counting.txt"
+
+
+def test_stage_phantoms_does_not_overwrite_existing_dummy_file(tmp_path, caplog):
+    archive = make_archive(tmp_path)
+    (archive / "first_response.txt").write_text("22 2212\n")
+    (archive / "first_counting.txt").unlink()
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0  first  1.5 2.5\n")
+    dummy = run_directory / "first_dummy_counting.txt"
+    dummy.write_text("keep me\n")
+
+    count = stage_phantoms(
+        run_directory,
+        archive,
+        accept_missing_counting=True,
+    )
+
+    assert count == 0
+    assert dummy.read_text() == "keep me\n"
+    assert not (run_directory / "radiation_phantom0.txt").exists()
+    assert not (run_directory / "counting_phantom0.txt").exists()
+    assert "Refusing to overwrite" in caplog.messages[-1]
+
+
+def test_stage_phantoms_continues_after_missing_file(tmp_path, caplog):
     archive = make_archive(tmp_path)
     run_directory = tmp_path / "run"
     run_directory.mkdir()
     write_phantoms(
         run_directory,
-        "0  missing  1.5 2.5\n",
+        "0  missing  1.5 2.5\n1  second  3.5 4.5\n",
     )
 
-    with pytest.raises(FileNotFoundError, match="missing_response.txt"):
-        stage_phantoms(run_directory, archive)
+    count = stage_phantoms(run_directory, archive)
 
-    assert list(run_directory.iterdir()) == [run_directory / "phantoms.txt"]
+    assert count == 1
+    assert not (run_directory / "radiation_phantom0.txt").exists()
+    assert not (run_directory / "counting_phantom0.txt").exists()
+    assert (run_directory / "radiation_phantom1.txt").is_symlink()
+    assert (run_directory / "counting_phantom1.txt").is_symlink()
+    assert "missing_response.txt" in caplog.messages[-1]
 
 
 @pytest.mark.parametrize(
