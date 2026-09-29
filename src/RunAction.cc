@@ -48,11 +48,6 @@ G4Run* RunAction::GenerateRun()
 {
   G4cout << "### AtRIS: executing GenerateRun" << G4endl;
   G4cout << "=== MASTER: " << IsMaster() << G4endl;
-  /*
-  if (IsMaster()) {
-    G4cout << "### AtRIS: Since we are in the master thread, we can configure Analysis" << G4endl;
-  }
-  */
   return new G4Run;
 }
 

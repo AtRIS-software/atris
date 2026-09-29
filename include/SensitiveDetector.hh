@@ -33,13 +33,8 @@ public:
 
 	virtual void Print();
 
-	// variables
-	//G4ThreeVector pos, dir, pv_pos, pv_dir, prepos;
-	//G4double ekin, pv_ekin, len, ioni, nioni;
 	G4double ioni, nioni;
-	//G4String part, det, vol, proc;
 	G4String det, part;
-	//G4int evid, trid, parid, runid, detid;
 	G4int detid, stepid;
 	
 
@@ -70,12 +65,10 @@ public:
 	// methods from base class
 	virtual void   Initialize(G4HCofThisEvent* hitCollection);
 	virtual G4bool ProcessHits(G4Step* step, G4TouchableHistory* history);
-	//virtual void   EndOfEvent(G4HCofThisEvent* hitCollection);
 
 private:
 
 	SDHitsCollection* fHitsCollection;
-	//G4VProcess* fpCreatorProcess;
 
 protected:
 	static std::string formatString;

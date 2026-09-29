@@ -71,7 +71,6 @@ SensitiveDetector::~SensitiveDetector()
 
 void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
 	// Create hits collection
-	//G4cout << "Starting tracking for this event" << G4endl;
 	fHitsCollection	= new SDHitsCollection(SensitiveDetectorName, collectionName[0]);
 	// Add this collection in hce
 	G4int hcID = G4SDManager::GetSDMpointer()->GetCollectionID(collectionName[0]);
@@ -79,7 +78,6 @@ void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
 }
 
 G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
-	//G4cout << "#### AHIT ####" << G4endl;
 	G4Track *trk      = step->GetTrack();
 	G4double edep     = step->GetTotalEnergyDeposit();
 	auto sourcedata   = G4GeneralParticleSourceData::Instance();
@@ -173,13 +171,10 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		G4int    apartPDG          = std::abs(partPDG);
 		G4int    k = static_cast<G4int>(std::log10(ekin/eV)/icrustep);
 		if (k < 0) k=0;
-		//G4cout << "PDG=" << partPDG << ", apartPDG=" << apartPDG << ", k=" << k;
 		if (apartPDG<2214) {
 			G4int    dpartPDG          = partPDG + 2213;
 			bool use = ((useornot[dpartPDG]) or (partPDG==22));
-			//G4cout << " is light with use=" << use << ",dpartPDG="<<dpartPDG << ", and ekin=" << ekin/MeV << "MeV" << G4endl;
 			if (use) { // light relevant particles
-				//G4cout << " and should be used ";
 				G4int j = useornot[dpartPDG]*650+k;
 				// ##########################
 				// Extension: equivalent dose
@@ -208,7 +203,6 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 
 			}
 		} else if (1000010019 < partPDG) {
-			// G4cout << " is heavy " << G4endl;
 			// We first check if we are dealing with one of the smaller, relevant isotopes
 			// We then check if we are dealing with one of: H2, H3, He3, He4
 			// If so, we add the contribution to the dose-rate histogram
