@@ -79,54 +79,78 @@ def stage_phantoms(run_directory, archive=None, copy=False):
         archive = Path(archive).resolve()
 
     phantoms = read_phantoms(run_directory)
-    operations = []
+    copy_operations = []
+    link_operations = []
     conflicts = []
     for phantom in phantoms:
         phantom_id = phantom["id"]
         stem = phantom["stem"]
-        radiation = find_phantom_file(
-            stem + "_response.txt", run_directory, archive
-        )
-        counting = find_phantom_file(
-            stem + "_counting.txt", run_directory, archive
-        )
-        radiation_destination = run_directory / (
-            "radiation_phantom" + str(phantom_id) + ".txt"
-        )
-        counting_destination = run_directory / (
-            "counting_phantom" + str(phantom_id) + ".txt"
-        )
-        operations.extend(
+        filenames = (
             (
-                (radiation, radiation_destination),
-                (counting, counting_destination),
-            )
+                stem + "_response.txt",
+                "radiation_phantom" + str(phantom_id) + ".txt",
+            ),
+            (
+                stem + "_counting.txt",
+                "counting_phantom" + str(phantom_id) + ".txt",
+            ),
         )
+        for filename, staged_filename in filenames:
+            source = find_phantom_file(filename, run_directory, archive)
+            staged_source = source
+            if copy:
+                staged_source = run_directory / Path(filename).name
+                if source != staged_source:
+                    copy_operations.append((source, staged_source))
+            link_operations.append(
+                (source, staged_source, run_directory / staged_filename)
+            )
 
-    pending = []
-    for source, destination in operations:
+    pending_copies = []
+    for source, destination in copy_operations:
         if not os.path.lexists(destination):
-            pending.append((source, destination))
-        elif destination.is_file() and destination.resolve() == source:
+            pending_copies.append((source, destination, False))
+        elif destination.is_symlink() and destination.resolve() == source:
+            pending_copies.append((source, destination, True))
+        else:
+            conflicts.append(str(destination))
+
+    pending_links = []
+    for source, staged_source, destination in link_operations:
+        if not os.path.lexists(destination):
+            pending_links.append((staged_source, destination, False))
+        elif destination.is_symlink() and destination.resolve() == staged_source:
             continue
+        elif copy and destination.is_symlink() and destination.resolve() == source:
+            pending_links.append((staged_source, destination, True))
         else:
             conflicts.append(str(destination))
     if conflicts:
         raise FileExistsError("Refusing to overwrite: " + ", ".join(conflicts))
 
     created = []
+    replaced_links = []
     try:
-        for source, destination in pending:
+        for source, destination, replace_link in pending_copies:
+            if replace_link:
+                replaced_links.append((destination, os.readlink(destination)))
+                destination.unlink()
             created.append(destination)
-            if copy:
-                shutil.copy2(source, destination)
-                logger.debug("Copied %s to %s", source, destination)
-            else:
-                destination.symlink_to(os.path.relpath(source, run_directory))
-                logger.debug("Linked %s to %s", destination, source)
+            shutil.copy2(source, destination)
+            logger.debug("Copied %s to %s", source, destination)
+        for source, destination, replace_link in pending_links:
+            if replace_link:
+                replaced_links.append((destination, os.readlink(destination)))
+                destination.unlink()
+            created.append(destination)
+            destination.symlink_to(os.path.relpath(source, run_directory))
+            logger.debug("Linked %s to %s", destination, source)
     except Exception:
         for path in reversed(created):
             path.unlink(missing_ok=True)
+        for path, target in reversed(replaced_links):
+            if not os.path.lexists(path):
+                path.symlink_to(target)
         raise
 
     return len(phantoms)
@@ -166,8 +190,8 @@ def main():
         "--copy",
         action="store_true",
         help=(
-            "Copy response files into the run directory instead of creating "
-            "relative symbolic links."
+            "Copy the named phantom tables into the run directory, then link "
+            "the numbered AtRIS filenames to those local copies."
         ),
     )
     add_logging_arguments(parser)
@@ -189,7 +213,11 @@ def main():
     if count == 0:
         logger.info("No phantoms to stage")
     else:
-        method = "copied files" if args.copy else "relative symbolic links"
+        method = (
+            "local copies and relative symbolic links"
+            if args.copy
+            else "relative symbolic links"
+        )
         logger.info("Staged %i phantoms using %s", count, method)
 
 

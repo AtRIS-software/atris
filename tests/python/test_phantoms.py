@@ -60,10 +60,48 @@ def test_stage_phantoms_can_copy_files(tmp_path):
 
     stage_phantoms(run_directory, archive, copy=True)
 
+    local_radiation = run_directory / "first_response.txt"
+    local_counting = run_directory / "first_counting.txt"
     radiation = run_directory / "radiation_phantom0.txt"
-    assert radiation.is_file()
-    assert not radiation.is_symlink()
+    counting = run_directory / "counting_phantom0.txt"
+    assert local_radiation.is_file()
+    assert local_counting.is_file()
+    assert not local_radiation.is_symlink()
+    assert not local_counting.is_symlink()
+    assert radiation.is_symlink()
+    assert counting.is_symlink()
+    assert os.readlink(radiation) == "first_response.txt"
+    assert os.readlink(counting) == "first_counting.txt"
     assert radiation.read_text() == "first radiation\n"
+
+
+def test_stage_phantoms_copy_replaces_matching_links(tmp_path):
+    archive = make_archive(tmp_path)
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(
+        run_directory,
+        "0  first  1.5 2.5\n",
+    )
+    stage_phantoms(run_directory, archive)
+
+    stage_phantoms(run_directory, archive, copy=True)
+    stage_phantoms(run_directory, archive, copy=True)
+
+    local_radiation = run_directory / "first_response.txt"
+    local_counting = run_directory / "first_counting.txt"
+    radiation = run_directory / "radiation_phantom0.txt"
+    counting = run_directory / "counting_phantom0.txt"
+    assert local_radiation.is_file()
+    assert local_counting.is_file()
+    assert not local_radiation.is_symlink()
+    assert not local_counting.is_symlink()
+    assert radiation.is_symlink()
+    assert counting.is_symlink()
+    assert os.readlink(radiation) == "first_response.txt"
+    assert os.readlink(counting) == "first_counting.txt"
+    assert radiation.read_text() == "first radiation\n"
+    assert counting.read_text() == "first counting\n"
 
 
 def test_stage_phantoms_accepts_custom_files_in_run_directory(tmp_path):
