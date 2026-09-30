@@ -106,6 +106,11 @@ Without `G4FORCENUMBEROFTHREADS`, AtRIS uses all processors detected by Geant4.
 An existing macro containing `/run/numberOfThreads` retains that setting unless
 `G4FORCENUMBEROFTHREADS` is set.
 
+At completion, AtRIS reports the wall time spent executing the Geant4 macro,
+the setup and cleanup time outside that macro, and their total. The macro
+interval uses the reported worker count but can still contain serial Geant4
+initialization, coordination, and output work; it is not pure parallel CPU time.
+
 Starting a simulation is reported by:
 
 ```text

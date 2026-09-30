@@ -64,9 +64,9 @@ def prepare_run(run_directory, *, chunked=False):
         (run_directory / "chunks").mkdir()
 
 
-def invoke_atris(command, run_directory, *arguments):
+def invoke_atris(command, run_directory, *arguments, threads="1"):
     environment = os.environ.copy()
-    environment["G4FORCENUMBEROFTHREADS"] = "1"
+    environment["G4FORCENUMBEROFTHREADS"] = threads
     return subprocess.run(
         [command, *arguments],
         cwd=run_directory,
@@ -86,6 +86,7 @@ def run_atris(
     physics="FTFP_BERT_HP",
     mode="-1",
     phantom_count="1",
+    threads="1",
 ):
     return invoke_atris(
         command,
@@ -94,6 +95,7 @@ def run_atris(
         simulation,
         str(mode),
         str(phantom_count),
+        threads=threads,
     )
 
 
@@ -106,6 +108,25 @@ def histogram_entries(path):
         np.loadtxt(path, delimiter=",", skiprows=column_index + 1)
     )
     return int(data[:, 0].sum())
+
+
+def assert_timing_output(output, worker_threads):
+    match = re.search(
+        r"### AtRIS timing: Geant4 macro wall time: (\d+\.\d{3}) s "
+        r"using (\d+) worker thread\(s\)\n"
+        r"### AtRIS timing: setup/cleanup wall time: (\d+\.\d{3}) s\n"
+        r"### AtRIS timing: total wall time: (\d+\.\d{3}) s",
+        output,
+    )
+    assert match is not None
+    macro_seconds, reported_workers, outside_seconds, total_seconds = match.groups()
+    assert int(reported_workers) == worker_threads
+    assert float(macro_seconds) >= 0
+    assert float(outside_seconds) >= 0
+    assert float(total_seconds) == pytest.approx(
+        float(macro_seconds) + float(outside_seconds),
+        abs=0.002,
+    )
 
 
 @pytest.mark.regression
@@ -129,6 +150,7 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
     assert "### AtRIS: Starting the simulation" in result.stdout
     assert "### AtRIS: simulation used 1 worker thread(s)" in result.stdout
     assert "### AtRIS: the simulation has completed" in result.stdout
+    assert_timing_output(result.stdout, 1)
 
     written_suffixes = {
         path.name[len("protons"):]
@@ -147,9 +169,17 @@ def test_mode_one_writes_binary_step_trace_with_track_genealogy(
 ):
     prepare_run(tmp_path)
 
-    result = run_atris(atris_command, tmp_path, "protons", mode="1")
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        "protons",
+        mode="1",
+        threads="2",
+    )
 
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "### AtRIS: simulation used 2 worker thread(s)" in result.stdout
+    assert_timing_output(result.stdout, 2)
     records = read_step_records(tmp_path / "protons.steps.binary")
     assert len(records)
     assert set(records["event_id"]) == {0, 1}
