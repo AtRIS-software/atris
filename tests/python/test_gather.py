@@ -26,14 +26,26 @@ from atris_tools.gather import (
 COLUMNS = "entries,Sw,Sw2,Sxw0,Sx2w0"
 
 
-def write_histogram(path, rows, *, plane_sum=1.0, title="kinetic energy"):
+def write_histogram(
+    path,
+    rows,
+    *,
+    plane_sum=1.0,
+    title="kinetic energy",
+    seed_pairs=None,
+    annotation=None,
+):
     lines = [
         "#class tools::histo::h1d",
         f"#title {title}",
         "#dimension 1",
         f"#planes_Sxyw {plane_sum}",
-        COLUMNS,
     ]
+    if seed_pairs is not None:
+        lines.append("#annotation atris.random_seed_pairs " + seed_pairs)
+    if annotation is not None:
+        lines.append("#annotation " + annotation)
+    lines.append(COLUMNS)
     lines.extend(",".join(str(value) for value in row) for row in rows)
     Path(path).write_text("\n".join(lines) + "\n")
 
@@ -233,13 +245,48 @@ def test_gather_histogram_sums_all_columns_and_plane_values(tmp_path):
     assert destination.read_bytes() == first_result
 
 
+def test_gather_histogram_combines_seed_provenance(tmp_path):
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    destination = tmp_path / "total.csv"
+    write_histogram(first, [[1, 2, 3, 4, 5]], seed_pairs="123456:654321")
+    write_histogram(second, [[1, 2, 3, 4, 5]], seed_pairs="111111:222222")
+
+    gather_histogram([first, second], destination)
+
+    header, _, _ = read_histogram(destination)
+    assert "#annotation atris.gathered_chunks 2" in header
+    assert (
+        "#annotation atris.random_seed_pairs "
+        "123456:654321,111111:222222"
+    ) in header
+    assert "#annotation atris.random_seed_pairs_complete true" in header
+
+
+def test_gather_histogram_records_different_atris_annotations(tmp_path):
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    write_histogram(first, [[1, 2, 3, 4, 5]], annotation="atris.quantity ionization")
+    write_histogram(second, [[1, 2, 3, 4, 5]], annotation="atris.quantity dose")
+
+    destination = tmp_path / "total.csv"
+    gather_histogram([first, second], destination)
+
+    header, _, _ = read_histogram(destination)
+    assert "#annotation atris.quantity ionization | dose" in header
+
+
 def test_incremental_gather_reads_only_new_chunks(tmp_path, monkeypatch):
     first = tmp_path / "first.csv"
     second = tmp_path / "second.csv"
     destination = tmp_path / "total.csv"
     state = tmp_path / "protons.gathered-chunks.txt"
-    write_histogram(first, [[1, 2, 3, 4, 5]])
-    write_histogram(second, [[10, 20, 30, 40, 50]])
+    write_histogram(
+        first, [[1, 2, 3, 4, 5]], seed_pairs="111111:222222"
+    )
+    write_histogram(
+        second, [[10, 20, 30, 40, 50]], seed_pairs="333333:444444"
+    )
     gather_histogram([first], destination)
     state.write_text("protons 111111 222222\n")
 
@@ -263,8 +310,13 @@ def test_incremental_gather_reads_only_new_chunks(tmp_path, monkeypatch):
     )
 
     assert reads == [destination, second]
-    _, _, total = original_read_histogram(destination)
+    header, _, total = original_read_histogram(destination)
     np.testing.assert_array_equal(total, [[11, 22, 33, 44, 55]])
+    assert "#annotation atris.gathered_chunks 2" in header
+    assert (
+        "#annotation atris.random_seed_pairs "
+        "111111:222222,333333:444444"
+    ) in header
 
 
 def test_incremental_gather_rebuilds_after_prior_chunk_changes(

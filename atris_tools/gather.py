@@ -20,6 +20,10 @@ from .postprocess import process_psf
 
 
 PLANE_SUM_PREFIX = "#planes_Sxyw "
+SEED_PAIRS_PREFIX = "#annotation atris.random_seed_pairs "
+GATHERED_CHUNKS_PREFIX = "#annotation atris.gathered_chunks "
+SEED_PAIRS_COMPLETE_PREFIX = "#annotation atris.random_seed_pairs_complete "
+ATRIS_ANNOTATION_PREFIX = "#annotation atris."
 ETA_COMPLETION_WINDOW = 20
 CHANGE_FRACTION = 0.1
 CONVERGENCE_COLUMNS = (
@@ -178,7 +182,78 @@ def read_histogram(path):
 
 
 def comparable_header(header):
-    return [line for line in header if not line.startswith(PLANE_SUM_PREFIX)]
+    return [
+        line
+        for line in header
+        if not line.startswith((PLANE_SUM_PREFIX, ATRIS_ANNOTATION_PREFIX))
+    ]
+
+
+def merge_provenance(headers):
+    """Combine AtRIS annotations without making them gather constraints."""
+    represented_chunks = 0
+    seed_pairs = []
+    has_provenance = False
+    annotations = {}
+    for header in headers:
+        chunk_count = 1
+        for line in header:
+            if line.startswith(GATHERED_CHUNKS_PREFIX):
+                chunk_count = int(line[len(GATHERED_CHUNKS_PREFIX):])
+                has_provenance = True
+            elif line.startswith(SEED_PAIRS_PREFIX):
+                values = line[len(SEED_PAIRS_PREFIX):]
+                if values and values != "runtime-default":
+                    seed_pairs.extend(values.split(","))
+                has_provenance = True
+            elif line.startswith(SEED_PAIRS_COMPLETE_PREFIX):
+                has_provenance = True
+            elif line.startswith(ATRIS_ANNOTATION_PREFIX):
+                fields = line.split(" ", 2)
+                key = fields[1]
+                value = fields[2] if len(fields) == 3 else ""
+                values = annotations.setdefault(key, [])
+                if value not in values:
+                    values.append(value)
+        represented_chunks += chunk_count
+
+    output_header = [
+        line for line in headers[0]
+        if not line.startswith(ATRIS_ANNOTATION_PREFIX)
+    ]
+    merged_annotations = [
+        "#annotation %s %s" % (key, " | ".join(values))
+        for key, values in sorted(annotations.items())
+    ]
+    if not has_provenance:
+        insertion = next(
+            (
+                index
+                for index, line in enumerate(output_header)
+                if line.startswith("#bin_number ")
+            ),
+            len(output_header),
+        )
+        output_header[insertion:insertion] = merged_annotations
+        return output_header
+
+    merged_annotations.append(GATHERED_CHUNKS_PREFIX + str(represented_chunks))
+    if seed_pairs:
+        merged_annotations.append(SEED_PAIRS_PREFIX + ",".join(seed_pairs))
+    merged_annotations.append(
+        SEED_PAIRS_COMPLETE_PREFIX
+        + str(len(seed_pairs) == represented_chunks).lower()
+    )
+    insertion = next(
+        (
+            index
+            for index, line in enumerate(output_header)
+            if line.startswith("#bin_number ")
+        ),
+        len(output_header),
+    )
+    output_header[insertion:insertion] = merged_annotations
+    return output_header
 
 
 def plane_sum(header):
@@ -213,6 +288,7 @@ def write_gathered_chunks(path, entries):
 def combine_histograms(source_paths, snapshot_counts=(), observe=None):
     snapshot_counts = set(snapshot_counts)
     first_header, first_columns, total = read_histogram(source_paths[0])
+    headers = [first_header]
     total_plane_sum = plane_sum(first_header)
     snapshots = {1: total.copy()} if 1 in snapshot_counts else {}
     if observe is not None:
@@ -224,6 +300,7 @@ def combine_histograms(source_paths, snapshot_counts=(), observe=None):
             raise ValueError("Histogram headers differ: " + str(source_path))
         if columns != first_columns or data.shape != total.shape:
             raise ValueError("Histogram shape differs: " + str(source_path))
+        headers.append(header)
         total += data
         current_plane_sum = plane_sum(header)
         if (total_plane_sum is None) != (current_plane_sum is None):
@@ -235,7 +312,7 @@ def combine_histograms(source_paths, snapshot_counts=(), observe=None):
         if observe is not None:
             observe(source_number, data, total)
 
-    return first_header, first_columns, total, total_plane_sum, snapshots
+    return merge_provenance(headers), first_columns, total, total_plane_sum, snapshots
 
 
 def gather_histogram(source_paths, destination):
