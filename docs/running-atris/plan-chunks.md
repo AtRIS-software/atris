@@ -86,8 +86,8 @@ unfinished chunks. Never launch overlapping workers for the same entries.
 
 As soon as a chunk finishes, you can [gather and inspect its results](process-results.md)
 while the remaining chunks continue running. Gather the raw histograms before
-normalizing them. Binary particle records remain per chunk and are not merged
-by gathering.
+normalizing them. ROOT interface and step ntuples remain per chunk and are not
+merged by gathering.
 
 Preserve the inputs, plan, and software versions with the results. Unique seed
 pairs distinguish the chunks, but identical seeds alone do not reproduce a run

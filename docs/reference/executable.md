@@ -28,8 +28,8 @@ the outputs. Existing output names can be overwritten.
 | Integer | Name used by `atris-run` | Products |
 | --- | --- | --- |
 | `-1` | `response` | Primary, source-position, source-direction, ionization, and phantom CSV histograms. |
-| `0` | `profile` | All histograms plus `<name>.binary` interface-crossing records. |
-| `1` | `shower` | All histograms and interface records, plus `<name>.steps.binary` records for steps in sensitive volumes. |
+| `0` | `profile` | The same histograms plus interface-crossing records in `<name>.root`. |
+| `1` | `shower` | The same ROOT products plus transport-step records in sensitive volumes. |
 
 Use only these three modes. Other integers are not explicitly rejected but
 have no documented contract. Step output includes steps in the terminating
@@ -58,7 +58,7 @@ The parent directory of an output prefix must already exist.
 ## Status and diagnostics
 
 `AtRIS --version` prints the compiled version. A successful macro execution
-returns `0`; a failed macro execution returns `1`. Phantom loading and binary
+returns `0`; a failed macro execution returns `1`. Phantom loading and output
 opening failures also return `1`. Wrong argument count prints usage but
 currently returns `0`, so a zero status alone is not evidence that a simulation
 ran. Malformed integer arguments can fail before execution.

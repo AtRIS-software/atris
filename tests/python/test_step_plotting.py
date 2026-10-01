@@ -2,10 +2,10 @@ import sys
 
 import numpy as np
 import pytest
+import uproot
 
 from atris_tools import plotting, step_plotting
-from atris_tools.binary_output import STEP_RECORDS, write_header
-from atris_tools.step_output import STEP_DTYPE
+from atris_tools.step_output import STEP_FIELDS
 
 
 TRACE_ROWS = (
@@ -30,28 +30,49 @@ TRACE_ROWS = (
 )
 
 
+STEP_BRANCH_TYPES = {
+    name: (
+        "int32"
+        if index < 6
+        else "float64"
+        if index < 19
+        else "string"
+    )
+    for index, name in enumerate(STEP_FIELDS)
+}
+
+
 def write_step_trace(path, rows=TRACE_ROWS):
-    records = np.zeros(len(rows), dtype=STEP_DTYPE)
-    for record, values in zip(records, rows):
-        for name, value in zip(STEP_DTYPE.names, values):
-            record[name] = value
-    with path.open("wb") as stream:
-        write_header(stream, STEP_RECORDS, STEP_DTYPE.itemsize)
-        records.tofile(stream)
+    columns = {
+        name: np.asarray([row[index] for row in rows])
+        for index, name in enumerate(STEP_FIELDS)
+    }
+    with uproot.recreate(path) as root_file:
+        root_file.mktree(
+            "interfaces",
+            {
+                "pdg": "int32",
+                "interface_id": "int32",
+                "angle_degrees": "int32",
+                "kinetic_energy_MeV": "float64",
+                "primary_energy_MeV": "float64",
+            },
+        )
+        root_file.mktree("steps", STEP_BRANCH_TYPES)
+        root_file["steps"].extend(columns)
 
 
-def test_step_reader_rejects_partial_binary_record(tmp_path):
-    path = tmp_path / "protons.steps.binary"
-    with path.open("wb") as stream:
-        write_header(stream, STEP_RECORDS, STEP_DTYPE.itemsize)
-        stream.write(b"incomplete")
+def test_step_reader_rejects_missing_root_column(tmp_path):
+    path = tmp_path / "protons.root"
+    with uproot.recreate(path) as root_file:
+        root_file.mktree("steps", {"event_id": "int32"})
 
-    with pytest.raises(ValueError, match="complete 256-byte records"):
+    with pytest.raises(ValueError, match="missing columns"):
         step_plotting.read_step_trace(path)
 
 
 def test_read_step_trace_streams_aggregates_and_bounded_sample(tmp_path):
-    path = tmp_path / "protons.steps.binary"
+    path = tmp_path / "protons.root"
     write_step_trace(path)
 
     summary = step_plotting.read_step_trace(path, sample_limit=2)
@@ -70,7 +91,7 @@ def test_read_step_trace_streams_aggregates_and_bounded_sample(tmp_path):
 def test_plot_mode_one_output_writes_overview_and_shower_pngs(
     tmp_path, monkeypatch, gdml_text
 ):
-    write_step_trace(tmp_path / "protons.steps.binary")
+    write_step_trace(tmp_path / "protons.root")
     (tmp_path / "protons.gdml").write_text(gdml_text)
     monkeypatch.chdir(tmp_path)
 
@@ -86,8 +107,7 @@ def test_plot_mode_one_output_writes_overview_and_shower_pngs(
 def test_atris_plot_routes_mode_one_outputs_to_both_plotters(
     tmp_path, monkeypatch
 ):
-    write_step_trace(tmp_path / "protons.steps.binary")
-    (tmp_path / "protons.binary").write_bytes(b"")
+    write_step_trace(tmp_path / "protons.root")
     step_calls = []
     interface_calls = []
     monkeypatch.setattr(sys, "argv", ["atris-plot", str(tmp_path)])

@@ -14,9 +14,10 @@ atris-gather .
 ```
 
 Gathering includes only planned chunks with a `.COMPLETE` marker and ignores
-unfinished chunks. It combines their raw histograms into the species CSVs at
-the run root. Run one gather process at a time for that directory, and let it
-finish before post-processing the aggregate.
+unfinished chunks. It combines their raw histograms into species CSVs or a
+species ROOT file at the run root, matching the chunks' output mode. Run one
+gather process at a time for that directory, and let it finish before
+post-processing the aggregate.
 
 `atris-run . --check-complete` tells you whether the entire plan has finished.
 A successful completion check is not required to inspect the completed subset.

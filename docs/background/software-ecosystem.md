@@ -64,12 +64,11 @@ both an analysis environment and the name associated with a file format.
 Its [Python interface, PyROOT](https://root.cern/manual/python/), makes those
 facilities available from Python.
 
-ROOT is useful when exchanging results with a ROOT-based analysis or working
-with data from other particle-transport applications. This version of AtRIS
-uses Geant4's CSV analysis manager, and its gathering and post-processing tools
-expect those CSV histograms. Using ROOT for further analysis requires an
-explicit import or conversion; changing the output filename's extension does
-not select a different AtRIS output format.
+AtRIS uses Geant4's generic analysis manager. Response mode writes histogram
+CSVs; profile and shower modes write the same histograms and their particle
+ntuples to ROOT. The Python tools read ROOT with
+[Uproot](https://uproot.readthedocs.io/) and do not require a separate ROOT
+installation.
 
 ## HDF5: arrays and metadata in one file
 
@@ -85,8 +84,7 @@ primaries contributed to each response. HDF5 provides the storage structure;
 the analysis must define what the datasets mean.
 
 The current AtRIS tools do not supply an HDF5 export or read HDF5 as their
-standard simulation output. The `.binary` and `.steps.binary` particle records
-have AtRIS-specific headers and layouts; they are separate formats. The
-[output reference](../reference/outputs.md) describes the files actually written
-by this version, and [processing results](../running-atris/process-results.md)
-covers the supported CSV-to-response-table workflow.
+standard simulation output. The [output reference](../reference/outputs.md)
+describes the CSV and ROOT products written by this version, and
+[processing results](../running-atris/process-results.md) covers the supported
+response-table workflow.

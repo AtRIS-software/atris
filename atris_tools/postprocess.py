@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Convert raw AtRIS CSV histograms into scaled numerical response files."""
+"""Convert raw AtRIS histograms into scaled numerical response files."""
 
 import argparse
 import logging
 import os
-import re
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +16,14 @@ from .cli import (
 )
 from .phantoms import read_phantoms
 from .psf import load_psf
+from .response_histograms import (
+    IONIZATION_HISTOGRAM,
+    PRIMARY_HISTOGRAM,
+    ResponseHistogramReader,
+    csv_histogram_path,
+    csv_histogram_axes,
+    response_output_format,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -45,40 +52,21 @@ def process_psf(filename="simulation.psf"):
 
 
 def get_nr_phantoms(simname):
-    pattern = re.compile("^" + re.escape(simname) + r"_h2_h2\.dos\d+\.csv$")
-    nrphantoms = sum(
-        pattern.match(filename) is not None for filename in os.listdir(".")
-    )
+    with ResponseHistogramReader(simname) as histograms:
+        nrphantoms = histograms.phantom_count()
     logger.debug("%s output includes %i phantoms", simname, nrphantoms)
     return nrphantoms
 
 
 def get_histogram_axes(filename):
-    axes = []
-    with open(filename, "r") as histogram:
-        for line in histogram:
-            if line.startswith("#axis edges "):
-                axes.append(
-                    np.fromstring(line[len("#axis edges ") :], sep=" ")
-                )
-            elif line.startswith("#axis fixed "):
-                fields = line.split()
-                axes.append(
-                    np.linspace(
-                        float(fields[3]),
-                        float(fields[4]),
-                        int(fields[2]) + 1,
-                    )
-                )
-            elif line.startswith("entries,"):
-                break
-    if not axes:
-        raise ValueError("No histogram axes found in " + str(filename))
-    return axes
+    return csv_histogram_axes(filename)
 
 
-def get_energy_edges(simname):
-    edges = get_histogram_axes(simname + "_h1_h1.1.csv")[0]
+def get_energy_edges(simname, histograms=None):
+    if histograms is None:
+        with ResponseHistogramReader(simname) as source:
+            return get_energy_edges(simname, source)
+    edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
     logger.debug("%s output includes %i energy bins", simname, edges.shape[0] - 1)
     return edges
 
@@ -109,13 +97,17 @@ def _read_macro_configuration(filename):
     return np.asarray(energy_edges), event_count
 
 
-def input_output_warnings(simname):
+def _input_output_warnings(simname, histograms):
     warnings = []
-    histogram_path = Path(simname + "_h1_h1.1.csv")
+    def output_name(name):
+        if histograms.format == "root":
+            return simname + ".root"
+        return csv_histogram_path(simname, name).name
+
     bins_path = Path(simname + ".bins")
     macro_path = Path(simname + ".mac")
 
-    output_edges = get_histogram_axes(histogram_path)[0]
+    output_edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
     input_edges = None
     if bins_path.is_file():
         input_edges = np.atleast_1d(np.loadtxt(bins_path))
@@ -125,7 +117,7 @@ def input_output_warnings(simname):
         ):
             warnings.append(
                 "%s: %s does not match the energy edges recorded in %s"
-                % (simname, bins_path.name, histogram_path.name)
+                % (simname, bins_path.name, output_name(PRIMARY_HISTOGRAM))
             )
 
     if macro_path.is_file():
@@ -139,7 +131,7 @@ def input_output_warnings(simname):
                 % (simname, macro_path.name, bins_path.name)
             )
         if event_count is not None and not Path("chunks.txt").is_file():
-            primary_energy = read_histogram_data(histogram_path)
+            primary_energy = histograms.data(PRIMARY_HISTOGRAM)
             recorded_events = int(np.sum(primary_energy[1:-1, 0]))
             if recorded_events != event_count:
                 warnings.append(
@@ -148,16 +140,15 @@ def input_output_warnings(simname):
                         simname,
                         macro_path.name,
                         event_count,
-                        histogram_path.name,
+                        output_name(PRIMARY_HISTOGRAM),
                         recorded_events,
                     )
                 )
 
     psf_path = Path("simulation.psf")
-    ionization_path = Path(simname + "_h2_h2.ion.csv")
-    if psf_path.is_file() and ionization_path.is_file():
+    if psf_path.is_file() and IONIZATION_HISTOGRAM in histograms.names():
         detector_count = load_psf(psf_path).shape[0]
-        output_detector_count = len(get_histogram_axes(ionization_path)[1]) - 1
+        output_detector_count = len(histograms.axes(IONIZATION_HISTOGRAM)[1]) - 1
         if output_detector_count != detector_count:
             warnings.append(
                 "%s: %s defines %i detector layers, but %s records %i"
@@ -165,7 +156,7 @@ def input_output_warnings(simname):
                     simname,
                     psf_path.name,
                     detector_count,
-                    ionization_path.name,
+                    output_name(IONIZATION_HISTOGRAM),
                     output_detector_count,
                 )
             )
@@ -173,14 +164,7 @@ def input_output_warnings(simname):
     phantom_path = Path("phantoms.txt")
     if phantom_path.is_file():
         configured_phantoms = len(read_phantoms(Path.cwd()))
-        output_phantoms = sum(
-            re.match(
-                "^" + re.escape(simname) + r"_h2_h2\.dos\d+\.csv$",
-                filename,
-            )
-            is not None
-            for filename in os.listdir(".")
-        )
+        output_phantoms = histograms.phantom_count()
         if output_phantoms != configured_phantoms:
             warnings.append(
                 "%s: %s defines %i phantoms, but raw output contains %i"
@@ -192,6 +176,11 @@ def input_output_warnings(simname):
                 )
             )
     return warnings
+
+
+def input_output_warnings(simname):
+    with ResponseHistogramReader(simname) as histograms:
+        return _input_output_warnings(simname, histograms)
 
 
 def warn_if_inputs_do_not_match_output(simname):
@@ -215,18 +204,17 @@ def process_phantoms(nrphantoms):
     )
 
 
-def read_data(simname, nphant):
-    names = ["_h1_h1.1", "_h2_h2.dir", "_h2_h2.pos", "_h2_h2.ion"]
+def read_data(simname, nphant, histograms=None):
+    if histograms is None:
+        with ResponseHistogramReader(simname) as source:
+            return read_data(simname, nphant, source)
+    names = [PRIMARY_HISTOGRAM, "h2.dir", "h2.pos", IONIZATION_HISTOGRAM]
     for phantom_nr in range(nphant):
-        names.append("_h2_h2.dos" + str(phantom_nr))
-        names.append("_h2_h2.equi" + str(phantom_nr))
-        names.append("_h2_h2.rates" + str(phantom_nr))
+        names.append("h2.dos" + str(phantom_nr))
+        names.append("h2.equi" + str(phantom_nr))
+        names.append("h2.rates" + str(phantom_nr))
 
-    simulation_data = []
-    for name in names:
-        filename = simname + name + ".csv"
-        simulation_data.append(read_histogram_data(filename))
-    return simulation_data
+    return [histograms.data(name) for name in names]
 
 
 def scale_data(data, nphant, ndet, nenergyedges, phantom_data, geometry):
@@ -282,19 +270,22 @@ def make_output(data, geometry, simname, nphant):
 
 
 def process_run(simname):
-    warn_if_inputs_do_not_match_output(simname)
-    geometry, detector_count = process_psf()
-    phantom_count = get_nr_phantoms(simname)
-    energy_edges = get_energy_edges(simname)
-    phantom_data = process_phantoms(phantom_count)
-    logger.info(
-        "Post-processing %s with %i energy bins and %i phantoms",
-        simname,
-        energy_edges.shape[0] - 1,
-        phantom_count,
-    )
-    logger.debug("Reading %s histogram data", simname)
-    data = read_data(simname, phantom_count)
+    with ResponseHistogramReader(simname) as histograms:
+        for warning in _input_output_warnings(simname, histograms):
+            logger.warning("%s", warning)
+        geometry, detector_count = process_psf()
+        phantom_count = histograms.phantom_count()
+        energy_edges = get_energy_edges(simname, histograms)
+        phantom_data = process_phantoms(phantom_count)
+        logger.info(
+            "Post-processing %s %s output with %i energy bins and %i phantoms",
+            simname,
+            histograms.format.upper(),
+            energy_edges.shape[0] - 1,
+            phantom_count,
+        )
+        logger.debug("Reading %s histogram data", simname)
+        data = read_data(simname, phantom_count, histograms)
     logger.debug("Scaling %s response data", simname)
     scaled_data = scale_data(
         data,
@@ -313,7 +304,7 @@ def main():
     parser = argparse.ArgumentParser(
         formatter_class=HelpFormatter,
         description=(
-            "Scale canonical AtRIS histogram CSV files into altitude- and "
+            "Scale canonical AtRIS CSV or ROOT histograms into altitude- and "
             "energy-dependent ionization and phantom response tables."
         ),
         epilog=(
@@ -331,7 +322,7 @@ def main():
         type=Path,
         default=Path.cwd(),
         metavar="RUN_DIRECTORY",
-        help="Run directory containing canonical CSV output (default: current directory).",
+        help="Run directory containing canonical response output (default: current directory).",
     )
     add_logging_arguments(parser)
     add_version_argument(parser)
@@ -348,7 +339,7 @@ def main():
     try:
         os.chdir(run_directory)
         for simulation in ("protons", "alphas"):
-            if not Path(simulation + "_h1_h1.1.csv").is_file():
+            if response_output_format(simulation) is None:
                 logger.info("Skipping %s: output not found", simulation)
                 continue
             process_run(simulation)

@@ -12,6 +12,7 @@ class HistoManager
   public:
     HistoManager();
     ~HistoManager();
+    void FillMetadata();
 
   private:
     void Book();

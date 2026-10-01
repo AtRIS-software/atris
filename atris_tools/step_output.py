@@ -1,42 +1,45 @@
-"""Read binary transport-step records written by AtRIS output mode 1."""
+"""Read transport-step ntuples written by AtRIS output mode 1."""
 
-import numpy as np
-
-from .binary_output import STEP_RECORDS, read_records
+from .root_output import iterate_ntuple, read_ntuple
 
 
-STEP_DTYPE = np.dtype(
-    [
-        ("event_id", np.int32),
-        ("track_id", np.int32),
-        ("parent_id", np.int32),
-        ("step_id", np.int32),
-        ("pdg", np.int32),
-        ("detector_id", np.int32),
-        ("pre_x_km", np.float64),
-        ("pre_y_km", np.float64),
-        ("pre_z_km", np.float64),
-        ("post_x_km", np.float64),
-        ("post_y_km", np.float64),
-        ("post_z_km", np.float64),
-        ("pre_kinetic_energy_MeV", np.float64),
-        ("post_kinetic_energy_MeV", np.float64),
-        ("energy_deposit_MeV", np.float64),
-        ("nonionizing_energy_deposit_MeV", np.float64),
-        ("step_length_m", np.float64),
-        ("global_time_ns", np.float64),
-        ("primary_energy_MeV", np.float64),
-        ("creator_process", "S64"),
-        ("step_process", "S64"),
-    ]
+STEP_FIELDS = (
+    "event_id",
+    "track_id",
+    "parent_id",
+    "step_id",
+    "pdg",
+    "detector_id",
+    "pre_x_km",
+    "pre_y_km",
+    "pre_z_km",
+    "post_x_km",
+    "post_y_km",
+    "post_z_km",
+    "pre_kinetic_energy_MeV",
+    "post_kinetic_energy_MeV",
+    "energy_deposit_MeV",
+    "nonionizing_energy_deposit_MeV",
+    "step_length_m",
+    "global_time_ns",
+    "primary_energy_MeV",
+    "creator_process",
+    "step_process",
 )
 
 
 def read_step_records(filename):
-    """Memory-map one native AtRIS mode-1 step file."""
-    return read_records(filename, STEP_RECORDS, STEP_DTYPE)
+    """Read all records from one AtRIS mode-1 ROOT file."""
+    return read_ntuple(filename, "steps", STEP_FIELDS)
+
+
+def iterate_step_records(filename):
+    """Yield bounded record arrays from one AtRIS mode-1 ROOT file."""
+    return iterate_ntuple(filename, "steps", STEP_FIELDS)
 
 
 def process_name(value):
-    """Decode one fixed-width process name from a step record."""
-    return bytes(value).partition(b"\0")[0].decode("utf-8")
+    """Return a process name read from a ROOT string column."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)

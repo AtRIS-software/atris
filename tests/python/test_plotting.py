@@ -2,6 +2,7 @@ import logging
 import sys
 
 import numpy as np
+import uproot
 
 from atris_tools import plotting
 
@@ -99,6 +100,34 @@ def test_plot_run_without_phantoms_writes_only_generic_plot(
     plotting.plot_run("protons")
 
     assert [path.name for path in tmp_path.glob("*.png")] == ["protons.png"]
+
+
+def test_plot_run_reads_raw_diagnostics_from_root(
+    tmp_path, monkeypatch, gdml_text
+):
+    prepare_processed_run(tmp_path, 0, gdml_text)
+    for path in tmp_path.glob("protons_h*.csv"):
+        path.unlink()
+    energy_edges = np.array([1.0, 2.0, 3.0])
+    angular_edges = np.array([0.0, 0.5, 1.0])
+    with uproot.recreate(tmp_path / "protons.root") as root_file:
+        root_file["h1.1"] = (np.ones(2), energy_edges)
+        root_file["h2.dir"] = (
+            np.ones((2, 2)),
+            angular_edges,
+            angular_edges,
+        )
+        root_file["h2.pos"] = (
+            np.ones((2, 2)),
+            angular_edges,
+            angular_edges,
+        )
+    monkeypatch.chdir(tmp_path)
+
+    filenames, errors = plotting.plot_run("protons")
+
+    assert filenames == ["protons.png"]
+    assert errors == []
 
 
 def test_plot_convergence_writes_png_from_one_comparison(tmp_path, monkeypatch):

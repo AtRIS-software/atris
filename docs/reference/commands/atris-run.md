@@ -10,7 +10,7 @@ atris-run . --check-complete
 
 **Inputs:** `chunks.txt`, prepared species inputs, staged numbered phantoms,
 and `phantoms.txt` for the phantom count. **Outputs:** per-chunk histograms,
-optional binary records, logs, and completion markers under `chunks/`.
+optional ROOT particle ntuples, logs, and completion markers under `chunks/`.
 
 Defaults are current directory, physics list `FTFP_BERT_HP`, mode `response`,
 and one worker with index zero. Supply `--worker-index` and `--worker-count`
@@ -54,9 +54,9 @@ AtRIS execution options:
                         FTFP_BERT_HP).
   --mode {response,profile,shower}
                         AtRIS output mode: response writes the normal histograms;
-                        profile also writes binary interface records; shower writes
-                        interface and binary transport-step records (default:
-                        response).
+                        profile writes ROOT histograms and an interface ntuple;
+                        shower adds a transport-step ntuple to the ROOT output
+                        (default: response).
 
 Chunk plan and worker options:
   --entry NUMBER        Run only this one-based chunks.txt entry instead of a worker

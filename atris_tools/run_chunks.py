@@ -303,8 +303,8 @@ def main():
         default="response",
         help=(
             "AtRIS output mode: response writes the normal histograms; "
-            "profile also writes binary interface records; shower writes "
-            "interface and binary transport-step records (default: response)."
+            "profile writes ROOT histograms and an interface ntuple; shower "
+            "adds a transport-step ntuple to the ROOT output (default: response)."
         ),
     )
     chunk_options = parser.add_argument_group("Chunk plan and worker options")

@@ -10,7 +10,7 @@ The directory defaults to the current directory. Both `protons` and `alphas`
 are attempted, and a species without its primary histogram is skipped. There
 is no positional species filter.
 
-**Inputs:** canonical histogram CSV files, `simulation.psf`, and phantom
+**Inputs:** canonical histogram CSV or ROOT files, `simulation.psf`, and phantom
 mass/area metadata from `phantoms.txt` when phantom products are present.
 **Outputs:** `.ioni`, `.doseN`, `.equiN`, and `.ratesN`, replacing existing
 processed files. Available input/output consistency checks produce warnings.
@@ -27,12 +27,12 @@ The following is the command's `--help` output for this revision.
 ```text
 usage: atris-postprocess [-h] [-q | -v] [--version] [RUN_DIRECTORY]
 
-Scale canonical AtRIS histogram CSV files into altitude- and energy-dependent
+Scale canonical AtRIS CSV or ROOT histograms into altitude- and energy-dependent
 ionization and phantom response tables.
 
 positional arguments:
-  RUN_DIRECTORY  Run directory containing canonical CSV output (default: current
-                 directory).
+  RUN_DIRECTORY  Run directory containing canonical response output (default:
+                 current directory).
 
 optional arguments:
   -h, --help     show this help message and exit

@@ -1,23 +1,27 @@
 # Output files
 
 `<name>` below is the full simulation prefix; `N` is a zero-based phantom ID.
-This revision writes Geant4 CSV histograms and AtRIS binary files.
+Response mode writes Geant4 CSV histograms. Profile and shower modes write the
+same histogram quantities and particle ntuples to one ROOT file.
 
 ## Raw histogram files
 
-| Suffix | Axes | Accumulated weight |
+| CSV suffix / ROOT object | Axes | Accumulated weight |
 | --- | --- | --- |
-| `_h1_h1.1.csv` | Primary kinetic energy, MeV | Primary kinetic energy, MeV. Use `entries`, not `Sw`, for primary counts. |
-| `_h2_h2.dir.csv` | Global azimuth, rad; cos(polar angle) | One per primary direction. |
-| `_h2_h2.pos.csv` | Global azimuth, rad; cos(polar angle) | One per primary source position. |
-| `_h2_h2.ion.csv` | Primary energy, MeV; detector ID | Total deposit minus non-ionizing deposit, MeV, for steps in non-terminating sensitive layers. |
-| `_h2_h2.dosN.csv` | Primary energy, MeV; interface ID | Radiation response coefficient × crossing kinetic energy in eV. |
-| `_h2_h2.equiN.csv` | Primary energy, MeV; interface ID | The same energy response multiplied by the implemented radiation weight. |
-| `_h2_h2.ratesN.csv` | Primary energy, MeV; interface ID | Counting response coefficient. |
+| `_h1_h1.1.csv` / `h1.1` | Primary kinetic energy, MeV | Primary kinetic energy, MeV. Use `entries`, not `Sw`, for primary counts. |
+| `_h2_h2.dir.csv` / `h2.dir` | Global azimuth, rad; cos(polar angle) | One per primary direction. |
+| `_h2_h2.pos.csv` / `h2.pos` | Global azimuth, rad; cos(polar angle) | One per primary source position. |
+| `_h2_h2.ion.csv` / `h2.ion` | Primary energy, MeV; detector ID | Total deposit minus non-ionizing deposit, MeV, for steps in non-terminating sensitive layers. |
+| `_h2_h2.dosN.csv` / `h2.dosN` | Primary energy, MeV; interface ID | Radiation response coefficient × crossing kinetic energy in eV. |
+| `_h2_h2.equiN.csv` / `h2.equiN` | Primary energy, MeV; interface ID | The same energy response multiplied by the implemented radiation weight. |
+| `_h2_h2.ratesN.csv` / `h2.ratesN` | Primary energy, MeV; interface ID | Counting response coefficient. |
 
-All three modes write these histograms. There are $4 + 3N_{\mathrm{phantom}}$
-histogram products, where $N_{\mathrm{phantom}}$ is the phantom count. Despite the histogram titles, raw phantom values have not
-yet been divided by primary counts, masses, or interface areas.
+All three modes write these histograms. Mode `-1` writes one CSV per histogram;
+modes `0` and `1` store them as objects in `<name>.root`. There are
+$4 + 3N_{\mathrm{phantom}}$ histogram products, where
+$N_{\mathrm{phantom}}$ is the phantom count. Despite the histogram titles, raw
+phantom values have not yet been divided by primary counts, masses, or interface
+areas.
 
 Source-position and direction histograms have 120 azimuth bins from 0 to $2\pi$
 and 60 $\cos\theta$ bins from 0 to 1. Negative $\cos\theta$ values go into underflow;
@@ -59,7 +63,7 @@ locate the first non-comment line rather than assuming a fixed line count.
 ### Detector and interface IDs
 
 Ionization is associated with the sensitive volume's detector ID. Phantom
-responses and binary crossings use the interface ID:
+responses and ROOT interface crossings use the interface ID:
 
 $$
 \alpha = \arccos(\hat{\mathbf r}\cdot\hat{\mathbf p}),\qquad
@@ -75,7 +79,7 @@ the momentum direction.
 
 The angle is measured from the outward local radial direction: outward-moving
 particles have angles below 90 degrees, inward-moving particles above 90.
-The binary angle is rounded to the nearest whole degree, so a stored value of
+The recorded angle is rounded to the nearest whole degree, so a stored value of
 90 cannot resolve a near-tangential crossing's original direction.
 
 ## Processed response tables
@@ -96,7 +100,7 @@ detector_or_interface_id  altitude_km  response_bin_0  response_bin_1 ...
 ```
 
 There is one response column for each interior primary-energy bin, in the
-order recorded by `<name>_h1_h1.1.csv`. No division by energy-bin width is
+order recorded by the primary-energy histogram. No division by energy-bin width is
 performed. IDs and altitudes are written with integer and three-decimal-place
 formats respectively; response values use scientific notation with five
 places after the decimal. The first and last physical layer rows are omitted.
@@ -179,78 +183,79 @@ literally, including the placement of the square inside the logarithm; they
 are not a statement that the implementation matches a particular radiation
 protection standard.
 
-## Binary header
+(root-output)=
 
-Both binary products start with a 32-byte header. Integer and floating-point
-payloads use the writer's native byte order, recorded by the marker. Current
-Python readers recognize little- and big-endian headers.
+## ROOT output: `<name>.root`
 
-| Byte offset | Type | Field | Current value |
-| --- | --- | --- | --- |
-| 0 | 8 bytes | Magic | `ATRISBIN` |
-| 8 | uint16 | Format version | `1` |
-| 10 | uint16 | Record type | `1` for interfaces; `2` for steps |
-| 12 | uint32 | Byte-order marker | `0x01020304` |
-| 16 | uint32 | Header size | `32` |
-| 20 | uint32 | Record size | `16` or `256` bytes |
-| 24 | uint32 | Schema version | `1` |
-| 28 | uint32 | Reserved | `0` |
+Modes `0` and `1` use Geant4's ROOT analysis backend. One ROOT file contains
+the response histograms listed above, a `metadata` ntuple, and the particle
+ntuples selected by the mode. AtRIS and its Python tools use Uproot, so reading
+these products does not require a separate ROOT installation.
 
-The reader rejects incompatible versions, record sizes, or incomplete final
-records. Interface readers additionally accept historical headerless records,
-interpreted in native byte order. Step readers require a versioned header.
+The `metadata` ntuple contains one row for an ordinary run or one row per
+represented chunk in a gathered ROOT file:
 
-## Interface records: `<name>.binary`
+| Field | Meaning |
+| --- | --- |
+| `schema` | AtRIS metadata schema version. |
+| `atris_version` | Version compiled into the executable. |
+| `input_prefix` | Species input prefix used for geometry, macro, and bins. |
+| `physics_list` | Geant4 reference physics list. |
+| `output_mode` | Numeric AtRIS output mode. |
+| `phantom_count` | Number of loaded phantom pairs. |
+| `seeds_explicit` | `1` when the output prefix supplied explicit chunk seeds. |
+| `random_seed_1`, `random_seed_2` | The two explicit seeds, or zero for runtime defaults. |
+
+Gather concatenates available metadata rows without using them as histogram
+compatibility constraints. It combines only response histograms; the large
+particle ntuples remain in the individual chunk files.
+
+### Interface ntuple: `interfaces`
 
 Written in modes `0` and `1` on entry into non-terminating sensitive volumes
 when the pre-step status is a geometry boundary. A particle may cross many
 interfaces or revisit one, so records are crossings, not unique particles.
 
-| Byte offset | CSV field from `atris-dump` | Type | Meaning |
-| --- | --- | --- | --- |
-| 0 | `pdg` | int32 | Particle PDG code |
-| 4 | `interface` | uint16 | Interface ID |
-| 6 | `angle` | uint16 | Rounded angle from outward radius, degrees |
-| 8 | `kinetic_energy` | float32 | Pre-step particle kinetic energy, MeV |
-| 12 | `source_energy` | float32 | Primary source kinetic energy, MeV |
+| Field | Meaning |
+| --- | --- |
+| `pdg` | Particle PDG code. |
+| `interface_id` | Interface ID. |
+| `angle_degrees` | Rounded angle from the outward radius, degrees. |
+| `kinetic_energy_MeV` | Pre-step particle kinetic energy, MeV. |
+| `primary_energy_MeV` | Source primary kinetic energy, MeV. |
 
-Records have no event or track identifier. Thread writes are serialized, but
-record order is not a global event ordering. `atris-bin-to-ascii` writes these
-same five fields without a header, separated by spaces; `atris-dump` writes
-comma-separated values with a field-name header.
+Records have no event or track identifier, and multithreaded output does not
+define a global crossing order.
 
-## Step records: `<name>.steps.binary`
+### Step ntuple: `steps`
 
-Written in mode `1`, one record per processed step in a sensitive volume,
-including terminating volumes. Each record is 256 bytes. Fields occur in this
-order, with no extra padding between them:
+Written in mode `1`, one row per processed step in a sensitive volume,
+including terminating volumes.
 
-| Field(s) | Type | Meaning |
-| --- | --- | --- |
-| `event_id` | int32 | Geant4 event ID; fallback `-1` if unavailable |
-| `track_id`, `parent_id` | int32 each | Event-local track ID and parent track ID |
-| `step_id` | int32 | Current track step number |
-| `pdg` | int32 | Particle PDG code |
-| `detector_id` | int32 | Sensitive-volume ID |
-| `pre_x_km`, `pre_y_km`, `pre_z_km` | float64 each | Pre-step Cartesian position, km |
-| `post_x_km`, `post_y_km`, `post_z_km` | float64 each | Post-step Cartesian position, km |
-| `pre_kinetic_energy_MeV`, `post_kinetic_energy_MeV` | float64 each | Kinetic energy at each endpoint |
-| `energy_deposit_MeV` | float64 | Total step energy deposit |
-| `nonionizing_energy_deposit_MeV` | float64 | Non-ionizing component of that deposit |
-| `step_length_m` | float64 | Step length, m |
-| `global_time_ns` | float64 | Post-step global time, ns |
-| `primary_energy_MeV` | float64 | Source primary kinetic energy, MeV |
-| `creator_process` | 64 bytes | Null-terminated process name; `primary` for primary tracks |
-| `step_process` | 64 bytes | Null-terminated step-defining process; `none` if unavailable |
+| Field(s) | Meaning |
+| --- | --- |
+| `event_id` | Geant4 event ID; fallback `-1` if unavailable. |
+| `track_id`, `parent_id` | Event-local track ID and parent track ID. |
+| `step_id` | Current track step number. |
+| `pdg` | Particle PDG code. |
+| `detector_id` | Sensitive-volume ID. |
+| `pre_x_km`, `pre_y_km`, `pre_z_km` | Pre-step Cartesian position, km. |
+| `post_x_km`, `post_y_km`, `post_z_km` | Post-step Cartesian position, km. |
+| `pre_kinetic_energy_MeV`, `post_kinetic_energy_MeV` | Kinetic energy at each endpoint. |
+| `energy_deposit_MeV` | Total step energy deposit. |
+| `nonionizing_energy_deposit_MeV` | Non-ionizing component of that deposit. |
+| `step_length_m` | Step length, m. |
+| `global_time_ns` | Post-step global time, ns. |
+| `primary_energy_MeV` | Source primary kinetic energy, MeV. |
+| `creator_process` | Process that created the track; `primary` for primary tracks. |
+| `step_process` | Step-defining process; `none` if unavailable. |
 
-The six integers occupy bytes 0–23, the thirteen doubles bytes 24–127, and
-the two strings bytes 128–191 and 192–255. Names are truncated to 63 bytes plus
-a null terminator. Identify a track by event and track ID together. Across
-chunks, also retain the chunk identity. Multithreading can interleave records.
+Identify a track by event and track ID together. Across chunks, also retain the
+chunk identity. Stream either ntuple as CSV without changing the ROOT file:
 
 ```bash
-atris-dump protons.binary | head
-atris-dump protons.steps.binary | head
+atris-dump protons.root interfaces | head
+atris-dump protons.root steps | head
 ```
 
 ## Plots and chunk metadata
@@ -269,11 +274,11 @@ atris-dump protons.steps.binary | head
 
 An unnamed phantom input plot uses `phantom-N.inputs.png`. The plot command
 inspects canonical `protons` and `alphas` products in the selected directory;
-it does not automatically collect per-chunk binaries. See
+it does not automatically collect per-chunk particle ntuples. See
 [Scatter/gather files](chunks.md) for logs, completion markers, gathered-state
 files, and the convergence CSV schema.
 
 Implementation: `src/PrimaryGeneratorAction.cc`, `src/HistoManager.cc`,
-`src/SensitiveDetector.cc`, `include/BinaryOutput.hh`, and
-`atris_tools/postprocess.py`, `binary_output.py`, `interface_output.py`,
-`step_output.py`, and `plotting.py`.
+`src/SensitiveDetector.cc`, `include/NtupleSchema.hh`, and
+`atris_tools/postprocess.py`, `response_histograms.py`, `root_output.py`,
+`interface_output.py`, `step_output.py`, and `plotting.py`.

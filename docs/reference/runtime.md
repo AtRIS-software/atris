@@ -56,8 +56,8 @@ run settings; a seed by itself is not a complete run specification.
 Most Python commands write progress messages, warnings, and errors to standard
 error. `--quiet` hides progress messages but still shows warnings and errors.
 `--verbose` also shows debugging details. You cannot use both options together.
-The command reference lists which tools support these options. Binary dump
-CSV is written to standard output for piping or redirection.
+The command reference lists which tools support these options. ROOT ntuple
+dumps are written as CSV to standard output for piping or redirection.
 
 Modern `atris-*` commands accept `--version` to report the Python package and
 available executable versions. `AtRIS --version` reports only the compiled

@@ -29,11 +29,13 @@ from .input_plotting import (
 )
 from .interface_plotting import plot_interface_output
 from .phantoms import read_phantoms
-from .postprocess import (
-    get_histogram_axes,
-    read_histogram_data,
-    warn_if_inputs_do_not_match_output,
+from .postprocess import warn_if_inputs_do_not_match_output
+from .response_histograms import (
+    PRIMARY_HISTOGRAM,
+    ResponseHistogramReader,
+    response_output_format,
 )
+from .root_output import has_ntuple
 from .step_plotting import plot_mode_one_output
 
 
@@ -222,7 +224,7 @@ def _add_response_plot(
 def _angular_values(histogram, axes):
     xbins = len(axes[0]) - 1
     ybins = len(axes[1]) - 1
-    values = histogram[:, 0].reshape((ybins + 2, xbins + 2))
+    values = histogram[:, 1].reshape((ybins + 2, xbins + 2))
     return values[1:-1, 1:-1]
 
 
@@ -465,11 +467,13 @@ def plot_run(simname):
     filenames = []
     errors = []
     species = simname.capitalize()
-    if Path(simname + "_h1_h1.1.csv").is_file():
+    output_format = response_output_format(simname)
+    if output_format is not None:
         warn_if_inputs_do_not_match_output(simname)
     try:
-        if Path(simname + "_h1_h1.1.csv").is_file():
-            energy_edges = get_histogram_axes(simname + "_h1_h1.1.csv")[0]
+        if output_format is not None:
+            with ResponseHistogramReader(simname) as histograms:
+                energy_edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
         else:
             energy_edges = np.atleast_1d(np.loadtxt(simname + ".bins"))
     except Exception as error:
@@ -487,11 +491,12 @@ def plot_run(simname):
 
     if Path(simname + ".ioni").is_file():
         try:
-            direction_axes = get_histogram_axes(simname + "_h2_h2.dir.csv")
-            position_axes = get_histogram_axes(simname + "_h2_h2.pos.csv")
-            primary_energy = read_histogram_data(simname + "_h1_h1.1.csv")
-            direction = read_histogram_data(simname + "_h2_h2.dir.csv")
-            position = read_histogram_data(simname + "_h2_h2.pos.csv")
+            with ResponseHistogramReader(simname) as histograms:
+                direction_axes = histograms.axes("h2.dir")
+                position_axes = histograms.axes("h2.pos")
+                primary_energy = histograms.data(PRIMARY_HISTOGRAM)
+                direction = histograms.data("h2.dir")
+                position = histograms.data("h2.pos")
             detector_ids, ionization = _read_response(simname + ".ioni")
             filename = simname + ".png"
             _save_generic_plot(
@@ -575,8 +580,8 @@ def main():
             "products already present in a run directory."
         ),
         epilog=(
-            "Recognized products include prepared macros and geometry, binary "
-            "or ASCII mode-0 interface records, mode-1 step traces, convergence "
+            "Recognized products include prepared macros and geometry, ROOT "
+            "interface and step records, convergence "
             "tables, and post-processed proton and alpha responses. Missing "
             "product groups are skipped so partial runs can still be inspected. "
             "Existing PNG files with the generated names are replaced. This "
@@ -614,17 +619,23 @@ def main():
         except Exception as error:
             errors.append("inputs: " + str(error))
         for simulation in ("protons", "alphas"):
-            binary_path = Path(simulation + ".binary")
-            ascii_path = Path(simulation + ".ascii")
-            step_path = Path(simulation + ".steps.binary")
-            if binary_path.is_file() or ascii_path.is_file():
+            root_path = Path(simulation + ".root")
+            root_interfaces = False
+            root_steps = False
+            if root_path.is_file():
+                try:
+                    root_interfaces = has_ntuple(root_path, "interfaces")
+                    root_steps = has_ntuple(root_path, "steps")
+                except Exception as error:
+                    errors.append("%s ROOT output: %s" % (simulation, error))
+            if root_interfaces:
                 try:
                     plotted.append(plot_interface_output(simulation))
                 except Exception as error:
                     errors.append(
-                        "%s mode-0 output: %s" % (simulation, error)
+                        "%s interface output: %s" % (simulation, error)
                     )
-            if step_path.is_file():
+            if root_steps:
                 try:
                     plotted.extend(plot_mode_one_output(simulation))
                 except Exception as error:

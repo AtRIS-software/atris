@@ -5,11 +5,25 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import uproot
 
 from atris_tools import postprocess
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
+
+
+def write_root_response(path):
+    energy_edges = np.array([1.0, 10.0, 100.0])
+    detector_edges = np.array([-0.5, 0.5, 1.5, 2.5, 3.5])
+    angular_edges = np.array([0.0, 0.5, 1.0])
+    angular = np.arange(1.0, 5.0).reshape(2, 2)
+    response = np.arange(1.0, 9.0).reshape(2, 4)
+    with uproot.recreate(path) as root_file:
+        root_file["h1.1"] = (np.array([4.0, 4.0]), energy_edges)
+        root_file["h2.dir"] = (angular, angular_edges, angular_edges)
+        root_file["h2.pos"] = (angular, angular_edges, angular_edges)
+        root_file["h2.ion"] = (response, energy_edges, detector_edges)
 
 
 def test_get_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
@@ -177,3 +191,39 @@ def test_main_rejects_species_argument(tmp_path, monkeypatch):
 
     with pytest.raises(SystemExit):
         postprocess.main()
+
+
+def test_postprocess_reads_root_response_histograms(tmp_path, monkeypatch):
+    write_root_response(tmp_path / "protons.root")
+    (tmp_path / "simulation.psf").write_text(
+        "0 1 0 1 0 1 0 1 1 1 1 0 0 0 0 0\n"
+        "1 2 0 1 0 1 1 1 1 1 1 0 0 0 0 0\n"
+        "2 3 0 1 0 1 2 1 1 1 1 0 0 0 0 0\n"
+        "3 4 0 1 0 1 3 1 1 1 1 0 0 0 0 0\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert postprocess.get_nr_phantoms("protons") == 0
+    np.testing.assert_array_equal(
+        postprocess.get_energy_edges("protons"),
+        [1.0, 10.0, 100.0],
+    )
+    data = postprocess.read_data("protons", 0)
+    np.testing.assert_array_equal(data[0][1:-1, 0], [4.0, 4.0])
+    np.testing.assert_array_equal(
+        data[3][:, 1].reshape(6, 4)[1:-1, 1:-1],
+        np.arange(1.0, 9.0).reshape(2, 4).T,
+    )
+
+    postprocess.process_run("protons")
+
+    assert (tmp_path / "protons.ioni").is_file()
+
+
+def test_postprocess_rejects_ambiguous_response_formats(tmp_path, monkeypatch):
+    write_root_response(tmp_path / "protons.root")
+    (tmp_path / "protons_h1_h1.1.csv").write_text("present\n")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValueError, match="Both CSV and ROOT"):
+        postprocess.get_energy_edges("protons")

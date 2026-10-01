@@ -18,7 +18,6 @@ atris-gather
 atris-postprocess
 atris-plot
 atris-dump
-atris-bin-to-ascii
 ```
 
 ## Shared options
@@ -36,7 +35,6 @@ for their behavior.
 | `psf2gdml` | `atris-psf-to-gdml` |
 | `atrismacrogen` | `atris-generate-macros` |
 | `postprocess` | `atris-postprocess` |
-| `bin2ascii` | `atris-bin-to-ascii` |
 
 Aliases invoke the same entry points, but only modern names receive the shared
 `--version` option. Prefer modern names in new scripts.

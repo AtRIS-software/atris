@@ -29,8 +29,8 @@ library notes are now in the [phantom library reference](reference/phantom-libra
 
 The repository now contains an initial `atris_tools` package. It provides
 command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
-macro generation, chunk scattering and gathering, post-processing, and binary
-conversion. These commands are also importable as Python modules.
+macro generation, chunk scattering and gathering, post-processing, and
+plotting. These commands are also importable as Python modules.
 
 The package uses `atris-*` command names for these operations. Existing
 standalone command names remain available for compatibility and to preserve the
@@ -41,20 +41,18 @@ macro generation, chunk management, numerical post-processing, and plotting.
 The C++ executable remains the scientific simulation core; the Python package
 prepares its inputs and manages the surrounding workflow.
 
-## Binary output
+## Simulation output
 
-Interface and transport-step files begin with the same 32-byte header. It
-contains the `ATRISBIN` identifier, format and schema versions, record type,
-byte-order marker, header size, and record size. Interface records retain the
-historical five fields. Step records contain the event and track identifiers,
+Modes 0 and 1 use Geant4's ROOT analysis backend for all output. Mode 0 stores
+the histograms and `interfaces` ntuple in `<name>.root`; mode 1 also stores the
+`steps` ntuple there. The single-file layout is a current implementation choice,
+not a required part of the format. Geant4 merges worker-thread objects. The
+interface columns contain particle, interface, angle, crossing-energy, and
+primary-energy values. The step columns contain event and track identifiers,
 particle and detector identifiers, pre- and post-step positions and energies,
-energy deposition, step length, time, primary energy, and process names.
-
-The readers in `atris_tools.interface_output` and `atris_tools.step_output`
-memory-map these files. `atris-dump` identifies either record type from the
-header and writes CSV text to standard output. New formats must use a new
-format or schema version rather than silently changing an existing record
-layout.
+energy deposition, step length, time, primary energy, and process names. The
+Python tools read this output with Uproot and process the larger step table in
+bounded chunks.
 
 Some modules still retain names and implementation details from the original
 standalone scripts. Further cleanup should favor clear importable functions and

@@ -1,5 +1,7 @@
 #include "HistoManager.hh"
-#include "G4CsvAnalysisManager.hh"
+#include "NtupleSchema.hh"
+#include "G4AnalysisManager.hh"
+#include "G4Threading.hh"
 #include "G4UnitsTable.hh"
 #include "DetectorConstruction.hh"
 #include "G4SDManager.hh"
@@ -72,7 +74,7 @@ HistoManager::~HistoManager()
 
 void HistoManager::Book()
 {
-	G4CsvAnalysisManager* analysis = G4CsvAnalysisManager::Instance();
+	G4AnalysisManager* analysis = G4AnalysisManager::Instance();
 	// This code replaces the HistoManager.cc
 	G4cout << "### AtRIS: configuring analysis histograms. " << G4endl;
 	analysis->SetVerboseLevel(0);
@@ -201,6 +203,87 @@ void HistoManager::Book()
 
 	}
 
+	if (mode != 0 && mode != 1) return;
+
+	id = analysis->CreateNtuple("metadata", "AtRIS output metadata");
+	analysis->CreateNtupleIColumn(id, "schema");
+	analysis->CreateNtupleSColumn(id, "atris_version");
+	analysis->CreateNtupleSColumn(id, "input_prefix");
+	analysis->CreateNtupleSColumn(id, "physics_list");
+	analysis->CreateNtupleIColumn(id, "output_mode");
+	analysis->CreateNtupleIColumn(id, "phantom_count");
+	analysis->CreateNtupleIColumn(id, "seeds_explicit");
+	analysis->CreateNtupleIColumn(id, "random_seed_1");
+	analysis->CreateNtupleIColumn(id, "random_seed_2");
+	analysis->FinishNtuple(id);
+	id = analysis->CreateNtuple(
+		"interfaces",
+		"Particle crossings at layer interfaces"
+	);
+	analysis->CreateNtupleIColumn(id, "pdg");
+	analysis->CreateNtupleIColumn(id, "interface_id");
+	analysis->CreateNtupleIColumn(id, "angle_degrees");
+	analysis->CreateNtupleDColumn(id, "kinetic_energy_MeV");
+	analysis->CreateNtupleDColumn(id, "primary_energy_MeV");
+	analysis->FinishNtuple(id);
+	if (mode != 1) return;
+
+	id = analysis->CreateNtuple("steps", "Particle transport steps");
+	analysis->CreateNtupleIColumn(id, "event_id");
+	analysis->CreateNtupleIColumn(id, "track_id");
+	analysis->CreateNtupleIColumn(id, "parent_id");
+	analysis->CreateNtupleIColumn(id, "step_id");
+	analysis->CreateNtupleIColumn(id, "pdg");
+	analysis->CreateNtupleIColumn(id, "detector_id");
+	analysis->CreateNtupleDColumn(id, "pre_x_km");
+	analysis->CreateNtupleDColumn(id, "pre_y_km");
+	analysis->CreateNtupleDColumn(id, "pre_z_km");
+	analysis->CreateNtupleDColumn(id, "post_x_km");
+	analysis->CreateNtupleDColumn(id, "post_y_km");
+	analysis->CreateNtupleDColumn(id, "post_z_km");
+	analysis->CreateNtupleDColumn(id, "pre_kinetic_energy_MeV");
+	analysis->CreateNtupleDColumn(id, "post_kinetic_energy_MeV");
+	analysis->CreateNtupleDColumn(id, "energy_deposit_MeV");
+	analysis->CreateNtupleDColumn(id, "nonionizing_energy_deposit_MeV");
+	analysis->CreateNtupleDColumn(id, "step_length_m");
+	analysis->CreateNtupleDColumn(id, "global_time_ns");
+	analysis->CreateNtupleDColumn(id, "primary_energy_MeV");
+	analysis->CreateNtupleSColumn(id, "creator_process");
+	analysis->CreateNtupleSColumn(id, "step_process");
+	analysis->FinishNtuple(id);
+
+}
+
+void HistoManager::FillMetadata()
+{
+	if (mode != 0 && mode != 1) return;
+	// One worker records the shared run metadata while Geant4 merges all ntuples.
+	if (G4Threading::G4GetThreadId() != 0) return;
+	auto analysis = G4AnalysisManager::Instance();
+	analysis->FillNtupleIColumn(metadataNtupleId, metadataSchema, 1);
+	analysis->FillNtupleSColumn(
+		metadataNtupleId, metadataAtrisVersion, ATRIS_VERSION
+	);
+	analysis->FillNtupleSColumn(
+		metadataNtupleId, metadataInputPrefix, simulationInputPrefix
+	);
+	analysis->FillNtupleSColumn(
+		metadataNtupleId, metadataPhysicsList, physicsListName
+	);
+	analysis->FillNtupleIColumn(metadataNtupleId, metadataOutputMode, mode);
+	analysis->FillNtupleIColumn(
+		metadataNtupleId, metadataPhantomCount, nrphantoms
+	);
+	analysis->FillNtupleIColumn(
+		metadataNtupleId, metadataSeedsExplicit, hasExplicitSeeds
+	);
+	analysis->FillNtupleIColumn(
+		metadataNtupleId, metadataRandomSeed1, explicitSeeds[0]
+	);
+	analysis->FillNtupleIColumn(
+		metadataNtupleId, metadataRandomSeed2, explicitSeeds[1]
+	);
+	analysis->AddNtupleRow(metadataNtupleId);
 }
 
 }  // namespace atris

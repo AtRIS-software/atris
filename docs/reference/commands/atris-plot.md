@@ -11,14 +11,14 @@ provide Matplotlib (`python -m pip install -e ".[plot]"`).
 
 **Inputs:** prepared species macros/geometry/bins, staged phantom tables,
 processed responses and their raw diagnostics, convergence CSVs, interface
-binaries (or `.ascii`), and step binaries, as available. It discovers the
+and step ntuples in ROOT output, as available. It discovers the
 canonical prefixes `protons` and `alphas`. **Outputs:** the
 [PNG products](../outputs.md#plots-and-chunk-metadata), replacing existing images.
 
 Absent product groups are skipped. Errors in individual groups are reported
 as warnings while other groups are attempted; command success does not imply
 that every possible plot was created. No gather, post-processing, or simulation
-is performed. Per-chunk binaries are not automatically discovered or combined.
+is performed. Per-chunk ROOT files are not automatically discovered or combined.
 
 ## Reading the plots
 
@@ -44,7 +44,7 @@ being plotted.
 
 ### Step traces
 
-For an available step binary from `--mode shower`, `<species>.steps.png`
+For an available `steps` ntuple from `--mode shower`, `<species>.steps.png`
 summarizes particle species, step-defining processes, shower development by
 layer, and kinetic-energy distributions. `<species>.shower.png` shows the
 event with the most recorded steps in altitude and transverse radius, on
@@ -69,8 +69,8 @@ optional arguments:
   -v, --verbose  Include detailed per-file, per-request, or per-chunk progress.
   --version      Show the AtRIS and atris-tools versions and exit.
 
-Recognized products include prepared macros and geometry, binary or ASCII mode-0
-interface records, mode-1 step traces, convergence tables, and post-processed proton
+Recognized products include prepared macros and geometry, ROOT interface and step
+records, convergence tables, and post-processed proton
 and alpha responses. Missing product groups are skipped so partial runs can still be
 inspected. Existing PNG files with the generated names are replaced. This command does
 not run AtRIS, gather chunks, or post-process raw histograms.

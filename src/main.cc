@@ -4,7 +4,6 @@
 #include "G4UImanager.hh"
 #include "G4GDMLParser.hh"
 
-#include "BinaryOutput.hh"
 #include "DetectorConstruction.hh"
 #include "UserActionInitialization.hh"
 #include "Randomize.hh"
@@ -28,8 +27,6 @@ G4String simulationInputPrefix;
 G4String physicsListName;
 G4int    mode = -1;
 G4int    nrofdetectors=0;
-FILE*    tuples1;
-FILE*    stepTrace;
 G4bool   hasExplicitSeeds = false;
 std::array<G4long, 2> explicitSeeds = {0, 0};
 
@@ -160,42 +157,13 @@ int main(int argc,char** argv){
 		}
 		return -1;
 	}
-	if ((mode == 0) or (mode == 1)){
-		G4String bFN = outputFileName + (G4String) ".binary";
-		G4cout << "### AtRIS: opening file:" << bFN << G4endl;
-		tuples1 = std::fopen(bFN,"wb");
-		if (
-			tuples1 == nullptr
-			or not atris::WriteBinaryHeader(
-				tuples1,
-				atris::BinaryRecordType::Interface,
-				sizeof(atris::InterfaceRecord)
-			)
-		) {
-			G4cerr << "### AtRIS: unable to open interface output: " << bFN << G4endl;
-			delete runManager;
-			return 1;
-		}
+	if (mode == 0) {
+		G4cout << "### AtRIS: mode 0 writes histograms and interface ntuples to "
+		       << outputFileName << ".root" << G4endl;
 	}
-	if (mode == 1){
-		G4String traceFileName = outputFileName + (G4String) ".steps.binary";
-		G4cout << "### AtRIS: opening step trace: " << traceFileName << G4endl;
-		G4cout << "### AtRIS: mode 1 writes one binary record per transport step; output may be very large" << G4endl;
-		stepTrace = std::fopen(traceFileName, "wb");
-		if (stepTrace == nullptr) {
-			G4cerr << "### AtRIS: unable to open step trace: " << traceFileName << G4endl;
-			delete runManager;
-			return 1;
-		}
-		if (not atris::WriteBinaryHeader(
-			stepTrace,
-			atris::BinaryRecordType::Step,
-			sizeof(atris::StepRecord)
-		)) {
-			G4cerr << "### AtRIS: unable to write step trace header: " << traceFileName << G4endl;
-			delete runManager;
-			return 1;
-		}
+	if (mode == 1) {
+		G4cout << "### AtRIS: mode 1 writes histograms, interface, and transport-step ntuples to "
+		       << outputFileName << ".root; output may be very large" << G4endl;
 	}
 
 	atris::UserActionInitialization* useract = new atris::UserActionInitialization(detector);
@@ -222,8 +190,6 @@ int main(int argc,char** argv){
 	} else {
 		G4cerr << "### AtRIS: macro execution failed with Geant4 status " << commandStatus << G4endl;
 	}
-	if ((mode == 0) or (mode == 1)) {std::fclose(tuples1);}
-	if (mode == 1) {std::fclose(stepTrace);}
 	delete runManager;
 	const auto totalEnd = std::chrono::steady_clock::now();
 	const double macroSeconds =

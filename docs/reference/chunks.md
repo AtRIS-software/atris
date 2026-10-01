@@ -105,11 +105,11 @@ pools or multiple workers with the same index against a shared plan.
 ## Gather products and restart behaviour
 
 `atris-gather` reads only planned chunks whose `.COMPLETE` markers exist. It
-sums histogram accumulators into canonical `<species>_*.csv` files at the run
-root. It never averages already normalized response tables. Incomplete chunk
-files are ignored; a required histogram missing from a completed chunk is an
-error. Headers and shapes must agree, apart from the accumulated
-`#planes_Sxyw` value, which is summed separately.
+sums histogram accumulators into canonical `<species>_*.csv` files for CSV
+chunks or `<species>.root` for ROOT chunks. It never averages already
+normalized response tables. Incomplete chunk files are ignored; a required
+histogram missing from a completed chunk is an error. CSV headers and shapes,
+or ROOT histogram definitions and axes, must agree.
 
 The first completed chunk determines the set of histogram suffixes to gather.
 Every other completed chunk must provide those suffixes. Keep configuration
@@ -118,7 +118,7 @@ configuration-consistency check.
 
 | Product | Contents |
 | --- | --- |
-| `<species>_*.csv` | Sum of the selected completed raw histograms. |
+| `<species>_*.csv` or `<species>.root` | Sum of the selected completed raw response histograms. |
 | `<species>.gathered-chunks.txt` | The plan triples included in the aggregate, in plan order. |
 | `<species>.convergence.csv` | Ionization convergence history when at least two chunks are available. |
 
@@ -136,9 +136,10 @@ directory rather than recycling old result directories.
 
 Gather can inspect the completed subset while workers run, provided completed
 chunks remain immutable. For a final result, first verify whole-plan completion.
-Gather does not merge `.binary` or `.steps.binary`, scale response tables, or
-make plots. Those particle records remain per chunk; run post-processing and
-plotting separately for canonical response products.
+Gather does not merge the `interfaces` or `steps` ROOT ntuples, scale response
+tables, or make plots. Those particle records remain per chunk; the canonical
+ROOT file contains the gathered response histograms and their metadata rows.
+Run post-processing and plotting separately for canonical response products.
 
 ## Convergence CSV
 

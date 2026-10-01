@@ -35,7 +35,7 @@ flowchart TD
     S --> H["atris-run: execute chunks"]
     G -. optional .-> H
     H --> Q["Per-chunk histograms and completion markers"]
-    Q -->|atris-gather| I["Combined raw histogram CSVs"]
+    Q -->|atris-gather| I["Combined raw response histograms"]
     I --> J["atris-postprocess"]
     B --> J
     F -. optional metadata .-> J
@@ -268,13 +268,15 @@ atris-gather .
 
 | Reads | Creates or updates |
 | --- | --- |
-| Plan, completion markers, completed chunk CSVs, `simulation.psf` | Canonical `protons_*.csv` and `alphas_*.csv` at the run root |
+| Plan, completion markers, completed chunk histograms, `simulation.psf` | Canonical response histograms at the run root |
 | The same completed subset | `protons.gathered-chunks.txt`, `alphas.gathered-chunks.txt`, and species `.convergence.csv` files |
 
-The canonical CSVs contain sums of raw histogram accumulators. The gathered-state
-files record which plan entries are included; convergence CSVs appear once at least two chunks of a species have completed
-and report how the ionization estimate changes as chunks are added. With only
-one chunk per species, there are no convergence tables yet. Original chunk files remain.
+Response-mode chunks produce canonical CSVs; profile and shower chunks produce
+one canonical ROOT file containing the summed response histograms and metadata.
+The gathered-state files record which plan entries are included; convergence
+CSVs appear once at least two chunks of a species have completed and report how
+the ionization estimate changes as chunks are added. With only one chunk per
+species, there are no convergence tables yet. Original chunk files remain.
 Unfinished chunks are ignored. Repeat gathering and the processing below as
 more chunks finish to update the results.
 
@@ -288,7 +290,7 @@ atris-postprocess .
 
 | Reads | Creates |
 | --- | --- |
-| Raw `protons_*.csv` and `alphas_*.csv`, `simulation.psf` | `.ioni` for each species |
+| Raw proton and alpha CSV or ROOT histograms, `simulation.psf` | `.ioni` for each species |
 | Optional raw phantom histograms and `phantoms.txt` | `.doseN`, `.equiN`, `.ratesN` for each selected phantom and species |
 
 The post-processor also checks available `.bins` and `.mac` inputs for
@@ -331,7 +333,7 @@ protons.icru_zero_0.000MeV_detAB.png        # phantom 1 responses
 ```
 
 There are corresponding alpha plots. A PNG is a visual summary; the numerical
-results remain in the response tables and raw CSVs. Plotting does not implicitly
+results remain in the response tables and raw histograms. Plotting does not implicitly
 run AtRIS, gather chunks, or perform post-processing. You could also have run
 `atris-plot` after step 5 to inspect inputs before simulating.
 
@@ -357,24 +359,25 @@ update the results. `atris-run . --check-complete` checks the whole plan; it is
 expected to report unfinished work after this walkthrough's two chunks and is
 not required before gathering.
 
-## Where particle-record files fit
+## Where particle records fit
 
-The walkthrough used `--mode response`, which produces histogram CSVs. With
-`--mode profile`, AtRIS additionally writes `<prefix>.binary` interface
-crossings. `--mode shower` also adds
-`<prefix>.steps.binary` transport steps in sensitive volumes.
+The walkthrough used `--mode response`, which produces histogram CSVs.
+`--mode profile` instead writes `<prefix>.root` containing the same response
+histograms and an `interfaces` ntuple. `--mode shower` adds a `steps` ntuple to
+that ROOT file.
 
-These records are parallel outputs of the simulation. They do not replace the
-histograms consumed by `atris-postprocess`. `atris-dump` can read either binary
-format and emit CSV text; `atris-plot` can inspect canonical species binaries.
-The gather command does not merge per-chunk binary files.
+The ntuples are parallel outputs of the simulation. They do not replace the
+histograms consumed by `atris-postprocess`. `atris-dump` can stream either
+ntuple as CSV text, and `atris-plot` can inspect canonical species ROOT files.
+Gather combines the response histograms but leaves the larger particle ntuples
+in their per-chunk ROOT files.
 
 ## Which files to retain
 
 Keep the PSF and species inputs with your results, together with phantom
 metadata and response tables when used. Retain any source data from which you
 constructed the PSF as model provenance. These explain what was simulated and allow results
-to be interpreted or regenerated. Retain raw histogram CSVs to repeat
+to be interpreted or regenerated. Retain raw histogram CSV or ROOT files to repeat
 post-processing without rerunning the simulation.
 
 Processed tables and PNGs can be regenerated when their inputs are intact.

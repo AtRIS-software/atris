@@ -1,7 +1,7 @@
 # Reference
 
-This reference describes the implementation in this version: CSV histograms,
-versioned binary particle records, and the accompanying Python tools. File
+This reference describes the implementation in this version: CSV and ROOT
+histograms, ROOT particle ntuples, and the accompanying Python tools. File
 formats and command options can differ between AtRIS revisions.
 
 ```{toctree}
