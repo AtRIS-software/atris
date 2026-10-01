@@ -29,6 +29,14 @@ Files begin with `#` metadata lines, followed by a column header and numeric
 rows. Axes are described by `#axis edges ...` or `#axis fixed N low high`.
 Read the axes from the output when analyzing an existing run.
 
+AtRIS adds native Geant4 `#annotation` records identifying the histogram,
+quantity, accumulated weight, simulation input prefix, physics list, output
+mode, phantom count, software version, and random seed pair. Phantom-response
+histograms also record the phantom ID. A gathered histogram records the number
+of represented chunks and all known seed pairs. Other provenance values that
+differ between compatible chunks are retained with ` | ` separators; they do
+not by themselves prevent gathering.
+
 | Column | Meaning for a histogram fill with weight `w` |
 | --- | --- |
 | `entries` | Number of fills, independent of weight. |
@@ -45,8 +53,8 @@ Underflow and overflow bins are included. For an energy-versus-detector H2
 with `D` detector bins and `B` energy bins, the post-processor reshapes `Sw` to
 `(D+2, B+2)`: energy varies fastest. Slicing `[1:-1, 1:-1]` removes the
 underflow/overflow rows and columns. The raw primary H1 similarly contains
-`B+2` rows. Post-processing assumes the current Geant4 layout of seven header
-lines for H1 and ten for H2, including the column header.
+`B+2` rows. Header length varies with the available annotations, so readers
+locate the first non-comment line rather than assuming a fixed line count.
 
 ### Detector and interface IDs
 
