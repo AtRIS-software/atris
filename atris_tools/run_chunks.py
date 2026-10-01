@@ -105,6 +105,7 @@ def run_chunks(
     run_directory = Path(run_directory).expanduser().resolve()
     mode_name = normalize_output_mode(mode)
     mode = OUTPUT_MODE_VALUES[mode_name]
+    output_suffix = ".root" if mode_name in ("profile", "shower") else ""
     entries = read_chunk_plan(run_directory)
     selected_entries = select_entries(
         entries,
@@ -209,7 +210,7 @@ def run_chunks(
                 [
                     "AtRIS",
                     physics_list,
-                    str(Path("chunks") / run_name),
+                    str(Path("chunks") / (run_name + output_suffix)),
                     str(mode),
                     str(phantom_count),
                 ],

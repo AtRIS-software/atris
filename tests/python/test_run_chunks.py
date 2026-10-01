@@ -349,6 +349,8 @@ def test_run_chunks_translates_named_modes_for_atris(
 
     assert run_chunks(tmp_path, mode=mode, entry=1) == 1
     assert calls[0][3] == value
+    expected_suffix = ".root" if mode in ("profile", "shower") else ""
+    assert calls[0][2] == "chunks/protons_111111_222222" + expected_suffix
 
 
 def test_help_separates_atris_chunk_and_logging_options(monkeypatch, capsys):

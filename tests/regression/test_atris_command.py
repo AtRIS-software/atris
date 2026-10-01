@@ -170,19 +170,22 @@ def assert_timing_output(output, worker_threads):
 
 @pytest.mark.regression
 @pytest.mark.parametrize(
-    ("mode", "creates_root", "creates_steps"),
+    ("simulation", "mode", "creates_root", "creates_steps"),
     [
-        pytest.param("-1", False, False, id="csv-response-mode"),
-        pytest.param("0", True, False, id="root-interface-mode"),
-        pytest.param("1", True, True, id="root-shower-mode"),
+        pytest.param("protons", "-1", False, False, id="default-csv-response"),
+        pytest.param("protons.csv", "-1", False, False, id="explicit-csv-response"),
+        pytest.param("protons.csv", "0", False, False, id="csv-interface"),
+        pytest.param("protons.root", "-1", True, False, id="root-response"),
+        pytest.param("protons.root", "0", True, False, id="root-interface"),
+        pytest.param("protons.root", "1", True, True, id="root-shower"),
     ],
 )
 def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
-    tmp_path, atris_command, mode, creates_root, creates_steps
+    tmp_path, atris_command, simulation, mode, creates_root, creates_steps
 ):
     prepare_run(tmp_path)
 
-    result = run_atris(atris_command, tmp_path, "protons", mode=mode)
+    result = run_atris(atris_command, tmp_path, simulation, mode=mode)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "### AtRIS: executing macro protons.mac" in result.stdout
@@ -197,29 +200,29 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
         assert not list(tmp_path.glob("protons_*.csv"))
         with uproot.open(root_path) as root_file:
             object_names = set(root_file.keys(cycle=False))
-            expected_objects = EXPECTED_ROOT_HISTOGRAMS | {
-                "metadata",
-                "interfaces",
-            }
+            expected_objects = set(EXPECTED_ROOT_HISTOGRAMS)
+            if mode in ("0", "1"):
+                expected_objects.update(("metadata", "interfaces"))
             if creates_steps:
                 expected_objects.add("steps")
             assert object_names == expected_objects
             assert int(root_file["h1.1"].member("fEntries")) == 2
-            metadata = root_file["metadata"]
-            assert set(metadata.keys()) == EXPECTED_ROOT_METADATA
-            assert metadata.num_entries == 1
-            assert metadata["output_mode"].array(library="np").tolist() == [
-                int(mode)
-            ]
-            assert metadata["phantom_count"].array(library="np").tolist() == [1]
+            if mode in ("0", "1"):
+                metadata = root_file["metadata"]
+                assert set(metadata.keys()) == EXPECTED_ROOT_METADATA
+                assert metadata.num_entries == 1
+                assert metadata["output_mode"].array(library="np").tolist() == [
+                    int(mode)
+                ]
+                assert metadata["phantom_count"].array(library="np").tolist() == [1]
     else:
         written_suffixes = {
             path.name[len("protons"):]
-            for path in tmp_path.glob("protons_*.csv")
+            for path in tmp_path.glob("protons_h*.csv")
         }
         assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
         assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
-        for path in tmp_path.glob("protons_*.csv"):
+        for path in tmp_path.glob("protons_h*.csv"):
             annotations = histogram_annotations(path)
             assert annotations["atris.csv_schema"] == "1"
             assert annotations["atris.input_prefix"] == "protons"
@@ -230,13 +233,24 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
 
 
 @pytest.mark.regression
+def test_unsupported_output_extension_fails_cleanly(tmp_path, atris_command):
+    prepare_run(tmp_path)
+
+    result = run_atris(atris_command, tmp_path, "protons.unsupported")
+
+    assert result.returncode != 0
+    output = result.stdout + result.stderr
+    assert "Cannot open analysis output 'protons.unsupported'" in output
+
+
+@pytest.mark.regression
 def test_mode_zero_writes_merged_root_interface_ntuple(tmp_path, atris_command):
     prepare_interface_run(tmp_path)
 
     result = run_atris(
         atris_command,
         tmp_path,
-        "protons",
+        "protons.root",
         mode="0",
         threads="2",
     )
@@ -259,7 +273,7 @@ def test_mode_one_writes_root_step_ntuple_with_track_genealogy(
     result = run_atris(
         atris_command,
         tmp_path,
-        "protons",
+        "protons.root",
         mode="1",
         threads="2",
     )
@@ -286,8 +300,8 @@ def test_mode_one_contains_mode_zero_interface_records(tmp_path, atris_command):
     prepare_interface_run(mode_zero)
     prepare_interface_run(mode_one)
 
-    zero_result = run_atris(atris_command, mode_zero, "protons", mode="0")
-    one_result = run_atris(atris_command, mode_one, "protons", mode="1")
+    zero_result = run_atris(atris_command, mode_zero, "protons.root", mode="0")
+    one_result = run_atris(atris_command, mode_one, "protons.root", mode="1")
 
     assert zero_result.returncode == 0, zero_result.stdout + zero_result.stderr
     assert one_result.returncode == 0, one_result.stdout + one_result.stderr
@@ -329,7 +343,12 @@ def test_seeded_mode_one_writes_root_file_inside_chunks(tmp_path, atris_command)
     prepare_run(tmp_path, chunked=True)
     simulation = "chunks/protons_123456_654321"
 
-    result = run_atris(atris_command, tmp_path, simulation, mode="1")
+    result = run_atris(
+        atris_command,
+        tmp_path,
+        simulation + ".root",
+        mode="1",
+    )
 
     assert result.returncode == 0, result.stdout + result.stderr
     root_path = tmp_path / (simulation + ".root")
@@ -363,7 +382,7 @@ def test_csv_and_root_response_histograms_gather_equivalently(
         result = run_atris(
             atris_command,
             run_directory,
-            simulation,
+            simulation + (".root" if mode == "0" else ""),
             mode=mode,
         )
         assert result.returncode == 0, result.stdout + result.stderr

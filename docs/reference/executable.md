@@ -11,7 +11,7 @@ directory containing its inputs and numbered phantom files.
 | Argument | Meaning |
 | --- | --- |
 | `physics-list` | Geant4 reference physics-list name, for example `FTFP_BERT_HP`. Availability depends on the linked Geant4 installation. An unrecognized name prints the available reference lists and exits unsuccessfully. |
-| `simulation-name` | Input and output prefix, or a seeded chunk name as described below. |
+| `simulation-name` | Input prefix and output filename, or a seeded chunk name as described below. An optional filename extension selects the Geant4 output backend. |
 | `mode` | Integer output mode from the table below. The executable does not accept the Python runner's mode names. |
 | `phantom-count` | Number of phantom pairs to load, indexed from zero. Use `0` for no phantom responses. This argument does not read `phantoms.txt`. |
 
@@ -23,13 +23,25 @@ This reads `protons.gdml`, `protons.bins`, `protons.mac`, and the two numbered
 phantom pairs in the current directory. Files beginning with `protons` receive
 the outputs. Existing output names can be overwritten.
 
+With no filename extension, the output format defaults to CSV. An explicit
+extension is passed to Geant4, independently of the output mode:
+
+```bash
+AtRIS FTFP_BERT_HP protons.csv -1 2
+AtRIS FTFP_BERT_HP protons.root -1 2
+```
+
+Both commands use the same `protons.*` input files. Geant4 selects and validates
+the requested backend. AtRIS exits with an error when the extension is unknown
+or the installed Geant4 lacks the requested optional backend.
+
 ## Output modes
 
 | Integer | Name used by `atris-run` | Products |
 | --- | --- | --- |
-| `-1` | `response` | Primary, source-position, source-direction, ionization, and phantom CSV histograms. |
-| `0` | `profile` | The same histograms plus interface-crossing records in `<name>.root`. |
-| `1` | `shower` | The same ROOT products plus transport-step records in sensitive volumes. |
+| `-1` | `response` | Primary, source-position, source-direction, ionization, and phantom response histograms. |
+| `0` | `profile` | The same histograms plus interface-crossing records. |
+| `1` | `shower` | The same products plus transport-step records in sensitive volumes. |
 
 Use only these three modes. Other integers are not explicitly rejected but
 have no documented contract. Step output includes steps in the terminating
@@ -45,8 +57,9 @@ fields is interpreted as `<prefix>_<seed1>_<seed2>`:
 AtRIS FTFP_BERT_HP chunks/protons_123456_654321 -1 2
 ```
 
-The full argument remains the output prefix. Input lookup uses the stripped
-basename in the current directory: `protons.gdml`, `protons.bins`, and
+The full argument, including an optional output extension, selects the output.
+Input lookup uses the suffix-free, stripped basename in the current directory:
+`protons.gdml`, `protons.bins`, and
 `protons.chunk.mac` if it exists, otherwise `protons.mac`. The directory part
 of a seeded name does not select an input directory. Both seeds are set before
 the macro executes; a later `/random/setSeeds` command in that macro can

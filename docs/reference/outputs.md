@@ -1,8 +1,8 @@
 # Output files
 
-`<name>` below is the full simulation prefix; `N` is a zero-based phantom ID.
-Response mode writes Geant4 CSV histograms. Profile and shower modes write the
-same histogram quantities and particle ntuples to one ROOT file.
+`<name>` below is the suffix-free simulation prefix; `N` is a zero-based
+phantom ID. The simulation argument's extension selects the Geant4 output
+backend independently of the output mode. A missing extension defaults to CSV.
 
 ## Raw histogram files
 
@@ -16,8 +16,8 @@ same histogram quantities and particle ntuples to one ROOT file.
 | `_h2_h2.equiN.csv` / `h2.equiN` | Primary energy, MeV; interface ID | The same energy response multiplied by the implemented radiation weight. |
 | `_h2_h2.ratesN.csv` / `h2.ratesN` | Primary energy, MeV; interface ID | Counting response coefficient. |
 
-All three modes write these histograms. Mode `-1` writes one CSV per histogram;
-modes `0` and `1` store them as objects in `<name>.root`. There are
+All three modes write these histograms. CSV output writes one file per
+histogram; ROOT output stores them as objects in `<name>.root`. There are
 $4 + 3N_{\mathrm{phantom}}$ histogram products, where
 $N_{\mathrm{phantom}}$ is the phantom count. Despite the histogram titles, raw
 phantom values have not yet been divided by primary counts, masses, or interface
@@ -187,10 +187,11 @@ protection standard.
 
 ## ROOT output: `<name>.root`
 
-Modes `0` and `1` use Geant4's ROOT analysis backend. One ROOT file contains
-the response histograms listed above, a `metadata` ntuple, and the particle
-ntuples selected by the mode. AtRIS and its Python tools use Uproot, so reading
-these products does not require a separate ROOT installation.
+When the simulation argument ends in `.root`, Geant4 writes one ROOT file. It
+contains the response histograms listed above and, in modes `0` and `1`, a
+`metadata` ntuple and the particle ntuples selected by the mode. AtRIS and its
+Python tools use Uproot, so reading these products does not require a separate
+ROOT installation.
 
 The `metadata` ntuple contains one row for an ordinary run or one row per
 represented chunk in a gathered ROOT file:

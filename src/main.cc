@@ -57,10 +57,17 @@ struct SimulationRun {
 
 SimulationRun parseSimulationRun(const G4String& argument) {
 	SimulationRun run;
-	run.inputPrefix = argument;
-
 	std::string path = argument.c_str();
 	std::size_t pathSeparator = path.find_last_of("/\\");
+	std::size_t extensionSeparator = path.find_last_of('.');
+	if (
+		extensionSeparator != std::string::npos
+		&& (pathSeparator == std::string::npos || extensionSeparator > pathSeparator)
+	) {
+		path.erase(extensionSeparator);
+	}
+	run.inputPrefix = path;
+	pathSeparator = path.find_last_of("/\\");
 	std::string name = pathSeparator == std::string::npos
 	                     ? path
 	                     : path.substr(pathSeparator + 1);
@@ -159,11 +166,11 @@ int main(int argc,char** argv){
 	}
 	if (mode == 0) {
 		G4cout << "### AtRIS: mode 0 writes histograms and interface ntuples to "
-		       << outputFileName << ".root" << G4endl;
+		       << outputFileName << G4endl;
 	}
 	if (mode == 1) {
 		G4cout << "### AtRIS: mode 1 writes histograms, interface, and transport-step ntuples to "
-		       << outputFileName << ".root; output may be very large" << G4endl;
+		       << outputFileName << "; output may be very large" << G4endl;
 	}
 
 	atris::UserActionInitialization* useract = new atris::UserActionInitialization(detector);
