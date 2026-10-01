@@ -29,15 +29,15 @@ from .input_plotting import (
 )
 from .interface_plotting import plot_interface_output
 from .phantoms import read_phantoms
-from .postprocess import get_histogram_axes, warn_if_inputs_do_not_match_output
+from .postprocess import (
+    get_histogram_axes,
+    read_histogram_data,
+    warn_if_inputs_do_not_match_output,
+)
 from .step_plotting import plot_mode_one_output
 
 
 logger = logging.getLogger(__name__)
-
-
-def _read_raw_histogram(filename, skiprows):
-    return np.atleast_2d(np.loadtxt(filename, delimiter=",", skiprows=skiprows))
 
 
 def _read_response(filename):
@@ -489,9 +489,9 @@ def plot_run(simname):
         try:
             direction_axes = get_histogram_axes(simname + "_h2_h2.dir.csv")
             position_axes = get_histogram_axes(simname + "_h2_h2.pos.csv")
-            primary_energy = _read_raw_histogram(simname + "_h1_h1.1.csv", 7)
-            direction = _read_raw_histogram(simname + "_h2_h2.dir.csv", 10)
-            position = _read_raw_histogram(simname + "_h2_h2.pos.csv", 10)
+            primary_energy = read_histogram_data(simname + "_h1_h1.1.csv")
+            direction = read_histogram_data(simname + "_h2_h2.dir.csv")
+            position = read_histogram_data(simname + "_h2_h2.pos.csv")
             detector_ids, ionization = _read_response(simname + ".ioni")
             filename = simname + ".png"
             _save_generic_plot(

@@ -26,6 +26,19 @@ def test_get_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
     np.testing.assert_allclose(axes[1], [0, 0.5, 1])
 
 
+def test_read_histogram_data_accepts_variable_length_annotations(tmp_path):
+    histogram = tmp_path / "histogram.csv"
+    histogram.write_text(
+        "#class tools::histo::h1d\n"
+        "#annotation atris.quantity primary energy\n"
+        "#annotation atris.random_seed_pairs 123456:654321\n"
+        "entries,Sw\n"
+        "2,3.5\n"
+    )
+
+    np.testing.assert_allclose(postprocess.read_histogram_data(histogram), [[2, 3.5]])
+
+
 def test_input_output_warnings_report_mismatched_run_files(tmp_path, monkeypatch):
     (tmp_path / "protons.bins").write_text("1\n20\n100\n")
     (tmp_path / "protons.mac").write_text(

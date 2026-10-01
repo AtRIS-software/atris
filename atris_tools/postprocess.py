@@ -83,6 +83,17 @@ def get_energy_edges(simname):
     return edges
 
 
+def read_histogram_data(filename):
+    """Read numeric rows after a variable-length Geant4 CSV header."""
+    with open(filename) as histogram:
+        for line_number, line in enumerate(histogram, start=1):
+            if not line.startswith("#"):
+                return np.atleast_2d(
+                    np.loadtxt(filename, delimiter=",", skiprows=line_number)
+                )
+    raise ValueError("No histogram column header found in " + str(filename))
+
+
 def _read_macro_configuration(filename):
     energy_edges = []
     event_count = None
@@ -128,9 +139,7 @@ def input_output_warnings(simname):
                 % (simname, macro_path.name, bins_path.name)
             )
         if event_count is not None and not Path("chunks.txt").is_file():
-            primary_energy = np.atleast_2d(
-                np.loadtxt(histogram_path, delimiter=",", skiprows=7)
-            )
+            primary_energy = read_histogram_data(histogram_path)
             recorded_events = int(np.sum(primary_energy[1:-1, 0]))
             if recorded_events != event_count:
                 warnings.append(
@@ -214,10 +223,9 @@ def read_data(simname, nphant):
         names.append("_h2_h2.rates" + str(phantom_nr))
 
     simulation_data = []
-    for index, name in enumerate(names):
+    for name in names:
         filename = simname + name + ".csv"
-        skiprows = 7 if index == 0 else 10
-        simulation_data.append(np.loadtxt(filename, delimiter=",", skiprows=skiprows))
+        simulation_data.append(read_histogram_data(filename))
     return simulation_data
 
 
