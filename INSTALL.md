@@ -9,7 +9,7 @@ This document covers the work done once for a machine or compiler environment:
 5. install the Python tools.
 
 The steps repeated for each shell session and simulation are in the
-[running instructions](README.md).
+[running instructions](docs/running-atris/index.md).
 
 ## Requirements
 
@@ -187,7 +187,7 @@ Because of the `--editable` flag, source changes take effect without
 reinstalling the package.
 
 At this point installation is complete. Continue with the
-[running instructions](README.md) to prepare and execute a simulation.
+[running instructions](docs/running-atris/index.md) to prepare and execute a simulation.
 
 ## FAQ
 

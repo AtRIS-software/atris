@@ -1,174 +1,268 @@
 # Running AtRIS on an HPC system
 
-This guide explains the execution model, sizing decisions, and recovery
-semantics for running AtRIS on a cluster. It is intentionally advisory rather
-than a site-ready submission recipe. The worker model is scheduler-neutral;
-Slurm names are used where a concrete scheduler concept helps.
+**Previous step:** [Prepare the chunk plan](running-atris/plan-chunks.md).
 
-For an executable worked example, use
-[`examples/earth-nrlmsis-full-slurm`](../examples/earth-nrlmsis-full-slurm/README.md).
-That example supplies the exact preparation commands, five-node `sbatch`
-script, monitoring commands, retry procedure, and final gather job. Adapt its
-account, partition, QoS, memory, and resource requests to the target site.
+**Next step:** [Process the completed results](running-atris/process-results.md).
 
-## Recommended execution model
+Start with a [prepared simulation](running-atris/prepare-simulation.md) and a
+[chunk plan](running-atris/plan-chunks.md). Preserve the physics list and output mode
+chosen during preparation when configuring the scheduler script. The supplied
+script defaults to `FTFP_BERT_HP` and response output.
 
-Use one scheduler allocation as a pool of persistent chunk workers. Each
-worker receives a fixed set of cores and runs several chunks sequentially.
-Completed chunks remain available if the allocation ends, and a later
-allocation skips them.
+This guide runs any prepared AtRIS simulation through a scheduler. The Slurm
+templates in `examples/slurm/` specify resources and worker launches; they do
+not select a planet, atmosphere, particle spectrum, or phantom configuration.
 
-```mermaid
-flowchart TB
-    A["One scheduler allocation"]
-    A --> N1["Node 1<br/>several workers × cores per worker"]
-    A --> NN["Node N<br/>several workers × cores per worker"]
-    N1 --> S["Shared run directory<br/>chunks.txt, outputs, COMPLETE markers"]
-    NN --> S
-    S --> G["One final gather task"]
+## Run a few chunks first
+
+Start in the prepared run directory with the AtRIS and Geant4 environment
+loaded. Request a small interactive allocation to run selected chunks on a
+compute node. For example:
+
+```bash
+salloc --nodes=1 --ntasks=1 --cpus-per-task=4 --time=00:30:00
 ```
 
-This is one allocation containing several long-lived workers, not one
-scheduler job per chunk. A worker runs one multithreaded AtRIS process at a
-time, then continues with another assigned chunk. This avoids per-chunk queue
-latency while retaining restartable chunk boundaries.
+Add the account, partition, memory, and other resource settings required by
+your cluster. Four cores and thirty minutes are example requests; allow enough
+time for a whole chunk to initialize, run, and write its outputs. Wait until
+Slurm grants the allocation before continuing.
 
-Keep the workflow in three distinct phases:
+Inside the allocated shell, launch one chunk through `srun`:
 
-1. Prepare inputs and create `chunks.txt` once.
-2. Run one worker-pool allocation at a time until every entry is complete.
-3. Gather and post-process with a single writer after completion is verified.
+```bash
+export G4FORCENUMBEROFTHREADS="$SLURM_CPUS_PER_TASK"
+srun --ntasks=1 --cpus-per-task="$SLURM_CPUS_PER_TASK" --cpu-bind=cores \
+    atris-run . --entry 1 --physics-list FTFP_BERT_HP --mode response
+```
 
-All workers and the gather task must see the same run directory. Do not overlap
-two worker pools or run a final gather against the same directory while chunks
-are still being written.
+`--entry` is a one-based line of `chunks.txt`. Repeat with selected entries
+covering the other particle species. Each command exits after that chunk;
+it does not start the rest of the plan. Use your prepared physics list and
+output mode throughout. Run transport through `srun`, not directly on the
+login node.
 
-## Size the allocation
+Gather and process the completed subset within the allocation:
 
-For equal compute nodes, define:
+```bash
+srun --ntasks=1 --cpus-per-task=1 atris-gather .
+srun --ntasks=1 --cpus-per-task=1 atris-postprocess .
+srun --ntasks=1 --cpus-per-task=1 atris-plot .
+```
 
-| Symbol | Meaning |
+Run these commands in order after the selected chunks finish. Once processing
+has finished, leave the allocated shell with `exit` to release the resources.
+Inspect the resulting PNGs and logs and
+[decide whether to continue](running-atris/process-results.md#decide-whether-to-continue).
+The unfinished plan is expected at this stage; do not require a whole-plan
+completion check before this inspection.
+
+## Submit a prepared simulation with Slurm
+
+After deciding to continue, use the worker-pool script below to run the remaining
+plan. It retains and skips the chunks already completed. If the inputs or chunk
+size need changing instead, prepare a fresh run directory before submitting.
+
+Work on the login node in the prepared run directory, with the AtRIS and
+Geant4 environment loaded. Copy the submission template:
+
+```bash
+cp "$ATRIS_ROOT/examples/slurm/run-atris.slurm.sh" .
+```
+
+The complete simulation script is shown below. Edit your copy before submitting it.
+
+```{literalinclude} ../examples/slurm/run-atris.slurm.sh
+:language: bash
+:caption: examples/slurm/run-atris.slurm.sh
+```
+
+### Resource request
+
+The `#SBATCH` lines tell Slurm what to allocate. In this example:
+
+| Setting | What it requests |
 | --- | --- |
-| `N` | allocated nodes |
-| `P` | allocatable physical CPU cores per node |
-| `Wn` | AtRIS workers per node |
-| `C` | CPU cores and Geant4 threads per worker |
-| `W` | total workers |
+| `--nodes=5` | Five compute nodes |
+| `--ntasks=20` | Twenty AtRIS workers in total |
+| `--ntasks-per-node=4` | Four workers on each node |
+| `--cpus-per-task=20` | Twenty CPU cores for each worker |
+| `--hint=nomultithread` | Placement on physical cores rather than additional hardware threads |
+| `--time=08:00:00` | An eight-hour allocation |
+| `--export=ALL` | Pass the submission environment to the job |
+| `--output` and `--error` | Log files under `chunks/`, with `%j` replaced by the job ID |
 
-The basic CPU constraints are:
+This uses 80 cores per node: four workers, each running a multithreaded AtRIS
+process on 20 cores. Adapt these numbers to your cluster and measured run
+performance. Add the account, partition, QoS, and memory request required by
+your site. The prepared chunk plan supplies the `chunks/` directory used for logs.
 
-```text
-W = N × Wn
-Wn × C <= P
+Each worker needs enough memory for its own AtRIS process. Measure both memory
+use and completed chunks per node-hour when choosing workers and cores per
+worker. Increasing the thread count of one process does not necessarily
+increase the total work completed on a node.
+
+### Environment and worker launch
+
+`set -eu` and `set -o pipefail` make command failures and missing variables stop
+the script. The `ATRIS_ROOT` check catches a missing AtRIS setup before launch.
+`cd` enters the directory from which you submitted the job, where the prepared
+inputs and `chunks.txt` are located.
+
+`G4FORCENUMBEROFTHREADS` gives each AtRIS process the number of threads requested
+by `--cpus-per-task`. The `srun` command launches the 20 workers and binds them
+to their allocated cores. Inside each task, `bash -c` reads that task's Slurm
+variables and passes them to `atris-run`:
+
+| Runner argument | Value supplied by Slurm | Purpose |
+| --- | --- | --- |
+| `--worker-index` | `SLURM_PROCID` | Identifies this worker, starting at zero |
+| `--worker-count` | `SLURM_NTASKS` | Gives the total number of workers |
+| `--deadline` | `SLURM_JOB_END_TIME` | Gives the allocation's end time as Unix seconds |
+| `--stop-before-end` | `ATRIS_STOP_BEFORE_END` | Stops starting new chunks before that deadline |
+
+Each worker runs its assigned chunks sequentially. With 20 workers, worker 0
+receives lines 1, 21, 41, and so on from `chunks.txt`; worker 1 receives lines
+2, 22, 42, and so on. Their assignments do not overlap. Each chunk starts a new
+AtRIS process; `srun` remains active until the workers exit.
+
+The script uses the runner defaults, `FTFP_BERT_HP` and response output. If your
+prepared simulation requires different settings, add `--physics-list` and
+`--mode` to the `atris-run` command inside `bash -c`.
+
+### Wall time and completion
+
+`ATRIS_STOP_BEFORE_END` defaults to 1,800 seconds, or 30 minutes. During that
+final interval, workers finish their active chunks but start no new ones.
+Set this interval longer than a measured slow chunk plus time to write its
+outputs. Initialization and final writing include serial work: short chunks
+repeat that overhead frequently, while long chunks leave more work to repeat
+after an interruption. See [chunk planning](running-atris/plan-chunks.md#choose-a-practical-chunk-size).
+
+`--kill-on-bad-exit=0` lets the other workers finish if one fails. The job still
+reports the failure. If the workers exit successfully, the final
+`atris-run --check-complete` checks whether the whole plan is finished. It
+returns failure if chunks remain, including after a planned safety stop. This
+allows a dependent final-processing job to distinguish completion from a run
+that needs another allocation.
+
+For this Slurm layout, choose a chunk count per species divisible by the node
+count. This convention applies to this layout, not to AtRIS runs in general.
+Keep the existing plan when resubmitting: completed chunks will be skipped.
+
+### Submit and monitor
+
+Submit from the run directory:
+
+```bash
+simulation_submission=$(sbatch --parsable run-atris.slurm.sh)
+simulation_job=${simulation_submission%%;*}
+echo "$simulation_job"
 ```
 
-In Slurm, these map to `--nodes=N`, `--ntasks=W`,
-`--ntasks-per-node=Wn`, and `--cpus-per-task=C`. The allocation wall time is
-the lifetime of the pool, not the expected duration of one chunk.
+The second command removes an optional cluster suffix from the job ID.
+Submission starts the scheduling process. Monitor the job and keep inspecting
+completed results as it runs. To follow its state and logs:
 
-CPU arithmetic is only the first constraint. Ensure that
-`Wn × measured peak worker memory` fits within usable node memory with margin.
-Also account for per-node temporary storage, shared-filesystem bandwidth, and
-licence or partition limits. If Slurm exposes hardware threads as CPUs,
-benchmark with physical-core placement such as `--hint=nomultithread`.
-
-Choose `C` by measuring completed chunks per node-hour, not merely the runtime
-of one chunk. Several medium-sized AtRIS workers can provide better node
-throughput than one process using every core, even when the all-core process
-finishes an individual chunk sooner.
-
-The [full Earth Slurm example](../examples/earth-nrlmsis-full-slurm/README.md)
-instantiates this model as five 80-core nodes, four workers per node, and 20
-cores per worker. Those values demonstrate the mapping; they are not universal
-recommendations.
-
-## What the wrapper does
-
-[`examples/run-atris.slurm.sh`](../examples/run-atris.slurm.sh) performs the
-worker-pool mechanics listed below. It is a reusable implementation component,
-not the resource policy for a particular cluster. The
-[full Earth Slurm simulation script](../examples/earth-nrlmsis-full-slurm/run-atris.slurm.sh)
-provides a concrete resource policy and delegates execution to this wrapper.
-
-The wrapper:
-
-1. Changes to the directory from which `sbatch` was invoked.
-2. Sets `G4FORCENUMBEROFTHREADS` to `SLURM_CPUS_PER_TASK`.
-3. Launches `SLURM_NTASKS` workers through one core-bound `srun` step.
-4. Translates each task's Slurm rank, task count, and deadline into the generic
-   `atris-run` worker arguments.
-5. Lets each worker run its assigned chunks sequentially and stop before the
-   supplied deadline.
-6. Checks the complete plan after all workers exit.
-
-`atris-run` does not import a Slurm API or read scheduler environment
-variables. The Slurm wrapper supplies its `--worker-index`, `--worker-count`,
-`--deadline`, and `--stop-before-end` values explicitly. Other schedulers can
-supply the same interface.
-
-Worker rank `r` out of `W` workers receives these one-based `chunks.txt`
-entries:
-
-```text
-r + 1, r + 1 + W, r + 1 + 2W, ...
+```bash
+squeue -j "$simulation_job"
+tail -f "chunks/slurm-${simulation_job}.out"
 ```
 
-With 20 workers, worker 0 receives entries 1, 21, 41, and so on; worker 1
-receives 2, 22, 42, and so on. This static round-robin assignment is
-collision-free and distributes the contiguous proton and alpha sections across
-the workers without a shared queue lock.
+Ctrl+C stops `tail`, not the job. To compare completed and planned chunks:
 
-The `srun` step uses `--kill-on-bad-exit=0`. If one worker fails, the other
-workers are allowed to finish instead of immediately losing all their active
-chunks. The overall job still reports the failure and can be resubmitted.
+```bash
+find chunks -maxdepth 1 -name '*.COMPLETE' -type f | wc -l
+wc -l chunks.txt
+```
 
-Slurm documents these task, binding, and deadline variables in the
-[`srun` manual](https://slurm.schedmd.com/srun.html) and
-[CPU management guide](https://slurm.schedmd.com/cpu_management.html).
+After the allocation exits, verify completion:
 
-## Choose a practical chunk size
+```bash
+atris-run --check-complete
+```
 
-There is no checkpoint inside an AtRIS chunk. If a worker is killed during a
-chunk, that chunk restarts from the beginning. Previously completed chunks stay
-safe.
+If entries remain, inspect the logs and resubmit the same script after the
+previous allocation has exited. Completed chunks are skipped. Do not overlap
+two allocations for the same plan. The script returns failure while entries
+remain, including when its safety window stopped further work.
 
-Use a short pilot to measure typical and slow-tail chunk times. Then choose:
+You can [process and inspect completed chunks](running-atris/process-results.md)
+while the allocation continues; the completion check is only needed to confirm
+that the entire plan has finished. The section below shows how to
+[process results in a Slurm job](#process-results-in-a-slurm-job).
 
-- a chunk runtime much shorter than the allocation wall time, so every worker
-  normally completes many chunks;
-- `ATRIS_STOP_BEFORE_END` longer than a slow chunk plus output-flush margin;
-- enough events per chunk to amortize AtRIS startup and fixed histogram I/O.
+## Process results in a Slurm job
 
-For example, chunks lasting tens of minutes fit naturally inside a multi-hour
-allocation. A 15-minute safety window is only the wrapper default; increase it
-when measured chunks can take longer.
+The [gathering, normalization, and plotting commands](running-atris/process-results.md)
+can run in a separate Slurm allocation. The supplied template checks that the entire plan has
+finished before processing, so it is intended for final results. For an interim
+inspection, run those commands on completed chunks using an interactive
+allocation or a separate job without that completion check.
 
-Benchmark several `--cpus-per-task` values, such as 1, 2, 4, 8, 16, and 20.
-Optimize completed chunks per node-hour rather than the duration of one chunk.
-Four 20-core workers may produce more results per hour than one 80-core worker
-even if the 80-core process completes an individual chunk sooner.
+To use the final-results template, copy it into the run directory:
 
-The event count of an existing chunk cannot be changed safely because every
-plan entry shares its species' chunk macro. Changing chunk size or simulation
-configuration therefore requires a new clean run directory.
+```bash
+cp "$ATRIS_ROOT/examples/slurm/gather-atris.slurm.sh" .
+```
+
+The complete processing script is:
+
+```{literalinclude} ../examples/slurm/gather-atris.slurm.sh
+:language: bash
+:caption: examples/slurm/gather-atris.slurm.sh
+```
+
+This requests one task on one node, with one CPU, 8 GB of memory, and one hour.
+Gathering writes shared aggregate files, so run only one gathering process at a
+time for a run directory. Adjust the memory and wall time to the output size,
+and add your cluster's account and partition settings.
+
+After entering the submission directory, the script runs four commands in order:
+
+1. `atris-run --check-complete` requires the entire plan to be complete for this
+   final-processing job. Remove this line in a copy used to inspect completed
+   chunks while the simulation continues.
+2. `atris-gather` combines the completed chunks' raw histograms.
+3. `atris-postprocess` normalizes the gathered results into response tables.
+4. `MPLBACKEND=Agg atris-plot` creates plots without requiring a graphical display.
+
+Because the script uses `set -e`, a failed command stops the job before the
+next step. Its `#SBATCH` log paths use `%j` to include the processing job ID.
+
+Submit from the run directory:
+
+```bash
+gather_submission=$(sbatch --parsable gather-atris.slurm.sh)
+gather_job=${gather_submission%%;*}
+echo "$gather_job"
+```
+
+The template checks completeness, then runs `atris-gather`, `atris-postprocess`,
+and `atris-plot` as one task. Logs are written to `chunks/gather-<job-id>.out`
+and `.err`. Wait for the job to finish successfully before inspecting results
+or extending the simulation.
+
+When the active simulation allocation is expected to finish the entire plan,
+you can queue processing after its success instead:
+
+```bash
+gather_submission=$(sbatch --parsable \
+  --dependency="afterok:${simulation_job}" gather-atris.slurm.sh)
+```
+
+Here `simulation_job` is the job ID saved at submission. The simulation script
+returns failure if chunks remain, so the dependent job cannot process partial
+results. If the simulation needs resubmission, submit processing after the
+final successful allocation instead.
 
 ## Extend an unconverged run
 
-If completed results need more Monte Carlo statistics, stop the worker pool and
-append another batch with `atris-scatter --extend <chunks-per-species>`. This
-keeps every existing seed and `COMPLETE` marker, reuses the established
-per-chunk event counts, and adds unique seed pairs to the end of `chunks.txt`.
-The next worker allocation skips the old entries and processes the new batch.
-
-Choose an extension count that distributes evenly across the worker count when
-practical. For example, adding one chunk per species for every worker gives
-each static worker one new proton and one new alpha entry. After the batch is
-complete, gather again and reassess convergence before adding more work.
-
-The seed pairs used by AtRIS are already recorded in `chunks.txt`; a generator
-`--random-seed` is optional. Supplying one makes creation of the extension
-reproducible, while omission obtains a fresh generator state. In both cases,
-new pairs are checked for collisions with the complete existing plan.
+After the worker allocation has exited, [extend the chunk plan](running-atris/plan-chunks.md#extend-a-run)
+and submit the same simulation script again. The workers skip completed entries
+and run the added chunks. Choose the extension count with this page's node-count
+convention in mind. If final processing was submitted with a dependency, attach
+it to the new simulation job ID.
 
 ## Failure and recovery reference
 
@@ -217,3 +311,10 @@ chosen with storage capacity in mind.
 If metadata or write load becomes significant, use larger chunks, run fewer
 workers per node, or stage through unique node-local directories. Keep final
 chunk outputs and `COMPLETE` markers on storage visible to gather.
+
+After execution, use [the shared results-processing guide](running-atris/process-results.md).
+
+
+**Previous step:** [Prepare the chunk plan](running-atris/plan-chunks.md).
+
+**Next step:** [Process the completed results](running-atris/process-results.md).

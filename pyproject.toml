@@ -12,8 +12,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-plot = ["matplotlib"]
-test = ["pytest", "matplotlib"]
+plot = ["matplotlib>=3.7,<4"]
+test = ["pytest", "matplotlib>=3.7,<4"]
+notebook = ["jupyterlab>=4,<5", "ipykernel>=6.29,<7", "matplotlib>=3.7,<4"]
+docs = [
+    "Sphinx==7.4.7",
+    "myst-parser==3.0.1",
+    "myst-nb==1.2.0",
+    "ipykernel>=6.29,<7",
+    "matplotlib>=3.7,<4",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinxcontrib-mermaid==0.9.2",
+]
 
 [project.scripts]
 atris-nrlmsis-to-psf = "atris_tools.nrlmsis2psf:main"

@@ -1,0 +1,50 @@
+# atris-postprocess
+
+Normalize canonical raw histograms into response tables.
+
+```bash
+atris-postprocess .
+```
+
+The directory defaults to the current directory. Both `protons` and `alphas`
+are attempted, and a species without its primary histogram is skipped. There
+is no positional species filter.
+
+**Inputs:** canonical histogram CSV files, `simulation.psf`, and phantom
+mass/area metadata from `phantoms.txt` when phantom products are present.
+**Outputs:** `.ioni`, `.doseN`, `.equiN`, and `.ratesN`, replacing existing
+processed files. Available input/output consistency checks produce warnings.
+
+The output is normalized per simulated primary energy bin; it does not include
+source-flux folding or conversion into physical rates. See
+[processed response tables](../outputs.md#processed-response-tables) for units,
+formulas, geometry assumptions, and empty-bin handling.
+
+## Arguments and options
+
+The following is the command's `--help` output for this revision.
+
+```text
+usage: atris-postprocess [-h] [-q | -v] [--version] [RUN_DIRECTORY]
+
+Scale canonical AtRIS histogram CSV files into altitude- and energy-dependent
+ionization and phantom response tables.
+
+positional arguments:
+  RUN_DIRECTORY  Run directory containing canonical CSV output (default: current
+                 directory).
+
+optional arguments:
+  -h, --help     show this help message and exit
+  -q, --quiet    Suppress normal progress; show warnings and errors only.
+  -v, --verbose  Include detailed per-file, per-request, or per-chunk progress.
+  --version      Show the AtRIS and atris-tools versions and exit.
+
+The command processes the protons and alphas prefixes when their primary histogram
+files are present. It reads simulation.psf and, for phantom responses, phantoms.txt;
+it writes .ioni, .doseN, .equiN, and .ratesN files, replacing existing processed
+files. Missing species are skipped. This command does not gather chunk histograms, run
+simulations, or make plots.
+```
+
+Implementation: `atris_tools/postprocess.py`.
