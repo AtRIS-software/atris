@@ -1,0 +1,209 @@
+# Input files
+
+The primary model input to the preparation workflow is `simulation.psf`.
+Phantom metadata and response tables are optional. The executable reads the
+species-specific GDML, macro, and bins files generated from that model and
+your source settings. NRLMSIS tables are one optional source for creating a PSF.
+
+## Run-directory filenames
+
+| File | Consumer | Purpose |
+| --- | --- | --- |
+| `simulation.psf` | Macro generation, GDML conversion, post-processing | Layer geometry and material properties. |
+| `simulation.gdml` | Macro generation | Geometry copied to the species-specific GDML files. |
+| `<prefix>.gdml` | AtRIS | Geant4 geometry and sensitive-detector IDs. |
+| `<prefix>.mac` | AtRIS | Geant4 initialization, source settings, seeds, and event count. |
+| `<prefix>.bins` | AtRIS | Primary kinetic-energy bin edges, in MeV. |
+| `phantoms.txt` | Staging, chunk runner, post-processing, plotting | Selection of named phantom tables, masses, and areas. |
+| `radiation_phantomN.txt` | AtRIS | Energy-response table for phantom `N`. |
+| `counting_phantomN.txt` | AtRIS | Counting-response table for phantom `N`. |
+| `<prefix>.chunk.mac`, `chunks.txt` | Chunk workflow | Shared chunk macro and seed plan; see [Scatter/gather files](chunks.md). |
+
+The Python workflow uses the species names `protons` and `alphas`. The
+executable can use other prefixes, but post-processing and plotting discover
+these two canonical names.
+
+## Planet Specification Format (PSF)
+
+A PSF is a whitespace-separated numeric table preceded by a material-definition
+line. Blank and `#` comment lines may precede the table. Legacy files may put
+the material definition in the first comment line instead.
+
+For example, the NRLMSIS converter writes:
+
+```text
+O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H
+```
+
+The first token describes the legacy solid composition as element symbols
+followed by relative mass weights. The GDML converter normalizes those solid
+weights. Remaining tokens name the per-layer material-fraction columns in
+order. Nonzero fractions define the composition of a gas, liquid, or solid
+layer and are written into GDML as supplied, so provide fractions summing to
+one. The NRLMSIS converter produces normalized gas fractions.
+
+| Column (one-based) | Quantity | Unit or convention |
+| --- | --- | --- |
+| 1 | Inner radius | km from the planet's centre |
+| 2 | Outer radius | km from the planet's centre |
+| 3, 4 | Starting and ending azimuth, phi | rad; endpoints, not angular widths |
+| 5, 6 | Starting and ending polar angle, theta | rad; endpoints, not angular widths |
+| 7 | Sensitive-detector ID | Integer |
+| 8 | Temperature | K |
+| 9 | Density | g/cm³ |
+| 10 | Pressure | Pa |
+| 11 | Material state | `0` gas, `1` solid, or `2` liquid |
+| 12 onward | Material mass fractions | One column per remaining material-definition token |
+
+The standard workflow assumes layers ordered from the centre outward with
+contiguous IDs from zero. ID `0` and the highest ID terminate tracks. The
+standard generated Earth model contains an interior, crust, atmosphere, and
+outer terminating layer. Macro generation places the source 0.001 km beyond
+the penultimate row's outer radius.
+
+The GDML converter requires the numeric column count to match the material
+header. It uses the last row's outer radius plus 100 km as the world half-size.
+Custom PSFs must also respect the post-processor's
+[geometry and altitude conventions](outputs.md#geometry-and-altitude).
+
+### Layer composition
+
+The PSF stores elemental mass fractions, not molecular abundances. For example,
+`O533Si467 N O Ar` requires three fraction columns in the order nitrogen,
+oxygen, argon. A gas row may end in `0 0.75 0.24 0.01`: the first value is the
+material state, followed by the three mass fractions. A solid row with nonzero
+fractions uses its per-layer composition. For backward compatibility, a solid
+row with all-zero fractions uses the compact solid composition from the header.
+Gas and liquid rows provide their composition in the per-layer columns.
+
+Convert number or mole fractions $x_i$ to mass fractions using
+
+$$
+w_i=\frac{x_i M_i}{\sum_j x_j M_j},
+$$
+
+where $M_i$ is the mass appropriate to each atom or molecule. For molecular
+species, combine their elemental mass contributions into the PSF's element
+columns. The converter does not normalize per-layer fractions for you.
+
+A compact {download}`two-layer format sample <../running-atris/examples/two-layer-atmosphere.psf>`
+is available for inspecting the text layout. It is a format example, not a
+physical atmosphere model. To construct a model step by step, use the
+[PSF notebook](../tutorials/exoplanet-psf.ipynb).
+
+## NRLMSIS source tables
+
+`atris-nrlmsis-to-psf` accepts downloaded text tables with a header containing
+`Year Mon Day` and these named fields:
+
+```text
+Year Mon Day DOY hour Heit Lat Lon Oden N2den O2den air T Heden Arden Hden Nden
+```
+
+Columns are selected by name, allowing extra columns. Values are interpreted
+as altitude in km, species number densities in cm⁻³, mass density `air` in
+g/cm³, and temperature in K. Header unit suffixes are stripped for matching;
+the converter does not perform arbitrary input-unit conversion.
+
+Input tables must share one date, time, latitude, and longitude and combine
+into a complete uniform altitude grid with at least two rows. Compatible
+duplicated altitudes are retained once, with relative tolerance `5e-4`.
+Rejected malformed or non-positive physical rows need a valid replacement at
+the same altitude. Conflicting duplicates and missing grid points are errors.
+The resulting Earth model uses a 6371 km radius and a 0.02 km crust.
+
+## GDML
+
+See [GDML in the software ecosystem](../background/software-ecosystem.md#gdml-exchanging-geometry)
+for an introduction to the format and its documentation.
+
+AtRIS uses the GDML world and assigns sensitive detectors using auxiliary tags:
+
+```xml
+<auxiliary auxtype="SensDet" auxvalue="2"/>
+```
+
+The numeric value becomes the detector ID. In this implementation, the initial
+detector count comes from counting whitespace tokens equal to `<auxiliary` in
+the GDML text. Keep the generated layout and one such tag per sensitive layer;
+unrelated auxiliary tags or reformatted tags can change this count. The
+histogram and terminating-layer logic assume contiguous IDs.
+
+## Energy bins and macros
+
+A `.bins` file contains whitespace-separated energy edges, without a header,
+in total kinetic energy MeV. Provide increasing edges. With `M` edges there
+are `M-1` interior energy bins, plus underflow and overflow bins in raw output.
+
+The generated grid is `10**linspace(min_power, max_power, energy_points)` for
+protons, and four times that grid for alphas. Alpha energies in the actual
+`.bins`, `.mac`, and output histograms are total particle energies, not energies
+per nucleon.
+
+Generated macros initialize the run, select a proton or alpha GPS source, use
+`User` energy histograms, emit one primary per event from a spherical surface,
+use a cosine angular distribution over 0–90 degrees, set a 100 m production
+cut, set two random seeds, and issue one `/run/beamOn` command. Histogram point
+weights are zero for the first edge and one for the remaining edges.
+
+Despite its option name, `--particles-per-bin` is multiplied by the number of
+**energy points**, not the number of intervals:
+
+$$
+N_p=n m,\qquad N_\alpha=\lfloor nf_\alpha\rfloor m.
+$$
+
+Here $n$ is `particles_per_bin`, $m$ is `energy_points`, and
+$f_\alpha$ is `alpha_factor`; the floor represents integer truncation for
+nonnegative counts.
+
+The default totals are 363000 protons and 239580 alphas. Actual sampled counts
+in each bin are recorded in the primary histogram and used for normalization.
+
+The current generator does not read `.spec` files or fold a physical primary
+spectrum into the results. Such files may be retained as run inputs by
+`atris-clone`, but do not control this generated simulation workflow.
+
+## Phantom selection
+
+`phantoms.txt` has four whitespace-separated fields per non-comment line:
+
+```text
+# ID  stem                          mass_g      area_cm2
+0     ramona_zero_0.060MeV_detA      0.5082      6.928
+1     icru_zero_0.000MeV_detAB       14094.7550  1413.72
+```
+
+IDs must be unique and contiguous from zero; rows are sorted by ID. Mass is
+in grams and area in cm². Use the area associated with the response table's
+calibration. The parser accepts numeric mass and area values without checking
+that they are positive; post-processing requires physically valid values.
+
+For each stem, staging locates `<stem>_response.txt` and `<stem>_counting.txt`
+in the run directory first, then the archive. It creates numbered relative
+symbolic links. Absolute stems are supported. `--copy` first copies the named
+tables into the run directory. A missing `phantoms.txt` means an empty selection
+in the Python tools; direct AtRIS runs still load the requested phantom count.
+
+## Phantom response matrices
+
+Each table starts with an uncommented, whitespace-separated list of integer
+PDG particle codes. Every subsequent particle row contains 650 coefficients,
+in the same particle order as the header. All loaded radiation and counting
+tables must have identical PDG headers. The executable expects
+`650 × number_of_PDG_codes` numeric values per table; a wrong count is reported
+but does not reliably stop execution.
+
+The fixed energy edges are `10**linspace(-6, 7, 651)` MeV: 1 eV to 10 TeV,
+with 0.02 spacing in log10 energy. The lookup uses
+`max(0, int(log10(kinetic_energy/eV) / 0.02))`, without interpolation or an
+upper-bound clamp. Keep energies inside the represented range.
+
+Radiation coefficients multiply the crossing particle's kinetic energy in eV;
+counting coefficients are accumulated directly. See the
+[normalization formulas](outputs.md#processed-response-tables). A dummy counting
+table created with `--accept-missing-counting` contains ones and represents
+unit counting response, not a measured efficiency.
+
+Implementation: `atris_tools/psf.py`, `nrlmsis2psf.py`, `psf2gdml.py`,
+`atrismacrogen.py`, `phantoms.py`, and `src/main.cc`.

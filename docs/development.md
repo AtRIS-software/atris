@@ -21,8 +21,9 @@ stages them under the numbered filenames required by the AtRIS executable; the
 run's `phantoms.txt` records the mapping back to the source names.
 
 The same directory still contains old response tables, variance tables, plots,
-and a development notebook. Their provenance and continuing role should be
-established before removing them.
+and other historical data. Their provenance and continuing role should be
+established before removing them. The development notebook and historical
+library notes are now in the [phantom library reference](reference/phantom-library.md).
 
 ## Companion Python package
 
@@ -64,8 +65,8 @@ small command-line entry points without changing the supported workflow.
 Do not assume that AtRIS becomes faster whenever more worker threads are added.
 The imported README (commit `112e4dc`) says that scaling eventually stops
 because of CPU cache topology. It does not give the limiting core count. The
-accompanying `simstarter.ipynb` uses 16 worker threads, so use 16 as the
-provisional historical setting until current hardware has been benchmarked.
+accompanying `simstarter.ipynb` uses 16 worker threads. That is a historical
+example, not a benchmark for current hardware.
 
 The thread count applies to each AtRIS process. Therefore, an HPC chunk using
 16 worker threads requires 16 cores, and concurrent chunks require separate
@@ -85,3 +86,10 @@ The current tests cover the Python tools and short runs of the compiled AtRIS
 executable. The main remaining gaps are a complete preparation-to-post-processing
 system test, behavioral tests for the Slurm wrappers, and reviewed numerical
 regression baselines for scientific output.
+
+See [Minimal test fixture](reference/minimal-test-fixture.md) for the fixture
+layout and the limits of its validation.
+
+The [workflow tutorial](tutorials/files-through-workflow.md) exercises preparation,
+execution, and processing using a few chunks of the Earth example. It checks
+the workflow, not scientific convergence.

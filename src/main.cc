@@ -95,36 +95,13 @@ int main(int argc,char** argv){
 	if (argc != 5){
 		G4cout << "Usage: " << argv[0]
 		       << " <physics-list> <simulation-name> <mode> <phantom-count>" << G4endl;
-		// G4cout << "Example: " << argv[0] << " FTFP_BERT_HP protons 0 1" << G4endl;
 		return 0;
 	}
 	const auto totalStart = std::chrono::steady_clock::now();
 	mode = std::stoi(argv[3]);
 	nrphantoms = std::stoi(argv[4]);
-	/*
-	G4cout << "### AtRIS: make sure that the following files exist:" << G4endl;
-	G4cout << "\t\t "<< prefix <<".gdml\t\t:: geometry specification" << G4endl;
-	G4cout << "\t\t "<< prefix <<".mac\t\t:: macro file" << G4endl;
-	G4cout << "\t\t "<< prefix <<".bins\t\t:: input spectrum energy bins" << G4endl;
-	G4cout << "\t\t "<< "icru_response.txt\t\t:: first default phantom (or alternative)" << G4endl;
-	G4cout << "\t\t "<< "cell_response.txt\t\t:: second default phantom (or alternative)" << G4endl;
-	G4cout << "### AtRIS: the following files will be overwritten!" << G4endl;
-	G4cout << "\t\t "<< prefix <<".ioni\t\t::        mode -1 custom ionization density output" << G4endl;
-	G4cout << "\t\t "<< prefix <<".dose\t\t::        mode -1 custom absorbed dose rate output using first phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<".dose2\t\t::       mode -1 custom absorbed dose rate output using second phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<".equi\t\t::        mode -1 custom equivalent dose rate output using first phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<".equi2\t\t::       mode -1 custom equivalent dose rate output using second phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<".rates\t\t::       mode -1 custom count rate output using first phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<".rates2\t\t::      mode -1 custom count rate output using second phantom" << G4endl;
-	G4cout << "\t\t "<< prefix <<"0.binary\t\t::     mode 0 binary output (all interfaces)" << G4endl;
-	G4cout << "\t\t "<< prefix <<"_h1_h1.1.csv\t::   source energy distribution" << G4endl;
-	G4cout << "\t\t "<< prefix <<"_h2_h2.dir.csv\t:: source direction distribution" << G4endl;
-	G4cout << "\t\t "<< prefix <<"_h2_h2.pos.csv\t:: source position distribution" << G4endl;
-	G4cout << "\t\t "<< prefix <<"_h2_h2.ion.csv\t:: resulting ionization histrogram" << G4endl;
-	G4cout << "\t\t "<< prefix <<".steps.binary\t:: mode 1 binary step output" << G4endl;
-	G4cout << "\t\t "<< prefix <<".log\t\t::         detailed log file" << G4endl;
-	G4cout << "\t\t "<< prefix <<".error\t\t::       error stream file" << G4endl;
-	*/
+	// The simulation name selects the geometry, energy bins, and macro inputs;
+	// the phantom count selects the numbered radiation and counting responses.
 	if (!Phantoms(nrphantoms)) return 1;
 	SimulationRun simulation = parseSimulationRun(argv[2]);
 	outputFileName    = argv[2];
@@ -221,12 +198,6 @@ int main(int argc,char** argv){
 		}
 	}
 
-	// DEACT atris::PrimaryGeneratorAction *pga = new atris::PrimaryGeneratorAction;
-	// DEACT runManager->SetUserAction(pga);
-	// DEACT atris::RunAction *beg = new atris::RunAction;
-	// DEACT runManager->SetUserAction(beg);
-
-	// ACT
 	atris::UserActionInitialization* useract = new atris::UserActionInitialization(detector);
 	runManager->SetUserInitialization(useract);
 

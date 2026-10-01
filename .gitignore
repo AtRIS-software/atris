@@ -6,3 +6,11 @@ geant4_install_ok
 __pycache__/
 *.egg-info/
 smoke-run/
+
+# Local documentation environment and generated pages
+.venv-docs/
+docs/_build/
+
+# Notebook scratch files
+.ipynb_checkpoints/
+docs/tutorials/exoplanet-inputs/

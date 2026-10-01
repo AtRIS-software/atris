@@ -45,7 +45,6 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	G4double dircost  = std::cos(dirtheta);
 
 	// Get kinetic energy
-	// DEACT created a local variable here
 	G4double primary_vertex_energy = ParticleGenerator->GetParticleEnergy();
 
 	// Calculate position

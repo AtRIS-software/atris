@@ -29,12 +29,6 @@ G4VPhysicalVolume* DetectorConstruction::Construct()
 {
 	return fParser.GetWorldVolume();
 }
-
-
-/*DetectorConstruction::~DetectorConstruction() {
-  ;
-  }*/
-
 void DetectorConstruction::ConstructSDandField() {
 	// We increase the precision of G4cout
 	G4int prec = G4cout.precision(15);
@@ -45,7 +39,6 @@ void DetectorConstruction::ConstructSDandField() {
 	// We now generate the sensitive detectors and assign them to the proper volumes
 	// We also count the number of generated sensitive detectors
 	for(G4GDMLAuxMapType::const_iterator iter=auxmap->begin(); iter!=auxmap->end(); iter++) {
-	//	G4cout << "Now printing SDID/DIID information in format: SDID: $SDID, mass/kg, surface/cm2, volume/cm3, density g/cm3" << G4endl;
 		for (G4GDMLAuxListType::const_iterator vit=(*iter).second.begin(); vit!=(*iter).second.end();vit++) {
 			if ((*vit).type=="SensDet") {
 				if (atrisverbose) G4cout << "SD " << (*vit).value << " to " << ((*iter).first)->GetName() << ", ";
@@ -63,7 +56,7 @@ void DetectorConstruction::ConstructSDandField() {
 					G4double surface  = mysol->GetSurfaceArea();
 					G4double volume   = mysol->GetCubicVolume();
 					G4double density  = mass / volume;
-					// Some debugging output:
+					// Print detector ID, mass, surface area, volume, and density.
 					G4cout << "SDIDr: " << SDID << ", " << mass/kg << ", " << surface/cm2 << ", " << volume/cm3 << ", " << density/(g/cm3) << G4endl;
 					// populating the dictionaries
 				}
