@@ -110,6 +110,15 @@ def histogram_entries(path):
     return int(data[:, 0].sum())
 
 
+def histogram_annotations(path):
+    return {
+        fields[1]: fields[2]
+        for line in path.read_text().splitlines()
+        if line.startswith("#annotation ")
+        for fields in [line.split(" ", 2)]
+    }
+
+
 def assert_timing_output(output, worker_threads):
     match = re.search(
         r"### AtRIS timing: Geant4 macro wall time: (\d+\.\d{3}) s "
@@ -158,6 +167,14 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
     }
     assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
     assert histogram_entries(tmp_path / "protons_h1_h1.1.csv") == 2
+    for path in tmp_path.glob("protons_*.csv"):
+        annotations = histogram_annotations(path)
+        assert annotations["atris.csv_schema"] == "1"
+        assert annotations["atris.input_prefix"] == "protons"
+        assert annotations["atris.physics_list"] == "FTFP_BERT_HP"
+        assert annotations["atris.output_mode"] == mode
+        assert annotations["atris.random_seed_pairs"] == "runtime-default"
+        assert annotations["atris.quantity"]
     assert (tmp_path / "protons.binary").exists() is creates_interfaces
     assert (tmp_path / "protons.steps.binary").exists() is creates_steps
     assert not (tmp_path / "protons.ascii").exists()
@@ -228,6 +245,10 @@ def test_seeded_prefix_uses_shared_chunk_inputs_and_seeded_output_prefix(
     }
     assert written_suffixes == EXPECTED_HISTOGRAM_SUFFIXES
     assert histogram_entries(tmp_path / "chunks" / f"{prefix}_h1_h1.1.csv") == 1
+    annotations = histogram_annotations(
+        tmp_path / "chunks" / f"{prefix}_h1_h1.1.csv"
+    )
+    assert annotations["atris.random_seed_pairs"] == "123456:654321"
     assert not (tmp_path / "protons_h1_h1.1.csv").exists()
 
 

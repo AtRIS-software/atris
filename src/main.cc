@@ -24,10 +24,14 @@
 #include <sstream>
 
 G4String outputFileName;
+G4String simulationInputPrefix;
+G4String physicsListName;
 G4int    mode = -1;
 G4int    nrofdetectors=0;
 FILE*    tuples1;
 FILE*    stepTrace;
+G4bool   hasExplicitSeeds = false;
+std::array<G4long, 2> explicitSeeds = {0, 0};
 
 // For holding phantom responses
 G4int nrphantoms;
@@ -124,6 +128,12 @@ int main(int argc,char** argv){
 	if (!Phantoms(nrphantoms)) return 1;
 	SimulationRun simulation = parseSimulationRun(argv[2]);
 	outputFileName    = argv[2];
+	simulationInputPrefix = simulation.inputPrefix;
+	hasExplicitSeeds = simulation.hasSeeds;
+	if (simulation.hasSeeds) {
+		explicitSeeds[0] = simulation.seeds[0];
+		explicitSeeds[1] = simulation.seeds[1];
+	}
 	G4String gdmlname = simulation.inputPrefix+".gdml";
 	determine_nrofdetectors(gdmlname);
 	G4cout << "### AtRIS: Generating detbins with the determined number of detectors" << G4endl;
@@ -159,6 +169,7 @@ int main(int argc,char** argv){
 	atris::DetectorConstruction* detector = new atris::DetectorConstruction(parser);
 	runManager->SetUserInitialization(detector);
 	G4String physics = argv[1]; 			 //Setting up the physics list
+	physicsListName = physics;
 	G4PhysListFactory factory;                       // initialize physics list
 	if (factory.IsReferencePhysList(physics) or (factory.IsReferencePhysList(physics.substr(0,physics.size()-4)))) {
 		G4VModularPhysicsList* physlist = factory.GetReferencePhysList(physics);
