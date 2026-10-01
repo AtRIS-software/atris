@@ -114,7 +114,7 @@ def parse_header(filename):
 def line_processor(filename):
     core,template = parse_header(filename)
     columnnames   = {"rmin":0,"rmax":1,"phimin":2,"phimax":3,"thetamin":4,
-                     "thetamax":5,"SDID":6,"temperature":7,"density":8,"pressure":9,"core":10}
+                     "thetamax":5,"SDID":6,"temperature":7,"density":8,"pressure":9,"state":10}
     #print "template:", template
     for mat in template:
         idx  = template[mat]["colidx"] + 11
@@ -128,23 +128,28 @@ def line_processor(filename):
     #We generate the materials and geometry entries
     materials, geometry, struct = [], [], []
     for aLine in data:
-        custom = aLine[columnnames["core"]] == 1.0
+        state_code = aLine[columnnames["state"]]
+        state = {1.0: "solid", 2.0: "liquid"}.get(state_code, "gas")
         sdid = int(aLine[columnnames["SDID"]])
         name = "material" + str(sdid)
         temp = aLine[columnnames["temperature"]]
         dens = aLine[columnnames["density"]]
         pres = aLine[columnnames["pressure"]]
-        if custom:
-            gdmlmater = gdml_material(core, name, temp, dens, pres,"solid")
-            materials.append(gdmlmater)
-        else: 
-            atmomat = template.copy()
-            for mat in template:
-                nname = template[mat]["material"]
-                idx  = columnnames[mat]
-                atmomat[nname]["mass fraction"] = aLine[idx]
-            gdmlmater = gdml_material(atmomat, name, temp, dens, pres,"gas")
-            materials.append(gdmlmater)
+        rowmat = {}
+        for mat in template:
+            nname = template[mat]["material"]
+            idx = columnnames[mat]
+            rowmat[nname] = {
+                "mass fraction": aLine[idx],
+                "material": nname,
+            }
+        material = (
+            core
+            if state_code == 1.0
+            and all(item["mass fraction"] == 0.0 for item in rowmat.values())
+            else rowmat
+        )
+        materials.append(gdml_material(material, name, temp, dens, pres, state))
         #now the geometry  entry
         solname  = "solid" + str(int(aLine[columnnames["SDID"]]))
         rmin     = aLine[columnnames["rmin"]]

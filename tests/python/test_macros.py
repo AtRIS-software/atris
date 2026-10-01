@@ -107,6 +107,41 @@ def test_psf_conversion_preserves_reviewed_layer_geometry(tmp_path, monkeypatch)
         auxiliary.attrib["auxvalue"]
         for auxiliary in generated.findall("./structure/volume/auxiliary")
     ] == ["0", "1"]
+    legacy_material = generated.find("./materials/material[@name='material0']")
+    assert legacy_material.attrib["state"] == "solid"
+    assert [
+        (fraction.attrib["ref"], float(fraction.attrib["n"]))
+        for fraction in legacy_material.findall("fraction")
+    ] == [("G4_H", 1.0)]
+
+
+@pytest.mark.parametrize(
+    ("state_code", "fractions", "expected_state"),
+    [
+        (0, (0.75, 0.25), "gas"),
+        (1, (0.25, 0.75), "solid"),
+        (2, (0.1119, 0.8881), "liquid"),
+    ],
+)
+def test_psf_conversion_uses_explicit_composition_for_every_state(
+    tmp_path, state_code, fractions, expected_state
+):
+    psf = tmp_path / "simulation.psf"
+    psf.write_text(
+        "H1000 H O\n"
+        "0 1 0 6.283185 0 3.141593 0 293.15 1 101325 "
+        f"{state_code} {fractions[0]} {fractions[1]}\n"
+    )
+
+    output = psf2gdml(psf)
+
+    root = ElementTree.parse(output).getroot()
+    material = root.find("./materials/material[@name='material0']")
+    assert material.attrib["state"] == expected_state
+    assert [
+        (fraction.attrib["ref"], float(fraction.attrib["n"]))
+        for fraction in material.findall("fraction")
+    ] == [("G4_H", fractions[0]), ("G4_O", fractions[1])]
 
 
 def test_psf_conversion_accepts_named_input(tmp_path, monkeypatch):
