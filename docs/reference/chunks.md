@@ -22,6 +22,7 @@ run/
         protons_123456_654321.log
         protons_123456_654321_h1_h1.1.csv
         protons_123456_654321_h2_h2.ion.csv
+        protons_123456_654321_h2_h2.edep.csv
         ...
         protons_123456_654321.COMPLETE
 ```

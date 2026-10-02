@@ -19,6 +19,7 @@ from .psf import load_psf
 from .response_histograms import (
     IONIZATION_HISTOGRAM,
     PRIMARY_HISTOGRAM,
+    TOTAL_DEPOSITION_HISTOGRAM,
     ResponseHistogramReader,
     csv_histogram_path,
     response_output_format,
@@ -172,28 +173,42 @@ def process_phantoms(nrphantoms):
     )
 
 
-def scale_data(data, nphant, phantom_data, geometry):
+def scale_data(
+    data,
+    nphant,
+    phantom_data,
+    geometry,
+    atmospheric_response_count=1,
+):
     nrparticles = data[0][1:-1]
-    limit = 1 + nphant * 3
-    for hist_index in range(3, 3 + limit):
+    phantom_start = 3 + atmospheric_response_count
+    for hist_index in range(3, phantom_start):
         new_data = data[hist_index][1:-1, 1:-1].T
         data[hist_index] = new_data / nrparticles[None, :]
-        if hist_index == 3:
-            data[hist_index] = data[hist_index] / geometry["volume/cm3"][:, None]
-        if hist_index > 3:
-            phantom_nr = int((hist_index - 4) / 3)
-            phantom_surface = phantom_data[phantom_nr, 1]
-            if ((hist_index - 4) % 3) != 2:
-                phantom_surface = phantom_surface / phantom_data[phantom_nr, 0]
-            data[hist_index] = (
-                data[hist_index]
-                * phantom_surface
-                / geometry["inn_surface/cm2"][:, None]
-            )
+        data[hist_index] = data[hist_index] / geometry["volume/cm3"][:, None]
+    for hist_index in range(phantom_start, phantom_start + nphant * 3):
+        new_data = data[hist_index][1:-1, 1:-1].T
+        data[hist_index] = new_data / nrparticles[None, :]
+        phantom_offset = hist_index - phantom_start
+        phantom_nr = int(phantom_offset / 3)
+        phantom_surface = phantom_data[phantom_nr, 1]
+        if (phantom_offset % 3) != 2:
+            phantom_surface = phantom_surface / phantom_data[phantom_nr, 0]
+        data[hist_index] = (
+            data[hist_index]
+            * phantom_surface
+            / geometry["inn_surface/cm2"][:, None]
+        )
     return data
 
 
-def make_output(data, geometry, simname, nphant):
+def make_output(
+    data,
+    geometry,
+    simname,
+    nphant,
+    atmospheric_extensions=(".ioni",),
+):
     altitude = (geometry["inn_surface/cm2"] / (4.0 * np.pi)) ** 0.5 / 100000.0
     altitude = altitude - altitude[2]
     altitude = altitude[1:-1, None]
@@ -202,13 +217,19 @@ def make_output(data, geometry, simname, nphant):
     number_format = ["%.5e"] * data[3].shape[1]
     number_format = ["%8.3f"] + number_format
     number_format = ["%5i"] + number_format
-    for hist_index in range(3, 3 + 1 + nphant * 3):
-        if hist_index == 3:
-            extension = ".ioni"
-        else:
-            extension = extensions[(hist_index - 4) % 3] + str(
-                int((hist_index - 4) / 3)
-            )
+    phantom_start = 3 + len(atmospheric_extensions)
+    outputs = [
+        (3 + offset, extension)
+        for offset, extension in enumerate(atmospheric_extensions)
+    ]
+    outputs.extend(
+        (
+            phantom_start + offset,
+            extensions[offset % 3] + str(int(offset / 3)),
+        )
+        for offset in range(nphant * 3)
+    )
+    for hist_index, extension in outputs:
         histogram_data = data[hist_index][1:-1, :]
         output_data = np.hstack((sdid, altitude, histogram_data))
         np.savetxt(
@@ -236,7 +257,11 @@ def process_run(simname):
             phantom_count,
         )
         logger.debug("Reading %s histogram data", simname)
-        names = [PRIMARY_HISTOGRAM, "h2.dir", "h2.pos", IONIZATION_HISTOGRAM]
+        atmospheric_outputs = [(IONIZATION_HISTOGRAM, ".ioni")]
+        if TOTAL_DEPOSITION_HISTOGRAM in histograms.names():
+            atmospheric_outputs.append((TOTAL_DEPOSITION_HISTOGRAM, ".edep"))
+        names = [PRIMARY_HISTOGRAM, "h2.dir", "h2.pos"]
+        names += [name for name, _ in atmospheric_outputs]
         names += [
             "h2.%s%i" % (quantity, phantom_nr)
             for phantom_nr in range(phantom_count)
@@ -249,9 +274,18 @@ def process_run(simname):
         phantom_count,
         phantom_data,
         geometry,
+        atmospheric_response_count=len(atmospheric_outputs),
     )
     logger.debug("Writing %s response files", simname)
-    make_output(scaled_data, geometry, simname, phantom_count)
+    make_output(
+        scaled_data,
+        geometry,
+        simname,
+        phantom_count,
+        atmospheric_extensions=tuple(
+            extension for _, extension in atmospheric_outputs
+        ),
+    )
     logger.info("Wrote processed %s response files", simname)
 
 
@@ -260,13 +294,15 @@ def main():
         formatter_class=HelpFormatter,
         description=(
             "Scale canonical AtRIS CSV or ROOT histograms into altitude- and "
-            "energy-dependent ionization and phantom response tables."
+            "energy-dependent atmospheric energy-deposition and phantom "
+            "response tables."
         ),
         epilog=(
             "The command processes the protons and alphas prefixes when their "
             "primary histogram files are present. It reads simulation.psf and, "
-            "for phantom responses, phantoms.txt; it writes .ioni, .doseN, "
-            ".equiN, and .ratesN files, replacing existing processed files. "
+            "for phantom responses, phantoms.txt; it writes .ioni, .edep when "
+            "total-deposition input is present, and .doseN, .equiN, and .ratesN "
+            "files, replacing existing processed files. "
             "Missing species are skipped. This command does not gather chunk "
             "histograms, run simulations, or make plots."
         ),

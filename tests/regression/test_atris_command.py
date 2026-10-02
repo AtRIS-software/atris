@@ -29,6 +29,7 @@ EXPECTED_HISTOGRAM_SUFFIXES = {
     "_h2_h2.dir.csv",
     "_h2_h2.dos0.csv",
     "_h2_h2.equi0.csv",
+    "_h2_h2.edep.csv",
     "_h2_h2.ion.csv",
     "_h2_h2.pos.csv",
     "_h2_h2.rates0.csv",
@@ -36,6 +37,7 @@ EXPECTED_HISTOGRAM_SUFFIXES = {
 EXPECTED_HISTOGRAM_SUFFIXES_WITHOUT_PHANTOMS = {
     "_h1_h1.1.csv",
     "_h2_h2.dir.csv",
+    "_h2_h2.edep.csv",
     "_h2_h2.ion.csv",
     "_h2_h2.pos.csv",
 }
@@ -43,6 +45,7 @@ EXPECTED_ROOT_HISTOGRAMS = {
     "h1.1",
     "h2.dir",
     "h2.dos0",
+    "h2.edep",
     "h2.equi0",
     "h2.ion",
     "h2.pos",
@@ -230,6 +233,11 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
             assert annotations["atris.output_mode"] == mode
             assert annotations["atris.random_seed_pairs"] == "runtime-default"
             assert annotations["atris.quantity"]
+
+    with ResponseHistogramReader(tmp_path / "protons") as histograms:
+        total_deposition = histograms.values("h2.edep")
+        ionization = histograms.values("h2.ion")
+        assert np.all(total_deposition + 1e-12 >= ionization)
 
 
 @pytest.mark.regression

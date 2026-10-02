@@ -158,6 +158,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	}
 	G4double ioni  = edep - nioni;
 	analysis->FillH2(2,einp,detid,ioni/MeV);
+	analysis->FillH2(3,einp,detid,edep/MeV);
 	// mode -1:      dose rate determination
 	// mode 0:   	 output data for all atmospheric sheets, at sheet interface
 	//         	 purpose: altitude particle profiles
@@ -201,7 +202,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 					}
 				}
 				for (G4int pidx=0;pidx<nrphantoms;pidx++){
-					G4int offset = 3 + 3*pidx;
+					G4int offset = 4 + 3*pidx;
 					analysis->FillH2(offset+0,einp,diid,abso[pidx][j]*ekin/eV );
 					analysis->FillH2(offset+1,einp,diid,abso[pidx][j]*ekin/eV*wfactor);
 					analysis->FillH2(offset+2,einp,diid,rate[pidx][j]);
@@ -217,7 +218,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 				G4int j = heavy[partPDG]*650+k;
 				G4double wfactor = 20;
 				for (G4int pidx=0;pidx<nrphantoms;pidx++){
-					G4int offset = 3 + 3*pidx;
+					G4int offset = 4 + 3*pidx;
 					analysis->FillH2(offset+0,einp,diid,abso[pidx][j]*ekin/eV );
 					analysis->FillH2(offset+1,einp,diid,abso[pidx][j]*ekin/eV*wfactor);
 					analysis->FillH2(offset+2,einp,diid,rate[pidx][j]);

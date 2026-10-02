@@ -39,7 +39,7 @@ or the installed Geant4 lacks the requested optional backend.
 
 | Integer | Name used by `atris-run` | Products |
 | --- | --- | --- |
-| `-1` | `response` | Primary, source-position, source-direction, ionization, and phantom response histograms. |
+| `-1` | `response` | Primary, source-position, source-direction, ionizing and total energy-deposition, and phantom response histograms. |
 | `0` | `profile` | The same histograms plus interface-crossing records. |
 | `1` | `shower` | The same products plus transport-step records in sensitive volumes. |
 

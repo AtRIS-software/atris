@@ -15,7 +15,9 @@ $$
 where $I_{d,b}$ is accumulated ionizing deposition, $P_b$ is the number of
 primary entries in that energy bin, and $V_d$ is layer volume. The denominator
 uses the primaries actually recorded in the bin, not the requested total
-number of events. Phantom products have additional mass and area factors;
+number of events. Total energy deposition is normalized identically, replacing
+$I_{d,b}$ with the accumulated total deposit $T_{d,b}$. Phantom products have
+additional mass and area factors;
 see [the normalization formulas](../reference/outputs.md#processed-response-tables).
 
 An unsampled bin has no response estimate. NaN or infinity from division by

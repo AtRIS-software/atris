@@ -12,8 +12,9 @@ is no positional species filter.
 
 **Inputs:** canonical histogram CSV or ROOT files, `simulation.psf`, and phantom
 mass/area metadata from `phantoms.txt` when phantom products are present.
-**Outputs:** `.ioni`, `.doseN`, `.equiN`, and `.ratesN`, replacing existing
-processed files. Available input/output consistency checks produce warnings.
+**Outputs:** `.ioni`, `.edep` when the raw total-deposition tally is present,
+`.doseN`, `.equiN`, and `.ratesN`, replacing existing processed files.
+Available input/output consistency checks produce warnings.
 
 The output is normalized per simulated primary energy bin; it does not include
 source-flux folding or conversion into physical rates. See
@@ -27,24 +28,26 @@ The following is the command's `--help` output for this revision.
 ```text
 usage: atris-postprocess [-h] [-q | -v] [--version] [RUN_DIRECTORY]
 
-Scale canonical AtRIS CSV or ROOT histograms into altitude- and energy-dependent
-ionization and phantom response tables.
+Scale canonical AtRIS CSV or ROOT histograms into altitude- and
+energy-dependent atmospheric energy-deposition and phantom response tables.
 
 positional arguments:
   RUN_DIRECTORY  Run directory containing canonical response output (default:
                  current directory).
 
-optional arguments:
+options:
   -h, --help     show this help message and exit
   -q, --quiet    Suppress normal progress; show warnings and errors only.
-  -v, --verbose  Include detailed per-file, per-request, or per-chunk progress.
+  -v, --verbose  Include detailed per-file, per-request, or per-chunk
+                 progress.
   --version      Show the AtRIS and atris-tools versions and exit.
 
-The command processes the protons and alphas prefixes when their primary histogram
-files are present. It reads simulation.psf and, for phantom responses, phantoms.txt;
-it writes .ioni, .doseN, .equiN, and .ratesN files, replacing existing processed
-files. Missing species are skipped. This command does not gather chunk histograms, run
-simulations, or make plots.
+The command processes the protons and alphas prefixes when their primary
+histogram files are present. It reads simulation.psf and, for phantom
+responses, phantoms.txt; it writes .ioni, .edep when total-deposition input is
+present, and .doseN, .equiN, and .ratesN files, replacing existing processed
+files. Missing species are skipped. This command does not gather chunk
+histograms, run simulations, or make plots.
 ```
 
 Implementation: `atris_tools/postprocess.py`.

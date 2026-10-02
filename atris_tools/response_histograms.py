@@ -9,6 +9,7 @@ import uproot
 
 PRIMARY_HISTOGRAM = "h1.1"
 IONIZATION_HISTOGRAM = "h2.ion"
+TOTAL_DEPOSITION_HISTOGRAM = "h2.edep"
 
 
 def csv_histogram_path(prefix, name):

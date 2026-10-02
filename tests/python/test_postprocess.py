@@ -10,6 +10,7 @@ import uproot
 from atris_tools import postprocess
 from atris_tools.response_histograms import (
     PRIMARY_HISTOGRAM,
+    TOTAL_DEPOSITION_HISTOGRAM,
     ResponseHistogramReader,
     csv_histogram_axes,
     read_csv_histogram,
@@ -19,7 +20,7 @@ from atris_tools.response_histograms import (
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
 
 
-def write_root_response(path):
+def write_root_response(path, include_total_deposition=True):
     energy_edges = np.array([1.0, 10.0, 100.0])
     detector_edges = np.array([-0.5, 0.5, 1.5, 2.5, 3.5])
     angular_edges = np.array([0.0, 0.5, 1.0])
@@ -30,6 +31,12 @@ def write_root_response(path):
         root_file["h2.dir"] = (angular, angular_edges, angular_edges)
         root_file["h2.pos"] = (angular, angular_edges, angular_edges)
         root_file["h2.ion"] = (response, energy_edges, detector_edges)
+        if include_total_deposition:
+            root_file[TOTAL_DEPOSITION_HISTOGRAM] = (
+                2 * response,
+                energy_edges,
+                detector_edges,
+            )
 
 
 def test_csv_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
@@ -223,10 +230,39 @@ def test_postprocess_reads_root_response_histograms(tmp_path, monkeypatch):
             histograms.values("h2.ion")[1:-1, 1:-1],
             np.arange(1.0, 9.0).reshape(2, 4),
         )
+        np.testing.assert_array_equal(
+            histograms.values(TOTAL_DEPOSITION_HISTOGRAM)[1:-1, 1:-1],
+            2 * np.arange(1.0, 9.0).reshape(2, 4),
+        )
 
     postprocess.process_run("protons")
 
     assert (tmp_path / "protons.ioni").is_file()
+    assert (tmp_path / "protons.edep").is_file()
+    ionization = np.loadtxt(tmp_path / "protons.ioni")[:, 2:]
+    total_deposition = np.loadtxt(tmp_path / "protons.edep")[:, 2:]
+    np.testing.assert_allclose(total_deposition, 2 * ionization, rtol=1e-5)
+
+
+def test_postprocess_accepts_output_without_total_deposition(
+    tmp_path, monkeypatch
+):
+    write_root_response(
+        tmp_path / "protons.root",
+        include_total_deposition=False,
+    )
+    (tmp_path / "simulation.psf").write_text(
+        "0 1 0 1 0 1 0 1 1 1 1 0 0 0 0 0\n"
+        "1 2 0 1 0 1 1 1 1 1 1 0 0 0 0 0\n"
+        "2 3 0 1 0 1 2 1 1 1 1 0 0 0 0 0\n"
+        "3 4 0 1 0 1 3 1 1 1 1 0 0 0 0 0\n"
+    )
+    monkeypatch.chdir(tmp_path)
+
+    postprocess.process_run("protons")
+
+    assert (tmp_path / "protons.ioni").is_file()
+    assert not (tmp_path / "protons.edep").exists()
 
 
 def test_postprocess_rejects_ambiguous_response_formats(tmp_path, monkeypatch):

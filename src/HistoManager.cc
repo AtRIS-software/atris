@@ -144,8 +144,24 @@ void HistoManager::Book()
 	analysis->SetH2YAxisTitle(id, "Sensitive detector ID");
 	analysis->SetH2ZAxisTitle(id, "Ionizing energy deposited [MeV]");
 	analysis->SetH2Activation(id,true);
+	// Total local energy deposition, retained separately so that atmospheric
+	// heating estimates do not have to rely on the ionizing component alone.
+	id = analysis->CreateH2(
+		"h2.edep", "Total energy deposition", enbins, detbins,
+		"MeV", "none", "none", "none"
+	);
+	AnnotateHistogram(
+		analysis->GetH2(id),
+		"h2.edep",
+		"total energy deposition",
+		"total energy deposit [MeV]"
+	);
+	analysis->SetH2XAxisTitle(id, "Primary kinetic energy [MeV]");
+	analysis->SetH2YAxisTitle(id, "Sensitive detector ID");
+	analysis->SetH2ZAxisTitle(id, "Total energy deposited [MeV]");
+	analysis->SetH2Activation(id,true);
 	for (G4int phantomnr = 0; phantomnr < nrphantoms; phantomnr++){
-		G4cout << "### AtRIS: Initializing higher order histograms for " << nrphantoms << " phantoms, with a total number of histograms equal to " << nrphantoms*3 + 4 <<G4endl;
+		G4cout << "### AtRIS: Initializing higher order histograms for " << nrphantoms << " phantoms, with a total number of histograms equal to " << nrphantoms*3 + 5 <<G4endl;
 		// For the DIID, we need less detbins, but we will keep this here and remove it latter when writing out the custom output
 		G4String suffix = std::to_string(phantomnr);
 		id = analysis->CreateH2(

@@ -43,7 +43,7 @@ flowchart TD
     I --> J["atris-postprocess"]
     B --> J
     F -. optional metadata .-> J
-    J --> K[".ioni + optional .doseN, .equiN, .ratesN"]
+    J --> K[".ioni + .edep + optional .doseN, .equiN, .ratesN"]
     K --> L["atris-plot"]
     I --> L
     E --> L
@@ -129,7 +129,8 @@ No particles have been simulated yet.
 ## 4. Optionally add phantom response matrices
 
 Skip this step to run without phantom responses. Atmospheric transport, source
-diagnostics, and ionizing energy deposition are available without phantoms.
+diagnostics, and ionizing and total energy deposition are available without
+phantoms.
 
 To add the example's two phantom responses:
 
@@ -251,6 +252,7 @@ A chunk's files have names like these; the seed numbers are illustrative:
 ```text
 chunks/protons_123456_654321_h1_h1.1.csv
 chunks/protons_123456_654321_h2_h2.ion.csv
+chunks/protons_123456_654321_h2_h2.edep.csv
 ...other histogram files for that chunk...
 chunks/protons_123456_654321.log
 chunks/protons_123456_654321.COMPLETE
@@ -294,18 +296,19 @@ atris-postprocess .
 
 | Reads | Creates |
 | --- | --- |
-| Raw proton and alpha CSV or ROOT histograms, `simulation.psf` | `.ioni` for each species |
+| Raw proton and alpha CSV or ROOT histograms, `simulation.psf` | `.ioni` and `.edep` for each species |
 | Optional raw phantom histograms and `phantoms.txt` | `.doseN`, `.equiN`, `.ratesN` for each selected phantom and species |
 
 The post-processor also checks available `.bins` and `.mac` inputs for
 consistency. The PSF supplies layer volumes and interface areas. When phantoms
 are selected, `phantoms.txt` supplies their masses and areas. Keep these input files in the run directory; post-processing needs them.
 
-For example, `protons.ioni` contains an ID column, an altitude column, and one
-response column per primary-energy bin. It describes ionizing energy deposited
-per volume per simulated primary. The phantom products use their corresponding
-mass and area normalization. They are response tables, not physical rates per
-second until an appropriate physical source normalization is applied.
+For example, `protons.ioni` and `protons.edep` contain an ID column, an altitude
+column, and one response column per primary-energy bin. They describe ionizing
+and total energy deposited per volume per simulated primary. The phantom
+products use their corresponding mass and area normalization. They are response
+tables, not physical rates per second until an appropriate physical source
+normalization is applied.
 
 With only the first chunk of each species complete, some energy bins may be
 unsampled and normalized values may be undefined. Run more chunks and assess

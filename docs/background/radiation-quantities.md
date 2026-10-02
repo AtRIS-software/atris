@@ -22,6 +22,19 @@ Use consistent energy units. The choice of $W$ depends on the material and
 physical assumptions; AtRIS does not supply a universal value. A production
 rate additionally requires an incident particle rate.
 
+## Total atmospheric energy deposition
+
+The total-deposition tally accumulates Geant4's total local energy deposit for
+the same steps as the ionization tally. After post-processing, `.edep` contains
+total deposited energy per unit volume per simulated primary, resolved by
+primary-energy bin, in MeV cm$^{-3}$ primary$^{-1}$.
+
+The difference `.edep - .ioni` is the correspondingly normalized non-ionizing
+energy deposition. `.edep` is useful input to an atmospheric-heating estimate,
+but it is not itself a heating rate: a physical incident spectrum and rate must
+be applied, and converting deposited energy to heat requires an explicit
+thermalization-efficiency assumption.
+
 ## Phantom responses
 
 A phantom represents a detector or material with a particular geometry and

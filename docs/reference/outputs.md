@@ -12,13 +12,14 @@ backend independently of the output mode. A missing extension defaults to CSV.
 | `_h2_h2.dir.csv` / `h2.dir` | Global azimuth, rad; cos(polar angle) | One per primary direction. |
 | `_h2_h2.pos.csv` / `h2.pos` | Global azimuth, rad; cos(polar angle) | One per primary source position. |
 | `_h2_h2.ion.csv` / `h2.ion` | Primary energy, MeV; detector ID | Total deposit minus non-ionizing deposit, MeV, for steps in non-terminating sensitive layers. |
+| `_h2_h2.edep.csv` / `h2.edep` | Primary energy, MeV; detector ID | Total local energy deposit, MeV, for the same steps and layers as `h2.ion`. |
 | `_h2_h2.dosN.csv` / `h2.dosN` | Primary energy, MeV; interface ID | Radiation response coefficient × crossing kinetic energy in eV. |
 | `_h2_h2.equiN.csv` / `h2.equiN` | Primary energy, MeV; interface ID | The same energy response multiplied by the implemented radiation weight. |
 | `_h2_h2.ratesN.csv` / `h2.ratesN` | Primary energy, MeV; interface ID | Counting response coefficient. |
 
 All three modes write these histograms. CSV output writes one file per
 histogram; ROOT output stores them as objects in `<name>.root`. There are
-$4 + 3N_{\mathrm{phantom}}$ histogram products, where
+$5 + 3N_{\mathrm{phantom}}$ histogram products, where
 $N_{\mathrm{phantom}}$ is the phantom count. Despite the histogram titles, raw
 phantom values have not yet been divided by primary counts, masses, or interface
 areas.
@@ -62,8 +63,9 @@ locate the first non-comment line rather than assuming a fixed line count.
 
 ### Detector and interface IDs
 
-Ionization is associated with the sensitive volume's detector ID. Phantom
-responses and ROOT interface crossings use the interface ID:
+Ionization and total energy deposition are associated with the sensitive
+volume's detector ID. Phantom responses and ROOT interface crossings use the
+interface ID:
 
 $$
 \alpha = \arccos(\hat{\mathbf r}\cdot\hat{\mathbf p}),\qquad
@@ -89,6 +91,7 @@ The recorded angle is rounded to the nearest whole degree, so a stored value of
 | Suffix | Quantity after scaling |
 | --- | --- |
 | `.ioni` | Ionizing energy deposition per cm³ per primary in the corresponding energy bin, in MeV cm⁻³ primary⁻¹. It is not yet an ion-pair production rate. |
+| `.edep` | Total local energy deposition per cm³ per primary in the corresponding energy bin, in MeV cm⁻³ primary⁻¹. It is not yet a heating rate. |
 | `.doseN` | Phantom energy response per mass per primary, using the table's radiation coefficients and eV energy factor. |
 | `.equiN` | The same response with the code's radiation weighting applied. |
 | `.ratesN` | Counting response per primary, after area scaling. It is not counts per second. |
@@ -107,16 +110,23 @@ places after the decimal. The first and last physical layer rows are omitted.
 
 Let $P_b$ be the primary H1 `entries` in energy bin $b$, $V_d$ the layer volume
 in cm³, $S_d$ the interface area in cm², and $A_N$, $M_N$ the phantom area and
-mass from `phantoms.txt`. With raw histogram sums $I$, $D$, $E$, and $C$:
+mass from `phantoms.txt`. With raw ionizing and total-deposition sums $I$ and
+$T$, and phantom sums $D$, $E$, and $C$:
 
 $$
 \begin{aligned}
 \mathrm{ioni}_{d,b} &= \frac{I_{d,b}}{P_b V_d},\\
+\mathrm{edep}_{d,b} &= \frac{T_{d,b}}{P_b V_d},\\
 \mathrm{dose}_{N,d,b} &= \frac{D_{d,b} A_N}{P_b M_N S_d},\\
 \mathrm{equi}_{N,d,b} &= \frac{E_{d,b} A_N}{P_b M_N S_d},\\
 \mathrm{rates}_{N,d,b} &= \frac{C_{d,b} A_N}{P_b S_d}.
 \end{aligned}
 $$
+
+Because `h2.ion` is total deposit minus Geant4's non-ionizing energy deposit,
+`.edep - .ioni` gives the correspondingly normalized non-ionizing component.
+Estimating atmospheric heating still requires a physical incident spectrum and
+an assumption about how much deposited energy thermalizes as heat.
 
 The code does not convert eV/g to Gy or apply a source flux or an ion-pair
 creation energy. If the supplied radiation coefficients are dimensionless
