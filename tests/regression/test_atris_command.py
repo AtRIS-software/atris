@@ -17,8 +17,8 @@ import uproot
 from atris_tools.interface_output import read_root
 from atris_tools.gather import gather_simulation
 from atris_tools.response_histograms import ResponseHistogramReader
-from atris_tools.root_output import has_ntuple
-from atris_tools.step_output import process_name, read_step_records
+from atris_tools.root_output import has_ntuple, read_ntuple
+from atris_tools.step_output import STEP_FIELDS, process_name
 
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -281,7 +281,7 @@ def test_mode_one_writes_root_step_ntuple_with_track_genealogy(
     assert result.returncode == 0, result.stdout + result.stderr
     assert "### AtRIS: simulation used 2 worker thread(s)" in result.stdout
     assert_timing_output(result.stdout, 2)
-    records = read_step_records(tmp_path / "protons.root")
+    records = read_ntuple(tmp_path / "protons.root", "steps", STEP_FIELDS)
     assert len(records)
     assert set(records["event_id"]) == {0, 1}
     assert np.all(records["track_id"] > 0)
@@ -353,7 +353,7 @@ def test_seeded_mode_one_writes_root_file_inside_chunks(tmp_path, atris_command)
     assert result.returncode == 0, result.stdout + result.stderr
     root_path = tmp_path / (simulation + ".root")
     assert root_path.is_file()
-    assert len(read_step_records(root_path)) == 1
+    assert len(read_ntuple(root_path, "steps", STEP_FIELDS)) == 1
     assert not list((tmp_path / "chunks").glob("*.csv"))
     with uproot.open(root_path) as root_file:
         assert "h1.1" in root_file
@@ -402,7 +402,7 @@ def test_csv_and_root_response_histograms_gather_equivalently(
 
         with ResponseHistogramReader(run_directory / "protons") as histograms:
             outputs[mode] = {
-                name: (histograms.axes(name), histograms.data(name))
+                name: (histograms.axes(name), histograms.values(name))
                 for name in histograms.names()
             }
 
@@ -412,10 +412,7 @@ def test_csv_and_root_response_histograms_gather_equivalently(
         root_axes, root_data = outputs["0"][name]
         for csv_axis, root_axis in zip(csv_axes, root_axes):
             np.testing.assert_allclose(csv_axis, root_axis, rtol=1e-6)
-        if name == "h1.1":
-            np.testing.assert_allclose(csv_data[:, 0], root_data[:, 0])
-        else:
-            np.testing.assert_allclose(csv_data[:, 1], root_data[:, 1])
+        np.testing.assert_allclose(csv_data, root_data)
 
 
 @pytest.mark.regression

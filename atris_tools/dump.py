@@ -2,21 +2,15 @@
 
 import argparse
 import csv
-from itertools import chain
 import os
 from pathlib import Path
 import sys
 
 from .cli import HelpFormatter, add_version_argument
-from .interface_output import ROOT_FIELDS
-from .root_output import iterate_ntuple
-from .step_output import STEP_FIELDS
+from .root_output import iterate_ntuple, ntuple_fields
 
 
-NTUPLE_FIELDS = {
-    "interfaces": ROOT_FIELDS,
-    "steps": STEP_FIELDS,
-}
+NTUPLES = ("interfaces", "steps")
 
 
 def _csv_value(value):
@@ -29,14 +23,11 @@ def _csv_value(value):
 
 def dump_ntuple(path, ntuple, stream):
     """Stream one AtRIS ROOT ntuple as CSV."""
-    fields = NTUPLE_FIELDS[ntuple]
-    batches = iterate_ntuple(path, ntuple, fields)
-    first_batch = next(batches, None)
-    batches = () if first_batch is None else chain((first_batch,), batches)
+    fields = ntuple_fields(path, ntuple)
     writer = csv.writer(stream, lineterminator="\n")
     writer.writerow(fields)
 
-    for records in batches:
+    for records in iterate_ntuple(path, ntuple, fields):
         for record in records:
             writer.writerow([_csv_value(record[field]) for field in fields])
 
@@ -61,7 +52,7 @@ def main():
     )
     parser.add_argument(
         "ntuple",
-        choices=NTUPLE_FIELDS,
+        choices=NTUPLES,
         metavar="{interfaces,steps}",
         help="ROOT ntuple to dump.",
     )

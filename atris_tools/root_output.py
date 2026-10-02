@@ -44,6 +44,12 @@ def read_ntuple(filename, tree_name, field_names):
     return _structured_records(arrays, field_names)
 
 
+def ntuple_fields(filename, tree_name):
+    """Return the branch names stored in a ROOT ntuple."""
+    with uproot.open(filename) as root_file:
+        return tuple(_tree(root_file, tree_name, ()).keys())
+
+
 def iterate_ntuple(filename, tree_name, field_names, step_size="100 MB"):
     """Yield bounded chunks from a Geant4 ROOT ntuple."""
     path = Path(filename)

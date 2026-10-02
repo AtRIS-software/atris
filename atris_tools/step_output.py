@@ -1,6 +1,6 @@
 """Read transport-step ntuples written by AtRIS output mode 1."""
 
-from .root_output import iterate_ntuple, read_ntuple
+from .root_output import iterate_ntuple
 
 
 STEP_FIELDS = (
@@ -26,11 +26,6 @@ STEP_FIELDS = (
     "creator_process",
     "step_process",
 )
-
-
-def read_step_records(filename):
-    """Read all records from one AtRIS mode-1 ROOT file."""
-    return read_ntuple(filename, "steps", STEP_FIELDS)
 
 
 def iterate_step_records(filename):
