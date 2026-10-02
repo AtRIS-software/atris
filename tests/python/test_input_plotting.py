@@ -262,9 +262,9 @@ def test_plot_inputs_writes_planet_specification_without_species_inputs(
 
     filenames, errors = input_plotting.plot_inputs()
 
-    assert filenames == ["simulation.inputs.png"]
+    assert filenames == ["simulation.psf.png"]
     assert errors == []
-    assert (tmp_path / "simulation.inputs.png").read_bytes().startswith(
+    assert (tmp_path / "simulation.psf.png").read_bytes().startswith(
         b"\x89PNG\r\n\x1a\n"
     )
 
@@ -280,7 +280,7 @@ def test_plot_inputs_writes_planet_specification_alongside_species_inputs(
 
     assert filenames == [
         "protons.inputs.png",
-        "simulation.inputs.png",
+        "simulation.psf.png",
         "phantom.test-phantom.inputs.png",
     ]
     assert errors == []

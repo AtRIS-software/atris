@@ -475,16 +475,33 @@ def _plot_composition(axis, layers, edges, model_edges):
         key=element_sort_key,
     )
     for element in elements:
+        label = element_label(element)
         fractions = np.array(
             [layer["fractions"].get(element, 0.0) for layer in layers]
         )
         fractions[fractions < MASS_FRACTION_PLOT_MINIMUM] = np.nan
-        axis.stairs(
+        curve = axis.stairs(
             fractions,
             edges,
             orientation="horizontal",
-            label=element_label(element),
+            label=label,
         )
+        modeled = np.flatnonzero(
+            np.isfinite(fractions)
+            & (edges[:-1] >= model_edges[0])
+            & (edges[1:] <= model_edges[-1])
+        )
+        if modeled.size >= 3:
+            index = modeled[modeled.size // 2]
+            axis.annotate(
+                label,
+                (fractions[index], (edges[index] + edges[index + 1]) / 2.0),
+                xytext=(4, 0),
+                textcoords="offset points",
+                color=curve.get_edgecolor(),
+                fontsize=8,
+                va="center",
+            )
     axis.tick_params(axis="y", labelleft=False)
     axis.set_xlabel(
         "Mass fraction (values below %.0e omitted)" % MASS_FRACTION_PLOT_MINIMUM
@@ -519,7 +536,7 @@ def plot_psf_inputs(filename="simulation.psf"):
     )
     _plot_composition(axes[1], layers, edges, model_edges)
     figure.tight_layout()
-    output_path = path.with_suffix(".inputs.png")
+    output_path = path.with_name(path.name + ".png")
     figure.savefig(output_path)
     plt.close(figure)
     return output_path.name
