@@ -20,13 +20,13 @@ from .postprocess import process_psf
 from .response_histograms import (
     IONIZATION_HISTOGRAM,
     PRIMARY_HISTOGRAM,
+    csv_histogram_axes,
     read_csv_histogram,
     response_output_format,
+    table_histogram_values,
 )
 from .root_histograms import (
     combine_root_histograms,
-    combine_root_metadata,
-    root_histogram_data,
     write_root_histograms,
 )
 
@@ -386,19 +386,16 @@ def gather_incremental_histogram(
         logger.debug("Histogram %s is up to date", destination.name)
 
 
-def ionization_components(primary_energy, ionization, detector_count):
+def ionization_components(primary_energy, ionization):
     """Return primary counts and ionization sums for plotted detector cells."""
-    primary_counts = primary_energy[1:-1, 0]
-    ionization_sum = ionization[:, 1].reshape(
-        (detector_count + 2, primary_counts.size + 2)
-    )
-    return primary_counts, ionization_sum[2:-2, 1:-1]
+    primary_counts = primary_energy[1:-1]
+    return primary_counts, ionization[1:-1, 2:-2].T
 
 
-def ionization_response(primary_energy, ionization, geometry, detector_count):
+def ionization_response(primary_energy, ionization, geometry):
     """Return the ionization matrix displayed by the quick-look plot."""
     primary_counts, ionization_sum = ionization_components(
-        primary_energy, ionization, detector_count
+        primary_energy, ionization
     )
     with np.errstate(divide="ignore", invalid="ignore"):
         response = ionization_sum / primary_counts[None, :]
@@ -447,7 +444,7 @@ def ionization_convergence_observer(
     run_directory, completed_count, primary_snapshots
 ):
     """Return an observer that calculates convergence after every chunk."""
-    geometry, detector_count = process_psf(run_directory / "simulation.psf")
+    geometry, _ = process_psf(run_directory / "simulation.psf")
     references = {
         count: change_reference_count(count)
         for count in range(2, completed_count + 1)
@@ -472,7 +469,7 @@ def ionization_convergence_observer(
             primary_chunk = primary_total - primary_snapshots[count - 1]
 
         chunk_counts, chunk_sum = ionization_components(
-            primary_chunk, ionization_chunk, detector_count
+            primary_chunk, ionization_chunk
         )
         if weights is None:
             weights = np.zeros(chunk_counts.shape)
@@ -508,7 +505,6 @@ def ionization_convergence_observer(
             primary_total,
             ionization_total,
             geometry,
-            detector_count,
         )
         if count >= 2:
             reference_count = references[count]
@@ -527,7 +523,7 @@ def ionization_convergence_observer(
             rows.append(
                 (
                     count,
-                    int(primary_total[1:-1, 0].sum()),
+                    int(primary_total[1:-1].sum()),
                     comparison_chunks,
                     100.0 * comparison_chunks / count,
                     100.0 * fractional_change(reference, current),
@@ -549,9 +545,18 @@ def combine_ionization_histograms(
     run_directory, source_paths, primary_snapshots
 ):
     """Combine ionization files and calculate convergence after every chunk."""
-    observe, rows = ionization_convergence_observer(
+    observe_values, rows = ionization_convergence_observer(
         run_directory, len(source_paths), primary_snapshots
     )
+    axes = csv_histogram_axes(source_paths[0])
+
+    def observe(count, current, total):
+        observe_values(
+            count,
+            table_histogram_values(current, axes),
+            table_histogram_values(total, axes),
+        )
+
     header, columns, total, total_plane_sum, _ = combine_histograms(
         source_paths, observe=observe
     )
@@ -596,9 +601,7 @@ def gather_root_simulation(
 
     def observe(count, current, total):
         nonlocal convergence_observer, convergence
-        primary_snapshots[count] = root_histogram_data(
-            total[PRIMARY_HISTOGRAM]
-        )
+        primary_snapshots[count] = total[PRIMARY_HISTOGRAM]["values"].copy()
         if IONIZATION_HISTOGRAM not in total:
             return
         if convergence_observer is None:
@@ -609,11 +612,13 @@ def gather_root_simulation(
             )
         convergence_observer(
             count,
-            root_histogram_data(current[IONIZATION_HISTOGRAM]),
-            root_histogram_data(total[IONIZATION_HISTOGRAM]),
+            current[IONIZATION_HISTOGRAM]["values"],
+            total[IONIZATION_HISTOGRAM]["values"],
         )
 
-    histograms = combine_root_histograms(source_paths, observe=observe)
+    histograms, metadata = combine_root_histograms(
+        source_paths, observe=observe
+    )
     primary = histograms[PRIMARY_HISTOGRAM]
     primary_events = primary["statistics"]["fEntries"]
     if not np.isclose(primary["values"].sum(), primary_events):
@@ -625,7 +630,7 @@ def gather_root_simulation(
     write_root_histograms(
         run_directory / (simulation + ".root"),
         histograms,
-        combine_root_metadata(source_paths),
+        metadata,
     )
     logger.info(
         "Gathered %i completed %s runs containing %i primary events",
@@ -711,12 +716,14 @@ def gather_simulation(run_directory, entries, simulation):
 
     primary_events = 0
     primary_snapshots = None
+    primary_paths = None
     primary_suffix = "_h1_h1.1.csv"
     if primary_suffix in paths_by_suffix:
         logger.debug("Combining %s primary histogram", simulation)
+        primary_paths = paths_by_suffix.pop(primary_suffix)
         header, columns, total, total_plane_sum, primary_snapshots = (
             combine_histograms(
-                paths_by_suffix.pop(primary_suffix),
+                primary_paths,
                 range(1, len(prefixes) + 1),
             )
         )
@@ -733,6 +740,11 @@ def gather_simulation(run_directory, entries, simulation):
     ionization_suffix = "_h2_h2.ion.csv"
     if ionization_suffix in paths_by_suffix and primary_snapshots is not None:
         logger.debug("Combining %s ionization histogram", simulation)
+        primary_axes = csv_histogram_axes(primary_paths[0])
+        primary_snapshots = {
+            count: table_histogram_values(snapshot, primary_axes, 0)
+            for count, snapshot in primary_snapshots.items()
+        }
         header, columns, total, total_plane_sum, convergence = (
             combine_ionization_histograms(
                 run_directory,

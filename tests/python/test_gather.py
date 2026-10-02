@@ -35,13 +35,15 @@ def write_histogram(
     title="kinetic energy",
     seed_pairs=None,
     annotation=None,
+    axes=(),
 ):
     lines = [
         "#class tools::histo::h1d",
         f"#title {title}",
-        "#dimension 1",
+        "#dimension %i" % (len(axes) or 1),
         f"#planes_Sxyw {plane_sum}",
     ]
+    lines.extend(axes)
     if seed_pairs is not None:
         lines.append("#annotation atris.random_seed_pairs " + seed_pairs)
     if annotation is not None:
@@ -176,14 +178,11 @@ def test_fractional_change_treats_unsampled_cells_as_zero():
 
 
 def test_ionization_response_matches_postprocess_scaling():
-    primary_energy = np.array([[0.0], [2.0], [4.0], [0.0]])
-    ionization = np.zeros((20, 2))
-    ionization[:, 1] = np.arange(20).reshape(5, 4).ravel()
+    primary_energy = np.array([0.0, 2.0, 4.0, 0.0])
+    ionization = np.arange(20).reshape(5, 4).T
     geometry = {"volume/cm3": np.array([2.0, 4.0, 8.0])}
 
-    response = ionization_response(
-        primary_energy, ionization, geometry, detector_count=3
-    )
+    response = ionization_response(primary_energy, ionization, geometry)
 
     np.testing.assert_allclose(response, [[9.0 / 8.0, 10.0 / 16.0]])
 
@@ -195,12 +194,16 @@ def test_convergence_has_one_row_per_chunk_from_two_onward(
     monkeypatch.setattr(
         "atris_tools.gather.process_psf", lambda path: (geometry, 3)
     )
-    primary = np.array([[0.0], [1.0], [1.0], [0.0]])
+    primary = np.array([0.0, 1.0, 1.0, 0.0])
     primary_snapshots = {count: count * primary for count in (1, 2, 3)}
     ionization_paths = []
     for count, value in enumerate((1.0, 3.0, 2.0), start=1):
         path = tmp_path / ("ionization-%i.csv" % count)
-        write_histogram(path, [[0, value, 0, 0, 0]] * 20)
+        write_histogram(
+            path,
+            [[0, value, 0, 0, 0]] * 20,
+            axes=("#axis edges 1 10 100", "#axis edges 0 1 2 3"),
+        )
         ionization_paths.append(path)
 
     _, _, _, _, rows = combine_ionization_histograms(

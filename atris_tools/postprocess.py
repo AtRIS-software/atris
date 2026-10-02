@@ -21,7 +21,6 @@ from .response_histograms import (
     PRIMARY_HISTOGRAM,
     ResponseHistogramReader,
     csv_histogram_path,
-    csv_histogram_axes,
     response_output_format,
 )
 
@@ -49,37 +48,6 @@ def process_psf(filename="simulation.psf"):
         "inn_surface/cm2": inner_surface[order],
     }
     return geometry, data.shape[0]
-
-
-def get_nr_phantoms(simname):
-    with ResponseHistogramReader(simname) as histograms:
-        nrphantoms = histograms.phantom_count()
-    logger.debug("%s output includes %i phantoms", simname, nrphantoms)
-    return nrphantoms
-
-
-def get_histogram_axes(filename):
-    return csv_histogram_axes(filename)
-
-
-def get_energy_edges(simname, histograms=None):
-    if histograms is None:
-        with ResponseHistogramReader(simname) as source:
-            return get_energy_edges(simname, source)
-    edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
-    logger.debug("%s output includes %i energy bins", simname, edges.shape[0] - 1)
-    return edges
-
-
-def read_histogram_data(filename):
-    """Read numeric rows after a variable-length Geant4 CSV header."""
-    with open(filename) as histogram:
-        for line_number, line in enumerate(histogram, start=1):
-            if not line.startswith("#"):
-                return np.atleast_2d(
-                    np.loadtxt(filename, delimiter=",", skiprows=line_number)
-                )
-    raise ValueError("No histogram column header found in " + str(filename))
 
 
 def _read_macro_configuration(filename):
@@ -131,8 +99,8 @@ def _input_output_warnings(simname, histograms):
                 % (simname, macro_path.name, bins_path.name)
             )
         if event_count is not None and not Path("chunks.txt").is_file():
-            primary_energy = histograms.data(PRIMARY_HISTOGRAM)
-            recorded_events = int(np.sum(primary_energy[1:-1, 0]))
+            primary_energy = histograms.values(PRIMARY_HISTOGRAM)
+            recorded_events = int(np.sum(primary_energy[1:-1]))
             if recorded_events != event_count:
                 warnings.append(
                     "%s: %s requests %i events, but %s records %i"
@@ -204,28 +172,11 @@ def process_phantoms(nrphantoms):
     )
 
 
-def read_data(simname, nphant, histograms=None):
-    if histograms is None:
-        with ResponseHistogramReader(simname) as source:
-            return read_data(simname, nphant, source)
-    names = [PRIMARY_HISTOGRAM, "h2.dir", "h2.pos", IONIZATION_HISTOGRAM]
-    for phantom_nr in range(nphant):
-        names.append("h2.dos" + str(phantom_nr))
-        names.append("h2.equi" + str(phantom_nr))
-        names.append("h2.rates" + str(phantom_nr))
-
-    return [histograms.data(name) for name in names]
-
-
-def scale_data(data, nphant, ndet, nenergyedges, phantom_data, geometry):
-    nrparticles = data[0][:, 0]
-    nrparticles = nrparticles[1:-1]
+def scale_data(data, nphant, phantom_data, geometry):
+    nrparticles = data[0][1:-1]
     limit = 1 + nphant * 3
-    shapex = ndet + 2
-    shapey = nenergyedges + 1
     for hist_index in range(3, 3 + limit):
-        new_data = data[hist_index][:, 1].reshape((shapex, shapey))
-        new_data = new_data[1:-1, 1:-1]
+        new_data = data[hist_index][1:-1, 1:-1].T
         data[hist_index] = new_data / nrparticles[None, :]
         if hist_index == 3:
             data[hist_index] = data[hist_index] / geometry["volume/cm3"][:, None]
@@ -273,9 +224,9 @@ def process_run(simname):
     with ResponseHistogramReader(simname) as histograms:
         for warning in _input_output_warnings(simname, histograms):
             logger.warning("%s", warning)
-        geometry, detector_count = process_psf()
+        geometry, _ = process_psf()
         phantom_count = histograms.phantom_count()
-        energy_edges = get_energy_edges(simname, histograms)
+        energy_edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
         phantom_data = process_phantoms(phantom_count)
         logger.info(
             "Post-processing %s %s output with %i energy bins and %i phantoms",
@@ -285,13 +236,17 @@ def process_run(simname):
             phantom_count,
         )
         logger.debug("Reading %s histogram data", simname)
-        data = read_data(simname, phantom_count, histograms)
+        names = [PRIMARY_HISTOGRAM, "h2.dir", "h2.pos", IONIZATION_HISTOGRAM]
+        names += [
+            "h2.%s%i" % (quantity, phantom_nr)
+            for phantom_nr in range(phantom_count)
+            for quantity in ("dos", "equi", "rates")
+        ]
+        data = [histograms.values(name) for name in names]
     logger.debug("Scaling %s response data", simname)
     scaled_data = scale_data(
         data,
         phantom_count,
-        detector_count,
-        energy_edges.shape[0],
         phantom_data,
         geometry,
     )

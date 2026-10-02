@@ -23,8 +23,22 @@ ROOT_STATISTICS = (
 )
 
 
-def read_root_histograms(path):
-    """Read all H1 and H2 objects from a ROOT response file."""
+def _read_metadata(root_file):
+    if "metadata" not in root_file:
+        return None
+    tree = root_file["metadata"]
+    arrays = tree.arrays(library="np")
+    metadata = {}
+    for name in tree.keys():
+        values = np.asarray(arrays[name])
+        if values.dtype.kind == "O":
+            values = np.asarray(values.tolist(), dtype=str)
+        metadata[name] = values
+    return metadata
+
+
+def read_root_file(path):
+    """Read response histograms and optional metadata from one ROOT file."""
     histograms = {}
     with uproot.open(path) as root_file:
         for name, class_name in root_file.classnames(cycle=False).items():
@@ -59,32 +73,12 @@ def read_root_histograms(path):
                     )
                 },
             }
+        metadata = _read_metadata(root_file)
     if PRIMARY_HISTOGRAM not in histograms:
         raise ValueError(
             "%s does not contain %s" % (Path(path).name, PRIMARY_HISTOGRAM)
         )
-    return histograms
-
-
-def _copy_histograms(histograms):
-    return {
-        name: {
-            "class": histogram["class"],
-            "title": histogram["title"],
-            "values": histogram["values"].copy(),
-            "variances": (
-                None
-                if histogram["variances"] is None
-                else histogram["variances"].copy()
-            ),
-            "axes": [
-                {"edges": axis["edges"].copy(), "title": axis["title"]}
-                for axis in histogram["axes"]
-            ],
-            "statistics": histogram["statistics"].copy(),
-        }
-        for name, histogram in histograms.items()
-    }
+    return histograms, metadata
 
 
 def _validate_histograms(reference, current, path):
@@ -112,15 +106,15 @@ def _validate_histograms(reference, current, path):
 
 
 def combine_root_histograms(source_paths, observe=None):
-    """Add compatible ROOT response histograms and their statistics."""
-    reference = read_root_histograms(source_paths[0])
-    total = _copy_histograms(reference)
+    """Add compatible ROOT histograms and concatenate available metadata."""
+    total, metadata = read_root_file(source_paths[0])
+    metadata_records = [] if metadata is None else [metadata]
     if observe is not None:
-        observe(1, reference, total)
+        observe(1, total, total)
 
     for count, path in enumerate(source_paths[1:], start=2):
-        current = read_root_histograms(path)
-        _validate_histograms(reference, current, path)
+        current, metadata = read_root_file(path)
+        _validate_histograms(total, current, path)
         for name, histogram in current.items():
             combined = total[name]
             combined["values"] += histogram["values"]
@@ -128,18 +122,21 @@ def combine_root_histograms(source_paths, observe=None):
                 combined["variances"] += histogram["variances"]
             for statistic, value in histogram["statistics"].items():
                 combined["statistics"][statistic] += value
+        if metadata is not None:
+            metadata_records.append(metadata)
         if observe is not None:
             observe(count, current, total)
-    return total
 
-
-def root_histogram_data(histogram):
-    """Return a ROOT histogram in the table layout used by post-processing."""
-    values = histogram["values"]
-    if values.ndim == 1:
-        return np.column_stack((values, values))
-    sums = values.ravel(order="F")
-    return np.column_stack((np.zeros(sums.size), sums))
+    if not metadata_records:
+        return total, None
+    fields = set.intersection(*(set(record) for record in metadata_records))
+    if not fields:
+        return total, None
+    combined_metadata = {
+        name: np.concatenate([record[name] for record in metadata_records])
+        for name in sorted(fields)
+    }
+    return total, combined_metadata
 
 
 def _root_axis(axis, name):
@@ -181,40 +178,6 @@ def _writable_histogram(histogram):
         fTsumwy2=statistics["fTsumwy2"],
         fTsumwxy=statistics["fTsumwxy"],
     )
-
-
-def read_root_metadata(path):
-    """Read optional AtRIS run metadata without constraining histograms."""
-    with uproot.open(path) as root_file:
-        if "metadata" not in root_file:
-            return None
-        tree = root_file["metadata"]
-        arrays = tree.arrays(library="np")
-        metadata = {}
-        for name in tree.keys():
-            values = np.asarray(arrays[name])
-            if values.dtype.kind == "O":
-                values = np.asarray(values.tolist(), dtype=str)
-            metadata[name] = values
-        return metadata
-
-
-def combine_root_metadata(source_paths):
-    """Concatenate metadata fields shared by the available ROOT chunks."""
-    records = [
-        metadata
-        for path in source_paths
-        if (metadata := read_root_metadata(path)) is not None
-    ]
-    if not records:
-        return None
-    fields = set.intersection(*(set(record) for record in records))
-    if not fields:
-        return None
-    return {
-        name: np.concatenate([record[name] for record in records])
-        for name in sorted(fields)
-    }
 
 
 def write_root_histograms(path, histograms, metadata=None):

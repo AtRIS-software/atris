@@ -71,6 +71,17 @@ def csv_histogram_axes(path):
     return axes
 
 
+def table_histogram_values(table, axes, column=1):
+    """Return a Geant4 CSV bin column in histogram-axis order."""
+    if len(axes) not in (1, 2):
+        raise ValueError("Only one- and two-dimensional histograms are supported")
+    shape = tuple(len(axis) + 1 for axis in axes)
+    values = np.asarray(table[:, column], dtype=float)
+    if values.size != np.prod(shape):
+        raise ValueError("Histogram table size does not match its axes")
+    return values.reshape(shape[::-1]).T
+
+
 class ResponseHistogramReader:
     """Expose equivalent response data from CSV files or one ROOT file."""
 
@@ -131,12 +142,15 @@ class ResponseHistogramReader:
             return [np.asarray(axis.edges()) for axis in histogram.axes]
         return csv_histogram_axes(csv_histogram_path(self.prefix, name))
 
-    def data(self, name):
-        """Return bins in the table layout consumed by post-processing."""
+    def values(self, name):
+        """Return bin values in histogram-axis order, including flow bins."""
         if self.format == "csv":
-            return read_csv_histogram(
-                csv_histogram_path(self.prefix, name)
-            )[2]
+            path = csv_histogram_path(self.prefix, name)
+            table = read_csv_histogram(path)[2]
+            column = 0 if name == PRIMARY_HISTOGRAM else 1
+            return table_histogram_values(
+                table, csv_histogram_axes(path), column
+            )
 
         histogram = self._root()[name]
         values = np.asarray(histogram.values(flow=True), dtype=float)
@@ -149,13 +163,11 @@ class ResponseHistogramReader:
                         "primary counts are unavailable"
                         % (self.prefix.name, PRIMARY_HISTOGRAM)
                     )
-            return np.column_stack((values, values))
-        if len(histogram.axes) == 2:
-            sums = values.ravel(order="F")
-            return np.column_stack((np.zeros(sums.size), sums))
-        raise ValueError(
-            "Unsupported response histogram dimension for " + name
-        )
+        if len(histogram.axes) not in (1, 2):
+            raise ValueError(
+                "Unsupported response histogram dimension for " + name
+            )
+        return values
 
     def phantom_count(self):
         indexes = {

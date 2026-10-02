@@ -8,6 +8,12 @@ import pytest
 import uproot
 
 from atris_tools import postprocess
+from atris_tools.response_histograms import (
+    PRIMARY_HISTOGRAM,
+    ResponseHistogramReader,
+    csv_histogram_axes,
+    read_csv_histogram,
+)
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
@@ -26,7 +32,7 @@ def write_root_response(path):
         root_file["h2.ion"] = (response, energy_edges, detector_edges)
 
 
-def test_get_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
+def test_csv_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
     histogram = tmp_path / "histogram.csv"
     histogram.write_text(
         "#axis edges 1 10 100\n"
@@ -34,13 +40,13 @@ def test_get_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
         "entries,Sw\n"
     )
 
-    axes = postprocess.get_histogram_axes(histogram)
+    axes = csv_histogram_axes(histogram)
 
     np.testing.assert_allclose(axes[0], [1, 10, 100])
     np.testing.assert_allclose(axes[1], [0, 0.5, 1])
 
 
-def test_read_histogram_data_accepts_variable_length_annotations(tmp_path):
+def test_read_csv_histogram_accepts_variable_length_annotations(tmp_path):
     histogram = tmp_path / "histogram.csv"
     histogram.write_text(
         "#class tools::histo::h1d\n"
@@ -50,7 +56,8 @@ def test_read_histogram_data_accepts_variable_length_annotations(tmp_path):
         "2,3.5\n"
     )
 
-    np.testing.assert_allclose(postprocess.read_histogram_data(histogram), [[2, 3.5]])
+    _, _, data = read_csv_histogram(histogram)
+    np.testing.assert_allclose(data, [[2, 3.5]])
 
 
 def test_input_output_warnings_report_mismatched_run_files(tmp_path, monkeypatch):
@@ -203,17 +210,19 @@ def test_postprocess_reads_root_response_histograms(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
 
-    assert postprocess.get_nr_phantoms("protons") == 0
-    np.testing.assert_array_equal(
-        postprocess.get_energy_edges("protons"),
-        [1.0, 10.0, 100.0],
-    )
-    data = postprocess.read_data("protons", 0)
-    np.testing.assert_array_equal(data[0][1:-1, 0], [4.0, 4.0])
-    np.testing.assert_array_equal(
-        data[3][:, 1].reshape(6, 4)[1:-1, 1:-1],
-        np.arange(1.0, 9.0).reshape(2, 4).T,
-    )
+    with ResponseHistogramReader("protons") as histograms:
+        assert histograms.phantom_count() == 0
+        np.testing.assert_array_equal(
+            histograms.axes(PRIMARY_HISTOGRAM)[0],
+            [1.0, 10.0, 100.0],
+        )
+        np.testing.assert_array_equal(
+            histograms.values(PRIMARY_HISTOGRAM)[1:-1], [4.0, 4.0]
+        )
+        np.testing.assert_array_equal(
+            histograms.values("h2.ion")[1:-1, 1:-1],
+            np.arange(1.0, 9.0).reshape(2, 4),
+        )
 
     postprocess.process_run("protons")
 
@@ -226,4 +235,4 @@ def test_postprocess_rejects_ambiguous_response_formats(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(ValueError, match="Both CSV and ROOT"):
-        postprocess.get_energy_edges("protons")
+        ResponseHistogramReader("protons")

@@ -221,15 +221,8 @@ def _add_response_plot(
     axis.figure.colorbar(mesh, ax=axis, label="Response per primary")
 
 
-def _angular_values(histogram, axes):
-    xbins = len(axes[0]) - 1
-    ybins = len(axes[1]) - 1
-    values = histogram[:, 1].reshape((ybins + 2, xbins + 2))
-    return values[1:-1, 1:-1]
-
-
 def _add_angular_plot(axis, histogram, axes, title):
-    values = _angular_values(histogram, axes)
+    values = histogram[1:-1, 1:-1].T
     mesh = axis.pcolormesh(
         axes[0],
         axes[1],
@@ -260,7 +253,7 @@ def _save_generic_plot(
 ):
     figure, axes = plt.subplots(ncols=2, nrows=2, figsize=(12, 10))
 
-    primary_counts = primary_energy[1:-1, 0]
+    primary_counts = primary_energy[1:-1]
     axes[0, 0].stairs(
         primary_counts,
         energy_edges,
@@ -494,9 +487,9 @@ def plot_run(simname):
             with ResponseHistogramReader(simname) as histograms:
                 direction_axes = histograms.axes("h2.dir")
                 position_axes = histograms.axes("h2.pos")
-                primary_energy = histograms.data(PRIMARY_HISTOGRAM)
-                direction = histograms.data("h2.dir")
-                position = histograms.data("h2.pos")
+                primary_energy = histograms.values(PRIMARY_HISTOGRAM)
+                direction = histograms.values("h2.dir")
+                position = histograms.values("h2.pos")
             detector_ids, ionization = _read_response(simname + ".ioni")
             filename = simname + ".png"
             _save_generic_plot(
