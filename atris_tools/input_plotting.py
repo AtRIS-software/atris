@@ -9,6 +9,7 @@ from matplotlib.colors import LogNorm
 import numpy as np
 
 from .phantoms import read_phantoms
+from .psf import read_psf_layers
 
 
 PHANTOM_ENERGY_EDGES_MEV = 10.0 ** np.linspace(-6.0, 7.0, 651)
@@ -463,15 +464,77 @@ def _plot_shell_profiles(
     )
 
 
+def _plot_composition(axis, layers, edges, model_edges):
+    mark_model_regions(axis, model_edges)
+    elements = sorted(
+        {
+            element
+            for layer in layers
+            for element in layer["fractions"]
+        },
+        key=element_sort_key,
+    )
+    for element in elements:
+        fractions = np.array(
+            [layer["fractions"].get(element, 0.0) for layer in layers]
+        )
+        fractions[fractions < MASS_FRACTION_PLOT_MINIMUM] = np.nan
+        axis.stairs(
+            fractions,
+            edges,
+            orientation="horizontal",
+            label=element_label(element),
+        )
+    axis.tick_params(axis="y", labelleft=False)
+    axis.set_xlabel(
+        "Mass fraction (values below %.0e omitted)" % MASS_FRACTION_PLOT_MINIMUM
+    )
+    axis.set_xscale("log")
+    axis.minorticks_on()
+    axis.legend()
+    axis.grid(alpha=0.25)
+
+
+def _plot_geometry_panels(shell_axis, composition_axis, layers):
+    radius = surface_radius(layers)
+    model_edges = model_shell_edges(layers)
+    _, _, edges = shell_coordinates(layers, reference_radius=radius)
+    temperature_axis = shell_axis.twiny()
+
+    _plot_shell_profiles(
+        shell_axis,
+        temperature_axis,
+        [layer["density"] for layer in layers],
+        [layer["pressure"] for layer in layers],
+        [layer["temperature"] for layer in layers],
+        edges,
+        model_edges,
+    )
+    _plot_composition(composition_axis, layers, edges, model_edges)
+
+
+def plot_psf_inputs(filename="simulation.psf"):
+    """Plot the planetary layers defined by a PSF file."""
+    path = Path(filename)
+    layers = read_psf_layers(path)
+    figure, axes = plt.subplots(
+        ncols=2,
+        figsize=(12, 10),
+        sharey=True,
+    )
+    figure.suptitle("Planet specification inputs")
+    _plot_geometry_panels(axes[0], axes[1], layers)
+    figure.tight_layout()
+    output_path = path.with_suffix(".inputs.png")
+    figure.savefig(output_path)
+    plt.close(figure)
+    return output_path.name
+
+
 def plot_species_inputs(simname):
     settings, energy_points = read_macro(simname + ".mac")
     energy_bins = np.atleast_1d(np.loadtxt(simname + ".bins"))
     geometry_layers = read_layers(simname + ".gdml")
-    radius = surface_radius(geometry_layers)
-    model_edges = model_shell_edges(geometry_layers)
-    _, _, edges = shell_coordinates(
-        geometry_layers, reference_radius=radius
-    )
 
     figure = plt.figure(figsize=(18, 10))
     grid = figure.add_gridspec(ncols=3, nrows=2)
@@ -479,7 +542,6 @@ def plot_species_inputs(simname):
     composition_axis = figure.add_subplot(grid[:, 1], sharey=shell_axis)
     settings_axis = figure.add_subplot(grid[0, 2])
     energy_axis = figure.add_subplot(grid[1, 2])
-    temperature_axis = shell_axis.twiny()
     species = simname.capitalize()
     figure.suptitle(species + " simulation inputs")
 
@@ -500,47 +562,7 @@ def plot_species_inputs(simname):
     energy_axis.minorticks_on()
     energy_axis.grid(alpha=0.25)
 
-    _plot_shell_profiles(
-        shell_axis,
-        temperature_axis,
-        [layer["density"] for layer in geometry_layers],
-        [layer["pressure"] for layer in geometry_layers],
-        [layer["temperature"] for layer in geometry_layers],
-        edges,
-        model_edges,
-    )
-
-    elements = sorted(
-        {
-            element
-            for layer in geometry_layers
-            for element in layer["fractions"]
-        },
-        key=element_sort_key,
-    )
-    mark_model_regions(composition_axis, model_edges)
-    for element in elements:
-        fractions = np.array(
-            [
-                layer["fractions"].get(element, 0.0)
-                for layer in geometry_layers
-            ]
-        )
-        fractions[fractions < MASS_FRACTION_PLOT_MINIMUM] = np.nan
-        composition_axis.stairs(
-            fractions,
-            edges,
-            orientation="horizontal",
-            label=element_label(element),
-        )
-    composition_axis.tick_params(axis="y", labelleft=False)
-    composition_axis.set_xlabel(
-        "Mass fraction (values below %.0e omitted)" % MASS_FRACTION_PLOT_MINIMUM
-    )
-    composition_axis.set_xscale("log")
-    composition_axis.minorticks_on()
-    composition_axis.legend()
-    composition_axis.grid(alpha=0.25)
+    _plot_geometry_panels(shell_axis, composition_axis, geometry_layers)
 
     settings_axis.axis("off")
     settings_axis.set_title("Source and run settings")
@@ -682,6 +704,13 @@ def plot_inputs():
                 filenames.append(plot_species_inputs(simname))
             except Exception as error:
                 errors.append("%s inputs: %s" % (simname, error))
+
+    psf_path = Path("simulation.psf")
+    if psf_path.is_file():
+        try:
+            filenames.append(plot_psf_inputs(psf_path))
+        except Exception as error:
+            errors.append("simulation PSF: %s" % error)
 
     try:
         metadata = {

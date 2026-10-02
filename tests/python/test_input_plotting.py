@@ -245,6 +245,47 @@ def test_plot_inputs_writes_species_and_phantom_pngs(
         assert (tmp_path / filename).read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
+PSF = """\
+H1000 H
+0 1 0 6.283185 0 3.141593 0 293 2.7 101325 1 0
+1 2 0 6.283185 0 3.141593 1 293 2.7 101325 1 0
+2 3 0 6.283185 0 3.141593 2 250 0.001 50000 0 1
+3.001 3.021 0 6.283185 0 3.141593 3 293 2.7 101325 1 0
+"""
+
+
+def test_plot_inputs_writes_planet_specification_without_species_inputs(
+    tmp_path, monkeypatch
+):
+    (tmp_path / "simulation.psf").write_text(PSF)
+    monkeypatch.chdir(tmp_path)
+
+    filenames, errors = input_plotting.plot_inputs()
+
+    assert filenames == ["simulation.inputs.png"]
+    assert errors == []
+    assert (tmp_path / "simulation.inputs.png").read_bytes().startswith(
+        b"\x89PNG\r\n\x1a\n"
+    )
+
+
+def test_plot_inputs_writes_planet_specification_alongside_species_inputs(
+    tmp_path, monkeypatch, gdml_text
+):
+    prepare_inputs(tmp_path, gdml_text)
+    (tmp_path / "simulation.psf").write_text(PSF)
+    monkeypatch.chdir(tmp_path)
+
+    filenames, errors = input_plotting.plot_inputs()
+
+    assert filenames == [
+        "protons.inputs.png",
+        "simulation.inputs.png",
+        "phantom.test-phantom.inputs.png",
+    ]
+    assert errors == []
+
+
 def test_plot_inputs_reports_missing_phantom_pair_but_keeps_species_plot(
     tmp_path, monkeypatch, gdml_text
 ):
