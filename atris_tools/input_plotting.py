@@ -495,35 +495,29 @@ def _plot_composition(axis, layers, edges, model_edges):
     axis.grid(alpha=0.25)
 
 
-def _plot_geometry_panels(shell_axis, composition_axis, layers):
-    radius = surface_radius(layers)
-    model_edges = model_shell_edges(layers)
-    _, _, edges = shell_coordinates(layers, reference_radius=radius)
-    temperature_axis = shell_axis.twiny()
-
-    _plot_shell_profiles(
-        shell_axis,
-        temperature_axis,
-        [layer["density"] for layer in layers],
-        [layer["pressure"] for layer in layers],
-        [layer["temperature"] for layer in layers],
-        edges,
-        model_edges,
-    )
-    _plot_composition(composition_axis, layers, edges, model_edges)
-
-
 def plot_psf_inputs(filename="simulation.psf"):
     """Plot the planetary layers defined by a PSF file."""
     path = Path(filename)
     layers = read_psf_layers(path)
+    radius = surface_radius(layers)
+    model_edges = model_shell_edges(layers)
+    _, _, edges = shell_coordinates(layers, reference_radius=radius)
     figure, axes = plt.subplots(
         ncols=2,
         figsize=(12, 10),
         sharey=True,
     )
     figure.suptitle("Planet specification inputs")
-    _plot_geometry_panels(axes[0], axes[1], layers)
+    _plot_shell_profiles(
+        axes[0],
+        axes[0].twiny(),
+        [layer["density"] for layer in layers],
+        [layer["pressure"] for layer in layers],
+        [layer["temperature"] for layer in layers],
+        edges,
+        model_edges,
+    )
+    _plot_composition(axes[1], layers, edges, model_edges)
     figure.tight_layout()
     output_path = path.with_suffix(".inputs.png")
     figure.savefig(output_path)
@@ -536,12 +530,10 @@ def plot_species_inputs(simname):
     energy_bins = np.atleast_1d(np.loadtxt(simname + ".bins"))
     geometry_layers = read_layers(simname + ".gdml")
 
-    figure = plt.figure(figsize=(18, 10))
-    grid = figure.add_gridspec(ncols=3, nrows=2)
-    shell_axis = figure.add_subplot(grid[:, 0])
-    composition_axis = figure.add_subplot(grid[:, 1], sharey=shell_axis)
-    settings_axis = figure.add_subplot(grid[0, 2])
-    energy_axis = figure.add_subplot(grid[1, 2])
+    figure, (settings_axis, energy_axis) = plt.subplots(
+        ncols=2,
+        figsize=(14, 6),
+    )
     species = simname.capitalize()
     figure.suptitle(species + " simulation inputs")
 
@@ -561,8 +553,6 @@ def plot_species_inputs(simname):
     energy_axis.set_xscale("log")
     energy_axis.minorticks_on()
     energy_axis.grid(alpha=0.25)
-
-    _plot_geometry_panels(shell_axis, composition_axis, geometry_layers)
 
     settings_axis.axis("off")
     settings_axis.set_title("Source and run settings")
