@@ -95,7 +95,7 @@ void HistoManager::Book()
 	G4int    dir_nbiny = 60 ;
 	G4double dir_vminx = 0.;
 	G4double dir_vmaxx = twopi;
-	G4double dir_vminy = 0.;
+	G4double dir_vminy = -1.;
 	G4double dir_vmaxy = 1.;
 	id = analysis->CreateH2("h2.dir", "Primary source direction",
 				dir_nbinx,dir_vminx,dir_vmaxx,dir_nbiny,dir_vminy,dir_vmaxy);
@@ -114,7 +114,7 @@ void HistoManager::Book()
 	G4int    pos_nbiny = 60 ;
 	G4double pos_vminx = 0.;
 	G4double pos_vmaxx = twopi;
-	G4double pos_vminy = 0.;
+	G4double pos_vminy = -1.;
 	G4double pos_vmaxy = 1.;
 	id = analysis->CreateH2("h2.pos", "Primary source position",
 				pos_nbinx,pos_vminx,pos_vmaxx,pos_nbiny,pos_vminy,pos_vmaxy);

@@ -238,6 +238,47 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
         total_deposition = histograms.values("h2.edep")
         ionization = histograms.values("h2.ion")
         assert np.all(total_deposition + 1e-12 >= ionization)
+        for name in ("h2.dir", "h2.pos"):
+            np.testing.assert_allclose(
+                histograms.axes(name)[1][[0, -1]],
+                [-1.0, 1.0],
+            )
+            values = histograms.values(name)
+            assert values.sum() == values[1:-1, 1:-1].sum() == 2
+
+
+@pytest.mark.regression
+def test_spherical_source_populates_both_angular_hemispheres(
+    tmp_path, atris_command
+):
+    # MixMax u in (0, 1] makes GPS cos(theta) = 1 - 2u span [-1, 1),
+    # exactly matching the histogram's inclusive-lower/exclusive-upper range.
+    prepare_run(tmp_path)
+    (tmp_path / "protons.mac").write_text(
+        "/run/initialize\n"
+        "/gps/particle proton\n"
+        "/gps/ene/mono 10 MeV\n"
+        "/gps/pos/type Surface\n"
+        "/gps/pos/shape Sphere\n"
+        "/gps/pos/centre 0 0 0 mm\n"
+        "/gps/pos/radius 3 km\n"
+        "/gps/ang/type cos\n"
+        "/gps/ang/mintheta 0 deg\n"
+        "/gps/ang/maxtheta 90 deg\n"
+        "/random/setSeeds 123456 654321\n"
+        "/run/beamOn 100\n"
+    )
+
+    result = run_atris(atris_command, tmp_path, "protons")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    with ResponseHistogramReader(tmp_path / "protons") as histograms:
+        for name in ("h2.dir", "h2.pos"):
+            values = histograms.values(name)
+            interior = values[1:-1, 1:-1]
+            assert values.sum() == interior.sum() == 100
+            assert interior[:, :30].sum() > 0
+            assert interior[:, 30:].sum() > 0
 
 
 @pytest.mark.regression
