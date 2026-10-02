@@ -5,8 +5,8 @@ This document covers the work done once for a machine or compiler environment:
 1. install the build requirements;
 2. build Geant4;
 3. build AtRIS;
-4. confirm that the executable and Geant4 runtime are present;
-5. install the Python tools.
+4. install the Python tools;
+5. check the installation.
 
 The steps repeated for each shell session and simulation are in the
 [running instructions](docs/running-atris/index.md).
@@ -160,19 +160,6 @@ cmake -B build
 cmake --build build -j
 ```
 
-Run the executable without simulation arguments to print its expected argument
-form:
-
-```bash
-./build/AtRIS
-```
-
-The expected output is:
-
-```text
-Usage: ./build/AtRIS <physics-list> <simulation-name> <mode> <phantom-count>
-```
-
 ### Install the Python tools
 
 From `<ATRIS_WORK>/atris`, install the Python package with its plotting
@@ -185,6 +172,12 @@ pip install --editable ".[plot]"
 This makes the AtRIS commands available in the current Python environment.
 Because of the `--editable` flag, source changes take effect without
 reinstalling the package.
+
+Check the executable and Python-tool versions:
+
+```bash
+atris-run --version
+```
 
 At this point installation is complete. Continue with the
 [running instructions](docs/running-atris/index.md) to prepare and execute a simulation.

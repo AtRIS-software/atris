@@ -131,6 +131,12 @@ same notation works in notebook Markdown cells. Define symbols and connect
 them to code variable names where useful. Keep executable Python, shell
 commands, and literal file contents in code blocks.
 
+## AtRIS command names
+
+Use the `atris-` commands in tutorials and running instructions, including
+installation checks. Keep legacy aliases, direct executable invocations, and
+Python-module command alternatives in Reference.
+
 ## Workflow navigation
 
 Label links “Previous step” or “Next step” only for actions that actually

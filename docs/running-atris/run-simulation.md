@@ -43,9 +43,9 @@ use your environment's instructions to launch the remaining plan:
 Keep the same inputs, plan, physics list, and output mode. Completed chunks
 are skipped and remain available for the next gather.
 
-If the physical setup or chunk size needs changing, prepare a fresh run
-directory instead of modifying inputs beneath existing outputs. You can stop
-here if the first results show that this calculation is not useful.
+If the first results suggest changes, revise the setup before continuing.
+[Review which existing outputs still apply](process-results.md#decide-whether-to-continue)
+when reusing the run directory.
 
 Continue gathering and inspecting while more chunks run. Once you intend the
 whole plan to be finished, use `atris-run . --check-complete` to verify it.

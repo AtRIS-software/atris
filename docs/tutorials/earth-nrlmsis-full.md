@@ -64,6 +64,15 @@ Convert the PSF to the Geant4 geometry `simulation.gdml`:
 atris-psf-to-gdml simulation.psf
 ```
 
+## Prepare the phantom inputs
+
+Copy and stage the example's two-phantom selection:
+
+```bash
+cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/phantoms.txt" .
+atris-stage-phantoms .
+```
+
 ## Prepare the particle inputs
 
 Generate inputs with the default energy grid and particle counts. The values
@@ -84,15 +93,6 @@ These are the `atris-generate-macros` defaults except for `--random-seed 12345`;
 omitting that option generates new random seeds. With 121 energy points, AtRIS
 will process 363,000 proton events (`121 x 3000`) and 239,580 alpha events
 (`121 x int(3000 x 0.66)`).
-
-## Prepare the phantom inputs
-
-Copy and stage the example's two-phantom selection:
-
-```bash
-cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/phantoms.txt" .
-atris-stage-phantoms .
-```
 
 ## Physics choices and execution
 

@@ -62,9 +62,12 @@ Creation refuses an existing plan, an existing chunk macro, or a nonempty
 
 `--extend N` appends `N` entries per species with new unique seed pairs. It
 preserves the existing chunk macros and their event counts. The plan is
-replaced atomically after writing the appended version. Stop workers before
-extending, since workers read their plan once at startup. Changing geometry,
-physics, spectra, phantom selection, or per-chunk size requires a separate run.
+replaced atomically after writing the appended version. Active workers keep
+using the plan they read at startup; newly appended entries become available
+to subsequent runner invocations. Extension does not
+revise the physical inputs or rerun completed entries. When changing the setup,
+[account for existing outputs](../running-atris/process-results.md#decide-whether-to-continue)
+before gathering old and new chunks together.
 
 For choosing chunk size, see [Plan chunks and restarts](../running-atris/plan-chunks.md#choose-a-practical-chunk-size).
 

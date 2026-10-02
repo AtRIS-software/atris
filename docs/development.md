@@ -41,6 +41,24 @@ macro generation, chunk management, numerical post-processing, and plotting.
 The C++ executable remains the scientific simulation core; the Python package
 prepares its inputs and manages the surrounding workflow.
 
+## Simulation preparation interface
+
+Physics-list and output-mode choices currently reach the simulation through
+`atris-run` arguments. This splits the simulation definition between preparation
+and launch, leaving users to repeat those choices when starting or resuming a
+job.
+
+A future revision should move these choices into the input-generation step,
+save them with the prepared inputs, and have the runner read them from there.
+Thread counts, worker assignments, and scheduler limits would remain execution
+settings.
+
+The name `atris-generate-macros` also needs reconsideration. The command already
+prepares geometry copies and energy bins as well as macros, and would then
+define more of the simulation configuration. Its name should describe preparing
+simulation inputs rather than generating one particular file format. The
+replacement name and configuration format are still to be decided.
+
 ## Simulation output
 
 The simulation filename selects Geant4's analysis backend; CSV is the default

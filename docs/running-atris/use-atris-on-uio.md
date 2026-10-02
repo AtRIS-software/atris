@@ -331,15 +331,6 @@ The first command creates a `build` directory and configures it from the
 checkout's `CMakeLists.txt`. The second compiles the program. AtRIS is a small
 build and does not need a parallel-build option.
 
-Check the compiled executable:
-
-```bash
-./build/AtRIS --version
-```
-
-`./` means “from the current directory”. The command should print an AtRIS
-version rather than `command not found`.
-
 ### Install the Python tools
 
 AtRIS also contains Python commands for preparing, running, processing, and

@@ -2,7 +2,7 @@
 
 **Next step:** [Plan chunks and restarts](plan-chunks.md).
 
-Prepare the planetary model, source sampling, and optional phantom responses
+Prepare the planetary model, optional phantom responses, and particle sampling
 before setting up the job. The same inputs can then run locally, on a server,
 or on an HPC system. AtRIS and its Python tools must already be
 [installed](installation.md).
@@ -49,6 +49,32 @@ atris-psf-to-gdml simulation.psf
 This creates `simulation.gdml`, the geometry and material description read by
 Geant4. Keep the PSF: post-processing also uses its layer geometry.
 
+## Optionally select phantoms
+
+Skip this step if you only need atmospheric transport and ionizing energy
+deposition. For phantom responses, create `phantoms.txt` in the run directory,
+listing the selected table stems and their masses and areas. Choose the
+material, detector, and shielding appropriate to your observable from the
+[phantom library](../reference/phantom-library.md). The
+[selection-file reference](../reference/inputs.md#phantom-selection) gives the
+row format and ID convention.
+
+Once that file is ready, stage its tables:
+
+```bash
+atris-stage-phantoms . --copy
+```
+
+This copies the selected named tables into the run directory and creates the
+numbered links expected by AtRIS. Keeping the targets local lets you transfer
+the whole directory to another machine. The runner reads the selection from
+`phantoms.txt`.
+
+The phantom tables define the response accumulated during particle transport.
+Changing them later does not change the response already recorded in the
+histograms, so select them as part of the physical setup before preparing the
+particle sampling.
+
 ## Prepare particle inputs
 
 The standard macro generator prepares separate proton and alpha simulations.
@@ -79,26 +105,12 @@ your study requires a different source position or angular distribution; the
 [macro-generator reference](../reference/commands/atris-generate-macros.md)
 describes the supported options.
 
-## Optionally select phantoms
-
-Skip this step if you only need atmospheric transport and ionizing energy
-deposition. For phantom responses, create `phantoms.txt` in the run directory,
-listing the selected table stems and their masses and areas. Choose the
-material, detector, and shielding appropriate to your observable from the
-[phantom library](../reference/phantom-library.md). The
-[selection-file reference](../reference/inputs.md#phantom-selection) gives the
-row format and ID convention.
-
-Once that file is ready, stage its tables:
-
-```bash
-atris-stage-phantoms . --copy
-```
-
-This copies the selected named tables into the run directory and creates the
-numbered links expected by AtRIS. Keeping the targets local lets you transfer
-the whole directory to another machine. The runner reads the selection from
-`phantoms.txt`.
+Additional macro batches can sample more particles for the same physical setup.
+For example, batches with different event counts and independent random seeds
+can contribute to the same result when their geometry, physics, phantom
+responses, source distribution, and histogram bins agree. Combine their raw
+histograms and [normalize by the combined primary counts](../background/normalization-and-uncertainty.md#gather-raw-sums-before-normalization).
+For more sampling with the existing macros, use [chunk extension](plan-chunks.md#extend-a-run).
 
 ## Record physics and output choices
 

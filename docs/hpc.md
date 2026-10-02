@@ -60,8 +60,9 @@ completion check before this inspection.
 ## Submit a prepared simulation with Slurm
 
 After deciding to continue, use the worker-pool script below to run the remaining
-plan. It retains and skips the chunks already completed. If the inputs or chunk
-size need changing instead, prepare a fresh run directory before submitting.
+plan. It retains and skips the chunks already completed. If you revise the
+setup first, [check which existing outputs still apply](running-atris/process-results.md#decide-whether-to-continue)
+before submitting.
 
 Work on the login node in the prepared run directory, with the AtRIS and
 Geant4 environment loaded. Copy the submission template:
@@ -258,11 +259,13 @@ final successful allocation instead.
 
 ## Extend an unconverged run
 
-After the worker allocation has exited, [extend the chunk plan](running-atris/plan-chunks.md#extend-a-run)
-and submit the same simulation script again. The workers skip completed entries
-and run the added chunks. Choose the extension count with this page's node-count
-convention in mind. If final processing was submitted with a dependency, attach
-it to the new simulation job ID.
+[Extend the chunk plan](running-atris/plan-chunks.md#extend-a-run) to add more
+samples. This can be done while the current allocation runs; its workers finish
+their existing assignments. After that allocation exits, submit the same
+simulation script again to pick up the added chunks and any other unfinished
+entries. Choose the extension count with this page's node-count convention in
+mind. If final processing was submitted with a dependency, attach it to the new
+simulation job ID.
 
 ## Failure and recovery reference
 

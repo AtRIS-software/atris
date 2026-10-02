@@ -25,12 +25,16 @@ same for local, server/workstation, and HPC jobs.
 
 ```mermaid
 flowchart TD
-    B["simulation.psf: primary model input"]
-    B -->|atris-psf-to-gdml| C["simulation.gdml"]
-    B --> D["atris-generate-macros"]
+    subgraph Physical["Physical setup"]
+        B["simulation.psf: primary model input"]
+        B -->|atris-psf-to-gdml| C["simulation.gdml"]
+        F["Optional: phantoms.txt + response library"] -->|atris-stage-phantoms| G["Numbered phantom files"]
+    end
+    subgraph Sampling["Particle sampling"]
+        D["atris-generate-macros"] --> E["Species .gdml, .mac, .bins"]
+    end
+    B --> D
     C --> D
-    D --> E["Species .gdml, .mac, .bins"]
-    F["Optional: phantoms.txt + response library"] -->|atris-stage-phantoms| G["Numbered phantom files"]
     E --> S["atris-scatter: chunk plan"]
     S --> H["atris-run: execute chunks"]
     G -. optional .-> H
@@ -82,7 +86,7 @@ workflow-first/
     simulation.psf
 ```
 
-Phantoms are optional; step 5 shows how to add their response tables.
+Phantoms are optional; step 4 shows how to add their response tables.
 
 ## 2. Inspect the primary model
 
@@ -122,40 +126,7 @@ simulation.gdml
 
 No particles have been simulated yet.
 
-## 4. Prepare separate proton and alpha inputs
-
-```bash
-atris-generate-macros . \
-  --particles-per-bin 3000 \
-  --alpha-factor 0.66 \
-  --energy-min-power 0 \
-  --energy-max-power 6 \
-  --energy-points 121 \
-  --random-seed 12345
-```
-
-| Reads | Creates |
-| --- | --- |
-| `simulation.psf`, `simulation.gdml` | `protons.gdml`, `protons.mac`, `protons.bins` |
-| The same model | `alphas.gdml`, `alphas.mac`, `alphas.bins` |
-
-Each species needs three files:
-
-| Extension | Role in the simulation |
-| --- | --- |
-| `.gdml` | Geometry. These are copies of `simulation.gdml`, so both species use the same atmosphere. |
-| `.mac` | Commands to Geant4: primary species, source surface, energy sampling, seeds, and number of events. |
-| `.bins` | Primary kinetic-energy bin edges used to organize the histograms. |
-
-This example requests 363,000 proton events and 239,580 alpha events. Its 121
-energy edges span 1–1,000,000 MeV for protons and 4–4,000,000 MeV for alphas. Despite the option
-name, the generator multiplies `--particles-per-bin` by the number of **energy
-points**, not intervals; see [the exact convention](../reference/inputs.md#energy-bins-and-macros).
-
-The leading names `protons` and `alphas` tie each set together. Later, passing
-`protons` to AtRIS makes it read all three `protons.*` inputs.
-
-## 5. Optionally add phantom response matrices
+## 4. Optionally add phantom response matrices
 
 Skip this step to run without phantom responses. Atmospheric transport, source
 diagnostics, and ionizing energy deposition are available without phantoms.
@@ -199,6 +170,41 @@ moved. Without `--copy`, the numbered links may point back to the shared library
 
 The response tables describe how crossing particles contribute to phantom
 responses. They are not additional physical volumes added to the GDML.
+Their coefficients are applied during transport, so the recorded response
+histograms are tied to this phantom selection.
+
+## 5. Prepare separate proton and alpha inputs
+
+```bash
+atris-generate-macros . \
+  --particles-per-bin 3000 \
+  --alpha-factor 0.66 \
+  --energy-min-power 0 \
+  --energy-max-power 6 \
+  --energy-points 121 \
+  --random-seed 12345
+```
+
+| Reads | Creates |
+| --- | --- |
+| `simulation.psf`, `simulation.gdml` | `protons.gdml`, `protons.mac`, `protons.bins` |
+| The same model | `alphas.gdml`, `alphas.mac`, `alphas.bins` |
+
+Each species needs three files:
+
+| Extension | Role in the simulation |
+| --- | --- |
+| `.gdml` | Geometry. These are copies of `simulation.gdml`, so both species use the same atmosphere. |
+| `.mac` | Commands to Geant4: primary species, source surface, energy sampling, seeds, and number of events. |
+| `.bins` | Primary kinetic-energy bin edges used to organize the histograms. |
+
+This example requests 363,000 proton events and 239,580 alpha events. Its 121
+energy edges span 1–1,000,000 MeV for protons and 4–4,000,000 MeV for alphas. Despite the option
+name, the generator multiplies `--particles-per-bin` by the number of **energy
+points**, not intervals; see [the exact convention](../reference/inputs.md#energy-bins-and-macros).
+
+The leading names `protons` and `alphas` tie each set together. Later, passing
+`protons` to AtRIS makes it read all three `protons.*` inputs.
 
 ## 6. Plan and run chunks
 
@@ -222,8 +228,6 @@ These small chunks let us try the full model without running the entire plan.
 Runtime still depends on the sampled particles and the machine. For longer
 runs, use the measured runtime to assess
 [the chunk-size tradeoff](../running-atris/plan-chunks.md#choose-a-practical-chunk-size).
-Create this plan only once; if the directory already has a plan, use its entries
-and chunk sizes instead.
 
 Run the first proton chunk and the first alpha chunk:
 
@@ -322,7 +326,7 @@ atris-plot .
 | Processed response tables, raw diagnostic histograms, species geometry and energy axes | Species result PNGs, plus one result PNG per selected phantom/species |
 
 The two species PNGs below are available without phantoms; the phantom PNGs
-are added when step 5 was followed:
+are added when step 4 was followed:
 
 ```text
 protons.inputs.png                       # source and atmosphere inputs
@@ -344,9 +348,9 @@ Check that they reflect the intended atmosphere, source, and phantoms, and use
 the chunk logs and output sizes to assess the cost of the remaining run. See
 [what to check](../running-atris/process-results.md#decide-whether-to-continue).
 
-If the setup needs changes, prepare a fresh run directory with revised inputs.
-If it is not worth pursuing, leave the remaining plan unrun. If the setup looks
-right, process all remaining entries using the same inputs and settings:
+Use the first results to decide whether to revise the setup or continue.
+If the setup looks right, process all remaining entries using the same inputs
+and settings:
 
 ```bash
 atris-run . --physics-list FTFP_BERT_HP --mode response
@@ -383,5 +387,6 @@ post-processing without rerunning the simulation.
 Processed tables and PNGs can be regenerated when their inputs are intact.
 For chunked runs, retain the plan, shared chunk macros, chunk outputs, and
 completion markers if you want to resume, extend, or rebuild the aggregate.
-Changing an upstream input does not automatically refresh any downstream file:
-prepare a fresh run for a changed model or simulation configuration.
+Changing an upstream input does not automatically refresh downstream files.
+When revising the setup in place, account for existing outputs and completion
+markers as described in [Decide whether to continue](../running-atris/process-results.md#decide-whether-to-continue).

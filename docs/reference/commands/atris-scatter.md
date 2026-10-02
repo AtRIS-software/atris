@@ -3,8 +3,8 @@
 Create or extend a plan of independently seeded proton and alpha chunks.
 
 ```bash
-atris-scatter . --chunks 20 --random-seed 42
-atris-scatter . --extend 10 --random-seed 43
+atris-scatter . --chunks 3000 --random-seed 42
+atris-scatter . --extend 3000 --random-seed 43
 ```
 
 The directory defaults to `.`. Exactly one of `--chunks` and `--extend` is

@@ -15,8 +15,8 @@ files-through-workflow
 ## Prepare model inputs
 
 [Prepare an Earth atmosphere simulation](earth-nrlmsis-full.md) uses supplied
-Earth atmosphere data and prepares the geometry, particle inputs, and optional
-phantom responses. The workflow tutorial below runs a few chunks of this model.
+Earth atmosphere data and prepares the geometry, optional phantom responses,
+and particle inputs. The workflow tutorial below runs a few chunks of this model.
 
 [Create an exoplanet PSF](exoplanet-psf.ipynb) builds a simple atmosphere with
 NumPy, plots its profiles, and writes the primary model input. This is a Jupyter

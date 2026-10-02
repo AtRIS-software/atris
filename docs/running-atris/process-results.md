@@ -75,15 +75,15 @@ Review the first plots and logs before launching the remaining plan:
   calculation practical? Include initialization and writing in that timing.
 
 If the setup looks right, [continue the existing plan](run-simulation.md#continue-the-run).
-The initial chunks already contribute to the calculation; do not scatter again
-or repeat completed work. Sparse early results are expected and need more
-sampling before scientific interpretation.
+The initial chunks already contribute to the calculation, and the runner skips
+them when it resumes. More chunks fill out the sampling and improve the statistics.
 
-If the model, source, phantoms, physics, output mode, or chunk size needs
-changing, stop any active runners and [prepare a fresh run directory](prepare-simulation.md).
-Keep the old inputs and results together so outputs from different setups are
-not mixed. If the first results show that the run is not worth pursuing, leave
-the remaining chunks unrun.
+The first results may suggest changes to the setup before continuing. You can
+revise it in the same directory or use another directory if you want to retain
+the earlier run. Changing inputs does not automatically invalidate old chunk
+outputs, completion markers, or gathered results; those still represent the
+earlier setup. Account for that when rerunning and gathering so incompatible
+results are not combined.
 
 Completing a plan and reaching adequate statistics are separate decisions.
 Continue inspecting the accumulating results and assess convergence for the
@@ -91,9 +91,10 @@ quantities you need.
 
 ## Need more statistics?
 
-[Extend the chunk plan](plan-chunks.md#extend-a-run) after stopping the runners,
-then resume with the same execution method. Gather and inspect each new
-completed batch. Changing the model, source, or physics requires a separate run.
+[Extend the chunk plan](plan-chunks.md#extend-a-run) to add more samples.
+Active runners finish their existing assignments; subsequent invocations pick
+up the added chunks. Gather and inspect each new completed batch. Extension adds sampling to the existing setup; for changes to
+the setup, see [the considerations above](#decide-whether-to-continue).
 
 For submitting processing through Slurm, see
 [Process results in a Slurm job](../hpc.md#process-results-in-a-slurm-job).

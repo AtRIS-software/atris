@@ -35,7 +35,8 @@ and Geant4; it does not select a planetary model or create simulation inputs.
 ## Prepare, run, and inspect
 
 1. [Prepare the simulation](prepare-simulation.md): supply `simulation.psf`,
-   generate species inputs, optionally select phantoms, and record the physics.
+   convert the geometry, stage any phantoms, prepare particle inputs, and record
+   the physics.
 2. [Plan chunks and restarts](plan-chunks.md): divide the requested events and
    choose a practical balance between startup overhead and recovery time.
 3. [Run a few chunks](run-simulation.md): execute selected plan entries locally,
@@ -43,7 +44,7 @@ and Geant4; it does not select a planetary model or create simulation inputs.
 4. [Gather and inspect](process-results.md): normalize the completed responses,
    plot the inputs and results, and assess runtime.
 5. [Decide whether to continue](process-results.md#decide-whether-to-continue):
-   launch the remaining plan if the setup looks right. If inputs need changing,
-   prepare a fresh run directory. Keep inspecting as more chunks finish.
+   launch the remaining plan if the setup looks right, or revise it based on
+   the first results. Keep inspecting as more chunks finish.
 
 To learn by following a complete example, use the [tutorials](../tutorials/index.md).

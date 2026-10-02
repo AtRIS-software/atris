@@ -24,14 +24,14 @@ Preparation and post-processing are shared across local, server/workstation,
 and HPC runs; the execution guides cover the job setup for each environment.
 
 1. [Prepare the simulation](running-atris/prepare-simulation.md): define the planet,
-   incident particles, physics, and quantities to record.
+   select any phantoms, and prepare the particle sampling and physics choices.
 2. [Plan and run a few chunks](running-atris/run-simulation.md): create a chunk
    plan and execute a small part of it on your computer, a server, or an HPC system.
 3. [Gather and inspect](running-atris/process-results.md): process the completed
    chunks and check the input plots, initial responses, and runtime.
 4. [Decide whether to continue](running-atris/process-results.md#decide-whether-to-continue):
-   keep running if the setup looks right, or revise the inputs in a fresh run
-   directory. Completed chunks remain part of a continued run.
+   keep running if the setup looks right, or revise it based on the first results.
+   Completed chunks remain part of a continued run with the same setup.
 
 The [tutorials](tutorials/index.md) provide worked examples of model preparation
 and a complete simulation workflow. The [reference](reference/index.md)
