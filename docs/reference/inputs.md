@@ -29,6 +29,11 @@ A PSF is a whitespace-separated numeric table preceded by a material-definition
 line. Blank and `#` comment lines may precede the table. Legacy files may put
 the material definition in the first comment line instead.
 
+From Python, `atris_tools.psf.build_psf` assembles layers from named quantities;
+`write_psf` saves the result with its descriptive header and material definition.
+See [Building a PSF from Python](#building-a-psf-from-python) and the
+[exoplanet notebook](../tutorials/exoplanet-psf.ipynb).
+
 For example, the NRLMSIS converter writes:
 
 ```text
@@ -65,6 +70,52 @@ The GDML converter requires the numeric column count to match the material
 header. It uses the last row's outer radius plus 100 km as the world half-size.
 Custom PSFs must also respect the post-processor's
 [geometry and altitude conventions](outputs.md#geometry-and-altitude).
+
+### Building a PSF from Python
+
+Import `build_psf` and `write_psf` from `atris_tools.psf`. All builder arguments
+are named:
+
+| Argument | Values |
+| --- | --- |
+| `inner_radius_km`, `outer_radius_km` | One radius per shell, measured from the centre, in outward order |
+| `temperature_k` | Temperature in kelvin |
+| `density_g_cm3` | Density in g/cm³ |
+| `pressure_pa` | Pressure in pascals |
+| `mass_fractions` | Element-to-fraction mapping, such as `{"N": 0.8, "O": 0.2}` |
+| `solid_composition` | Compact fallback composition, such as `"O533Si467"` |
+| `state` | `"gas"` (default), `"solid"`, or `"liquid"` |
+
+Except for the radii, each physical quantity and each element fraction can be a
+scalar shared by every layer or an array with one value per layer. States can
+also be supplied per layer. Fractions must sum to one; all-zero fractions in a
+solid row select the compact fallback composition. The builder checks array
+lengths, finite values, positive temperature and density, nonnegative pressure,
+and non-overlapping shells. It does not normalize fractions silently.
+
+The builder creates full spherical shells and assigns sequential IDs from zero.
+It preserves gaps between shells. Interior, surface, and outer stopping layers
+must be supplied explicitly; it does not add layers or calculate an atmosphere.
+
+The returned `PSF` holds the numeric array in `.layers` and its ordered material
+definition in `.materials`. The element mapping determines both column and
+header order. Save it with `write_psf(path, psf)`.
+
+For an existing NumPy table, the lower-level interface remains
+`write_psf(path, layers, materials="O533Si467 N")`. It checks the table shape,
+finite values, integer IDs, and material states. Both forms replace an existing
+file and expect the parent directory to exist. Additional keyword arguments
+are forwarded to `numpy.savetxt`; omitting `fmt` uses NumPy's own formatting.
+Use `write_psf(path, psf, fmt=psf.formats("%.3e"))` for three decimal places in
+scientific notation for temperature, density, pressure, and mass fractions.
+The format list preserves radii and angles and writes IDs and states as integers.
+
+Fixed column indices are defined in `atris_tools.psf`: `INNER_RADIUS`,
+`OUTER_RADIUS`, `PHI_START`, `PHI_END`, `THETA_START`, `THETA_END`, `DETECTOR_ID`,
+`TEMPERATURE`, `DENSITY`, `PRESSURE`, and `STATE`. `FIRST_ELEMENT` marks the
+start of the mass-fraction columns, whose order comes from the material header.
+Use these constants when indexing a PSF array, for example
+`layers[:, DENSITY]` or `layers[:, FIRST_ELEMENT:]`.
 
 ### Layer composition
 

@@ -94,8 +94,8 @@ Phantoms are optional; step 4 shows how to add their response tables.
 temperature, density, pressure, and composition. The prepared file contains
 an interior, crust, atmosphere, and outer terminating layer.
 
-Inspect it with `head -n 70 simulation.psf`. It contains descriptive comments,
-a material header, then numeric layer rows. The [PSF reference](../reference/inputs.md#planet-specification-format-psf)
+Inspect it with `head -n 5 simulation.psf`. Its first line defines the materials;
+the numeric layer rows follow. The [PSF reference](../reference/inputs.md#planet-specification-format-psf)
 defines their units and meanings.
 
 You can [write a PSF from scratch](../tutorials/exoplanet-psf.ipynb), use a prepared model,

@@ -25,8 +25,7 @@ phantom values have not yet been divided by primary counts, masses, or interface
 areas.
 
 Source-position and direction histograms have 120 azimuth bins from 0 to $2\pi$
-and 60 $\cos\theta$ bins from 0 to 1. Negative $\cos\theta$ values go into underflow;
-see the [recorded angular diagnostic defect](../known-bugs.md).
+and 60 $\cos\theta$ bins from -1 to 1.
 
 ### CSV structure
 

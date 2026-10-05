@@ -10,12 +10,13 @@ then follows prepared inputs through execution and results processing.
 earth-nrlmsis-full
 exoplanet-psf
 files-through-workflow
+earth-spectrum-folding
 ```
 
 ## Prepare model inputs
 
-[Prepare an Earth atmosphere simulation](earth-nrlmsis-full.md) uses supplied
-Earth atmosphere data and prepares the geometry, optional phantom responses,
+[Prepare an Earth atmosphere simulation](earth-nrlmsis-full.md) uses a supplied
+Earth PSF and prepares the geometry, optional phantom responses,
 and particle inputs. The workflow tutorial below runs a few chunks of this model.
 
 [Create an exoplanet PSF](exoplanet-psf.ipynb) builds a simple atmosphere with
@@ -37,3 +38,13 @@ The reusable guides follow the same sequence:
 [prepare the simulation](../running-atris/prepare-simulation.md),
 [plan chunks](../running-atris/plan-chunks.md), [run it](../running-atris/run-simulation.md), and
 [process the results](../running-atris/process-results.md).
+
+## Apply an incident spectrum
+
+[Fold the Earth responses with a cosmic-ray spectrum](earth-spectrum-folding.ipynb)
+continues from the processed Earth results. It uses protons to calculate
+atmospheric ionization and absorbed dose in the water phantom, then compares
+two incident spectra using the same simulation. This Jupyter notebook is at
+`docs/tutorials/earth-spectrum-folding.ipynb`.
+[View notebook](earth-spectrum-folding.ipynb) or download
+{download}`earth-spectrum-folding.ipynb <earth-spectrum-folding.ipynb>`.

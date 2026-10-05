@@ -41,7 +41,7 @@ profile is represented as spherical layers around Earth.
 Continue with [phantom selection](prepare-simulation.md#optionally-select-phantoms),
 then generate the particle macros and energy bins. Phantoms are optional.
 
-The [Earth example](../tutorials/earth-nrlmsis-full.md) also includes downloaded
-atmosphere tables, ready to use.
+The [Earth example](../tutorials/earth-nrlmsis-full.md) includes a prepared
+`simulation.psf`, ready to use.
 
 **Next step:** [Select phantoms and prepare particle inputs](prepare-simulation.md#optionally-select-phantoms).

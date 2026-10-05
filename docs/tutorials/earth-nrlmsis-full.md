@@ -2,9 +2,10 @@
 
 **Next step:** [Plan chunks for the prepared simulation](../running-atris/plan-chunks.md).
 
-This example prepares an Earth simulation from an NRLMSIS 2.0 atmosphere. The
-profile is for 18 August 2026 at 00:00 UTC, 55 degrees north and 45 degrees
-east, covering 0 to 100 km in 0.2 km steps.
+This example prepares an Earth simulation from the supplied `simulation.psf`.
+Its atmosphere has 101 layers, each 1 km thick, extending from the surface to
+101 km altitude. The PSF also includes the solid interior, crust, and outer
+stopping shell.
 
 These preparation steps are independent of execution environment. Continue with
 [chunk planning](../running-atris/plan-chunks.md) once the inputs are ready.
@@ -24,39 +25,15 @@ cd earth-nrlmsis-full
 
 ## Prepare the atmosphere
 
-Each example keeps its downloaded atmosphere tables in its own directory. The
-files in `examples/earth-nrlmsis-full` contain NRLMSIS 2.0 data for 18 August
-2026 at 00:00 UTC, 55 degrees north and 45 degrees east, covering 0 to 100 km
-in 0.2 km steps. Use these files unless you need a different time or location:
+Copy the example's PSF into the run directory:
 
 ```bash
-cp "$ATRIS_ROOT"/examples/earth-nrlmsis-full/nrlmsis-*.txt .
+cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/simulation.psf" .
 ```
 
-### Use a different time or location (optional)
-
-See [Download an atmosphere from NASA](../running-atris/download-nasa-atmosphere.md)
-for current form controls, date restrictions, activity inputs, and conversion.
-The web form checked on 29 September 2026 requires a step of at least 1 km;
-it does not accept the 0.2 km spacing used by the archived tables here.
-Keep the archived tables to reproduce this example. To obtain a new profile
-at that resolution, use a model interface that supports the finer grid and
-export a compatible table, or construct a PSF from your own model. A 1 km
-request creates a different, coarser atmosphere and should be recorded as such.
-
-### Convert the atmosphere
-
-Merge and validate all downloaded tables while converting them to
-`simulation.psf`:
-
-```bash
-atris-nrlmsis-to-psf nrlmsis-*.txt --output simulation.psf
-```
-
-The overlapping boundary rows allow the converter to replace a malformed row
-from one response with the valid copy from the next. It rejects conflicting
-duplicates, missing altitude levels, mismatched request parameters, and
-non-finite, zero, or negative atmospheric values.
+To use a different time or location, follow
+[Download an atmosphere from NASA](../running-atris/download-nasa-atmosphere.md)
+to obtain and convert a new profile instead.
 
 Convert the PSF to the Geant4 geometry `simulation.gdml`:
 
@@ -112,10 +89,17 @@ atmosphere, energy range, and particle inputs.
 
 After a chunk completes, [gather, post-process, and plot](../running-atris/process-results.md).
 
+Once you have processed responses, continue with the Jupyter notebook
+[Fold the Earth responses with a cosmic-ray spectrum](earth-spectrum-folding.ipynb)
+to calculate the proton contribution to ionization and water-phantom dose. The notebook is at
+`docs/tutorials/earth-spectrum-folding.ipynb`.
+[View notebook](earth-spectrum-folding.ipynb) or download
+{download}`earth-spectrum-folding.ipynb <earth-spectrum-folding.ipynb>`.
+
 ## Prepared reference files
 
-The example retains the downloaded atmosphere tables and generated
-AtRIS input files. Simulation outputs, plots, logs, and staged phantom links
+The example contains the PSF and the geometry and particle inputs generated
+from it. Simulation outputs, plots, logs, and staged phantom links
 are not included.
 
 As an alternative to generating the inputs above, copy the prepared example

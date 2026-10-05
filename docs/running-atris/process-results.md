@@ -53,6 +53,13 @@ spectrum and intensity are applied. See
 for interpretation and [Output files](../reference/outputs.md) for column
 definitions, units, and formulas.
 
+For a worked continuation of the Earth example, use the Jupyter notebook
+[Fold the Earth responses with a cosmic-ray spectrum](../tutorials/earth-spectrum-folding.ipynb)
+at `docs/tutorials/earth-spectrum-folding.ipynb`. It uses protons and one water
+phantom to work through ionization and absorbed dose rates for an incident spectrum.
+[View notebook](../tutorials/earth-spectrum-folding.ipynb) or download
+{download}`earth-spectrum-folding.ipynb <../tutorials/earth-spectrum-folding.ipynb>`.
+
 Unsampled energy bins have no response estimate and may contain undefined
 values. Inspect the sampling before interpreting the plots. The gathered
 `.convergence.csv` files describe ionization convergence across completed

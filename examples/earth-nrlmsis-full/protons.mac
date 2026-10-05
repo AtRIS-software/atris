@@ -127,7 +127,7 @@
 /gps/pos/type Surface
 /gps/pos/shape Sphere
 /gps/pos/centre 0 0 0 m
-/gps/pos/radius 6471.201 km
+/gps/pos/radius 6472.001 km
 /gps/ang/type cos
 /gps/ang/mintheta 0 deg
 /gps/ang/maxtheta 90 deg

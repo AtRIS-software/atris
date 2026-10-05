@@ -59,6 +59,111 @@ define more of the simulation configuration. Its name should describe preparing
 simulation inputs rather than generating one particular file format. The
 replacement name and configuration format are still to be decided.
 
+## Future development: adaptive energy-range chunks
+
+The current chunk plan repeats the same source-energy distribution with new
+random seeds. All chunks of a species share one chunk macro and identical
+histogram axes. This is useful for restarts and parallel execution, but it
+cannot direct additional simulation effort towards the energy intervals where
+another primary history would reduce the final uncertainty most.
+
+A future chunk format should treat completed chunks as additive building
+blocks of one canonical response matrix. The run would retain complete proton
+and alpha energy grids, while each chunk could select a contiguous subset of
+those bins and its own event count. The selection changes where computation is
+spent; it does not change the definition of the final response.
+
+The plan should store canonical bin indices rather than independent
+floating-point limits. For example, a versioned plan entry could contain the
+particle species, two random seeds, an inclusive first-bin index, an exclusive
+stop-bin index, and an event count. User-facing energy limits would be resolved
+to exact edges of the canonical grid when the entry is created. This prevents
+nearly equal edges, incompatible bin widths, and proton/alpha energy-scaling
+conventions from making apparently compatible chunks impossible to combine.
+Legacy three-field plan entries could continue to mean a full-range chunk
+using the existing shared chunk macro.
+
+### Chunk execution
+
+Each ranged chunk should run in an isolated temporary working directory. The
+runner would stage links to the fixed geometry and phantom inputs, write a
+local slice of the species `.bins` file, and generate a local chunk macro with
+the requested energy range and event count. Output would still be written to
+the run's central `chunks/` directory. Private working directories prevent
+concurrent workers from replacing one another's macros or energy grids.
+
+This arrangement can initially use the existing C++ input-prefix behaviour;
+the orchestration changes can remain in the Python tools. Local energy axes
+also avoid writing the full energy-by-detector matrix for a chunk that samples
+only a small part of it.
+
+### Range-aware gathering
+
+`atris-gather` would use the run-level `.bins` file as the canonical output
+axis. For every completed chunk it would:
+
+1. verify that the local energy edges are an exact contiguous slice of the
+   canonical grid;
+2. map the local primary counts and raw response sums into the corresponding
+   canonical rows; and
+3. add those raw accumulators before any response normalization.
+
+Overlapping chunks would improve the statistics of the same energy bins, and
+disjoint chunks would fill different parts of the response matrix. Bins with
+no primary histories must remain explicitly unsampled, normally represented
+as `NaN` after post-processing rather than as zero response. Local energy
+underflow or overflow entries would make the mapping ambiguous and should
+therefore cause gathering to fail.
+
+Histograms without a primary-energy axis, such as source direction and source
+position, can continue to be added directly. Both CSV and ROOT gathering
+should follow the same mapping and validation rules.
+
+Only sampling properties represented by an output dimension can safely vary
+between additive chunks. Energy range, event count, sampling weight between
+energy bins, and random seeds may differ because actual primary counts are
+retained for every energy bin. Geometry, materials, physics list, phantom
+definitions, detector layout, and canonical bin boundaries must remain fixed.
+Changing the source direction or position distribution would not be safe with
+the present response products because those dimensions are averaged out rather
+than retained in the response matrix.
+
+### Choosing valuable follow-up chunks
+
+Range-aware chunks provide the mechanism for adaptive simulation but do not by
+themselves decide where to spend more computation. An initial pilot should
+include at least two independent contributions to every energy bin so that the
+tools can estimate variation between chunks. For each energy bin, the planning
+tools could then report:
+
+- accumulated primary histories;
+- response uncertainty estimated from independent chunk means;
+- measured computation time per primary; and
+- contribution to uncertainty after convolution with one or more supplied
+  physical spectra.
+
+A follow-up priority can be defined as the predicted reduction in the selected
+final uncertainty divided by the predicted additional runtime. The supplied
+physical spectra would influence only the allocation of future histories; they
+would not be folded into or otherwise specialize the gathered response matrix.
+Konstantin's later convolution with measured spectra would therefore remain
+possible.
+
+The planner must retain a minimum exploration allocation. A sparse energy bin
+that has not yet produced an interaction is not evidence that its true response
+is zero. Adjacent high-priority bins can be grouped into one practical chunk so
+that Geant4 initialization time does not dominate many tiny simulations. The
+existing per-run timing output can provide the setup and transport measurements
+needed for this decision.
+
+Development should proceed in stages: first add manual ranged chunks and a
+backward-compatible plan parser; then implement and test range-aware gathering;
+then expose per-energy convergence and cost diagnostics; and only then add a
+tool that recommends or appends the next highest-value chunks. Numerical tests
+should cover overlapping ranges, disjoint ranges, unsampled gaps, incompatible
+edges, and equivalence between a full-range aggregate and the same raw
+histories divided among ranged chunks.
+
 ## Simulation output
 
 The simulation filename selects Geant4's analysis backend; CSV is the default
@@ -87,8 +192,7 @@ example, not a benchmark for current hardware.
 The thread count applies to each AtRIS process. Therefore, an HPC chunk using
 16 worker threads requires 16 cores, and concurrent chunks require separate
 sets of cores. Benchmark representative chunks at several thread counts before
-deciding how many cores to allocate to each chunk. Do not describe 16 as a
-measured optimum. User-facing guidance for chunk sizing, scheduler worker
+deciding how many cores to allocate to each chunk. Guidance for chunk sizing, scheduler worker
 pools, and resource measurement is in
 [Running AtRIS on an HPC system](hpc.md).
 
