@@ -29,6 +29,7 @@ extern std::array<G4long, 2> explicitSeeds;
 
 namespace {
 
+// Fixed source diagnostics use 3-degree azimuth bins and 1/30-wide cosine bins.
 constexpr G4int kSourceAzimuthBins = 120;
 constexpr G4int kSourceCosineBins = 60;
 constexpr G4double kSourceAzimuthMin = 0.;
@@ -37,6 +38,8 @@ constexpr G4double kSourceCosineMin = -1.;
 constexpr G4double kSourceCosineMax = 1.;
 // One primary-energy H1 and four non-phantom H2 histograms are always booked.
 constexpr G4int kBaseHistogramCount = 5;
+// Version of the annotations written into Geant4 CSV histogram headers.
+constexpr G4int kCsvSchemaVersion = 1;
 
 template <typename Histogram>
 void AnnotateHistogram(
@@ -49,7 +52,7 @@ void AnnotateHistogram(
 	if (histogram == nullptr) return;
 	histogram->add_annotation(
 		"atris.csv_schema",
-		std::to_string(atris::kOutputSchemaVersion)
+		std::to_string(kCsvSchemaVersion)
 	);
 	histogram->add_annotation("atris.version", ATRIS_VERSION);
 	histogram->add_annotation("atris.histogram_name", name);
@@ -284,7 +287,7 @@ void HistoManager::FillMetadata() const
 	analysis->FillNtupleIColumn(
 		kMetadataNtupleId,
 		kMetadataSchema,
-		kOutputSchemaVersion
+		kMetadataSchemaVersion
 	);
 	analysis->FillNtupleSColumn(
 		kMetadataNtupleId, kMetadataAtrisVersion, ATRIS_VERSION

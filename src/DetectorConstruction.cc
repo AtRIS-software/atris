@@ -36,10 +36,10 @@ G4VPhysicalVolume* DetectorConstruction::Construct()
 	return fParser.GetWorldVolume();
 }
 void DetectorConstruction::ConstructSDandField() {
-	// We increase the precision of G4cout
-	const G4int prec = G4cout.precision(kDiagnosticPrecision);
-	G4cout << "### AtRIS: increased precission to " << prec << " printing pi=" << pi << G4endl;
-	G4cout << "### AtRIS: proceeding with Detector contruction. " << G4endl;
+	G4cout.precision(kDiagnosticPrecision);
+	G4cout << "### AtRIS: increased precision to " << kDiagnosticPrecision
+	       << ", printing pi=" << pi << G4endl;
+	G4cout << "### AtRIS: proceeding with detector construction." << G4endl;
 	G4SDManager* const sdManager = G4SDManager::GetSDMpointer();
 	const G4GDMLAuxMapType* const auxiliaryMap = fParser.GetAuxMap();
 	// We now generate the sensitive detectors and assign them to the proper volumes

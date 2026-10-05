@@ -48,7 +48,6 @@ namespace {
 constexpr std::size_t kChunkSeedDigits = 6;
 constexpr G4double kDetectorBinHalfWidth = 0.5;
 constexpr std::size_t kLegacyPhysicsListSuffixLength = 4;
-constexpr G4int kTimingDecimalPlaces = 3;
 
 }  // namespace
 
@@ -166,8 +165,8 @@ int main(int argc,char** argv){
 	const G4String physics = argv[1]; 			 //Setting up the physics list
 	physicsListName = physics;
 	G4PhysListFactory factory;                       // initialize physics list
-	// Preserve the original launcher's compatibility check for a physics-list
-	// name with a four-character suffix. The full name is still passed to Geant4.
+	// Legacy validation also retries after removing four trailing characters.
+	// The full name is still passed to Geant4, so this does not normalize input.
 	const G4bool validPhysicsList = factory.IsReferencePhysList(physics)
 		|| factory.IsReferencePhysList(
 			physics.substr(0,physics.size()-kLegacyPhysicsListSuffixLength)
@@ -224,7 +223,7 @@ int main(int argc,char** argv){
 	const double totalSeconds =
 		std::chrono::duration<double>(totalEnd - totalStart).count();
 	std::ostringstream timingOutput;
-	timingOutput << std::fixed << std::setprecision(kTimingDecimalPlaces)
+	timingOutput << std::fixed << std::setprecision(3)
 		<< "### AtRIS timing: Geant4 macro wall time: " << macroSeconds
 		<< " s using " << workerThreads << " worker thread(s)\n"
 		<< "### AtRIS timing: setup/cleanup wall time: "

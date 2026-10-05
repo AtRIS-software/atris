@@ -216,9 +216,9 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 				const G4int responseIndex =
 					lightParticleResponseIndices[lookupIndex]
 					* kPhantomResponseEnergyBins + responseEnergyBin;
-				// Radiation weighting is 1 by default, 2 for protons and pions,
-				// and 20 for heavy ions. The numerical coefficients below are the
-				// original AtRIS piecewise neutron radiation-weighting formula.
+				// Radiation weighting is 1 by default, 2 for protons and neutral
+				// pions, and 20 for heavy ions. The numerical coefficients below
+				// are the original AtRIS piecewise neutron radiation-weighting formula.
 				G4double radiationWeight = kDefaultRadiationWeight;
 				if (absolutePDG == kProtonPDG || absolutePDG == kNeutralPionPDG) {
 					radiationWeight = kProtonPionRadiationWeight;

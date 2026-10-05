@@ -5,7 +5,8 @@
 
 namespace atris {
 
-// AtRIS output modes are part of the executable's command-line interface.
+// Response mode writes histograms only. Interface mode adds crossing and
+// metadata ntuples; step mode also records every transport step.
 constexpr G4int kResponseOutputMode = -1;
 constexpr G4int kInterfaceOutputMode = 0;
 constexpr G4int kStepOutputMode = 1;
