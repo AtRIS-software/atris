@@ -39,8 +39,8 @@ jobs:
 
       - name: Check shell-script syntax
         run: |
-          bash -n examples/run-atris.slurm.sh
-          bash -n examples/run-atris-singleton.slurm.sh
+          bash -n examples/slurm/run-atris.slurm.sh
+          bash -n examples/slurm/gather-atris.slurm.sh
 
   regression-tests:
     name: AtRIS regression tests
