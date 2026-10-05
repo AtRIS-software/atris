@@ -26,6 +26,9 @@ This divides the requested events into 3000 chunks per species. `chunks.txt`
 lists the chunks and their random seeds, the species `.chunk.mac` files set
 the events per chunk, and `chunks/` holds their outputs.
 
+For the costs of transport, layers, phantoms, and output, see
+[What determines runtime?](../background/what-determines-runtime.md).
+
 ## Choose a practical chunk size
 
 There is no checkpoint inside an AtRIS chunk. If a worker is killed during a

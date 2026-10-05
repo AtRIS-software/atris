@@ -43,6 +43,8 @@ interfaces; selecting a table does not insert a physical detector into the
 planetary geometry or alter the surrounding particle transport. Choose a table
 that represents the material and detector response you want to study. The
 [phantom library](../reference/phantom-library.md) describes the supplied examples.
+The [runtime discussion](what-determines-runtime.md#phantom-responses)
+explains the additional scoring, memory, and output costs of selecting phantoms.
 
 ## Absorbed dose
 
@@ -88,6 +90,18 @@ field can give different detector responses for different phantom tables.
 See [processed output units](../reference/outputs.md#processed-response-tables)
 and [source normalization](normalization-and-uncertainty.md) before applying
 results to a physical irradiation scenario.
+
+```{figure} ../images/earth-example/protons.icru_zero_0.000MeV_detAB.png
+:name: earth-phantom-responses
+:alt: Three energy-altitude response matrices for the ICRU phantom: absorbed dose, radiation-weighted dose, and counting response to proton-initiated showers.
+:width: 100%
+
+The ICRU phantom's responses to proton-initiated showers in the Earth example:
+absorbed dose, radiation-weighted dose, and counts. All three are responses per
+simulated primary; physical rates require an incident spectrum and intensity.
+```
+
+[Open the full-size phantom responses](../images/earth-example/protons.icru_zero_0.000MeV_detAB.png).
 
 ## Implementation
 

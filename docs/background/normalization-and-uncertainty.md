@@ -81,6 +81,18 @@ requires roughly four times as many histories. More histories do not remove
 uncertainty in the atmosphere, incident spectrum, phantom tables, or interaction
 models. Examine both sampling convergence and sensitivity to those inputs.
 
+```{figure} ../images/earth-example/protons.convergence.png
+:name: earth-proton-convergence
+:alt: Proton ionization convergence as completed chunks increase, comparing changes after each chunk group with estimated relative standard errors.
+:width: 100%
+
+Ionization convergence in the Earth example. The upper panel measures changes
+after adding chunks; the lower panel estimates statistical uncertainty. A small
+update does not imply equally small uncertainty.
+```
+
+[Open the full-size convergence plot](../images/earth-example/protons.convergence.png).
+
 ## Implementation
 
 `atris_tools/postprocess.py` normalizes the responses;

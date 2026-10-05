@@ -16,6 +16,7 @@ planetary-geometry
 physics-lists
 radiation-quantities
 normalization-and-uncertainty
+what-determines-runtime
 ```
 
 ## From a planetary model to particle histories
@@ -41,6 +42,8 @@ crossing a layer boundary. Together, these belong to one primary history.
 Repeating the calculation for many primaries builds a statistical estimate of
 the atmospheric response. [Follow one incoming proton](geant4-and-atris.md#follow-one-incoming-proton)
 shows what is followed and recorded.
+[What determines runtime?](what-determines-runtime.md) explains the costs of
+transport, atmospheric layers, phantom scoring, and output.
 
 ## What the results represent
 

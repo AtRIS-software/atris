@@ -25,6 +25,8 @@ or [convert an Earth atmosphere from NASA](download-nasa-atmosphere.md).
 Inspect the layer boundaries, units, density, and composition before generating
 other inputs; the [PSF reference](../reference/inputs.md#planet-specification-format-psf)
 defines the format.
+Layer resolution affects both the physical approximation and
+[the cost of transport and scoring](../background/what-determines-runtime.md#atmospheric-layers).
 
 The recommended layout places `runs/` beside the AtRIS directory. From `runs/`,
 or another directory where you keep simulations, create and enter a new run
@@ -74,6 +76,8 @@ The phantom tables define the response accumulated during particle transport.
 Changing them later does not change the response already recorded in the
 histograms, so select them as part of the physical setup before preparing the
 particle sampling.
+See [the cost of phantom responses](../background/what-determines-runtime.md#phantom-responses) when
+assessing the resources needed for your selection.
 
 ## Prepare particle inputs
 

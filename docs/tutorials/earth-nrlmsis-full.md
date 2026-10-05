@@ -41,6 +41,17 @@ Convert the PSF to the Geant4 geometry `simulation.gdml`:
 atris-psf-to-gdml simulation.psf
 ```
 
+```{figure} ../images/earth-example/simulation.psf.png
+:name: earth-atmosphere-plot
+:alt: Earth atmosphere profiles of density, pressure, temperature, and elemental mass fractions from the surface to 101 km.
+:width: 100%
+
+The example's atmosphere, plotted from `simulation.psf`. The steps follow the
+1 km layers; the right panel shows elemental mass fractions.
+```
+
+[Open the full-size atmosphere plot](../images/earth-example/simulation.psf.png).
+
 ## Prepare the phantom inputs
 
 Copy and stage the example's two-phantom selection:

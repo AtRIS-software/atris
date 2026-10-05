@@ -344,6 +344,19 @@ results remain in the response tables and raw histograms. Plotting does not impl
 run AtRIS, gather chunks, or perform post-processing. You could also have run
 `atris-plot` after step 5 to inspect inputs before simulating.
 
+```{figure} ../images/earth-example/protons.png
+:name: earth-proton-results
+:alt: Proton ionization response versus altitude and primary energy, with primary-energy counts and source-position and direction diagnostics below.
+:width: 100%
+
+Proton results from the Earth example after accumulating chunks. Each energy
+column in the upper panel shows the ionizing-deposition response with altitude,
+before applying an incident spectrum. The angular diagnostics in this snapshot
+omit one hemisphere.
+```
+
+[Open the full-size proton results](../images/earth-example/protons.png).
+
 ## Decide whether to continue
 
 Inspect the input and response plots before launching the remaining chunks.

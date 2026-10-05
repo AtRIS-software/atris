@@ -48,3 +48,6 @@ and Geant4; it does not select a planetary model or create simulation inputs.
    the first results. Keep inspecting as more chunks finish.
 
 To learn by following a complete example, use the [tutorials](../tutorials/index.md).
+
+[What determines runtime?](../background/what-determines-runtime.md) explains the
+costs of particle cascades, atmospheric layers, phantom responses, and output mode.

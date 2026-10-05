@@ -15,6 +15,8 @@ Layer thickness therefore controls spatial resolution. Finer layers can better
 resolve rapid changes near a surface or within a steep density gradient, but
 increase the geometry and output size. Refining the grid does not correct an
 inaccurate atmospheric profile or composition.
+See [the runtime cost of atmospheric layers](what-determines-runtime.md#atmospheric-layers)
+for how boundaries affect transport and scoring.
 
 A useful physical measure is the column mass along a path:
 
