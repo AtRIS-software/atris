@@ -13,7 +13,7 @@
 #include "G4GenericMessenger.hh"
 #include "G4ApplicationState.hh"
 
-extern G4int nrofdetectors;
+extern G4int numberOfDetectors;
 
 namespace {
 
@@ -39,34 +39,41 @@ void DetectorConstruction::ConstructSDandField() {
 	const G4int prec = G4cout.precision(15);
 	G4cout << "### AtRIS: increased precission to " << prec << " printing pi=" << pi << G4endl;
 	G4cout << "### AtRIS: proceeding with Detector contruction. " << G4endl;
-	G4SDManager* const SDman = G4SDManager::GetSDMpointer();
-	const G4GDMLAuxMapType* const auxmap = fParser.GetAuxMap();
+	G4SDManager* const sdManager = G4SDManager::GetSDMpointer();
+	const G4GDMLAuxMapType* const auxiliaryMap = fParser.GetAuxMap();
 	// We now generate the sensitive detectors and assign them to the proper volumes
 	// We also count the number of generated sensitive detectors
-	for(G4GDMLAuxMapType::const_iterator iter=auxmap->begin(); iter!=auxmap->end(); iter++) {
-		for (G4GDMLAuxListType::const_iterator vit=(*iter).second.begin(); vit!=(*iter).second.end();vit++) {
-			if ((*vit).type=="SensDet") {
-				if (kAtrisVerbose) G4cout << "SD " << (*vit).value << " to " << ((*iter).first)->GetName() << ", ";
-				const G4String detname = (*vit).value;
-				const G4int SDID = std::stoi(detname);
-				SensitiveDetector* const detSD = new SensitiveDetector(detname);
-				SDman->AddNewDetector( detSD);
-				G4VSensitiveDetector* const mydet = SDman->FindSensitiveDetector((*vit).value);
-				if(mydet) {
-					G4LogicalVolume* const myvol = (*iter).first;
-					myvol->SetSensitiveDetector(mydet);
+	for (auto volume = auxiliaryMap->begin(); volume != auxiliaryMap->end(); ++volume) {
+		for (auto auxiliary = volume->second.begin(); auxiliary != volume->second.end(); ++auxiliary) {
+			if (auxiliary->type == "SensDet") {
+				if (kAtrisVerbose) {
+					G4cout << "SD " << auxiliary->value << " to "
+					       << volume->first->GetName() << ", ";
+				}
+				const G4String detectorName = auxiliary->value;
+				const G4int detectorId = std::stoi(detectorName);
+				SensitiveDetector* const sensitiveDetector =
+					new SensitiveDetector(detectorName);
+				sdManager->AddNewDetector(sensitiveDetector);
+				G4VSensitiveDetector* const detector =
+					sdManager->FindSensitiveDetector(auxiliary->value);
+				if (detector) {
+					G4LogicalVolume* const logicalVolume = volume->first;
+					logicalVolume->SetSensitiveDetector(detector);
 					// At this point we implement the calculation of volume, mass, surface
-					const G4double mass = myvol->GetMass();
-					G4VSolid* const mysol = myvol->GetSolid();
-					const G4double surface = mysol->GetSurfaceArea();
-					const G4double volume = mysol->GetCubicVolume();
-					const G4double density = mass / volume;
+					const G4double mass = logicalVolume->GetMass();
+					G4VSolid* const solid = logicalVolume->GetSolid();
+					const G4double surface = solid->GetSurfaceArea();
+					const G4double solidVolume = solid->GetCubicVolume();
+					const G4double density = mass / solidVolume;
 					// Print detector ID, mass, surface area, volume, and density.
-					G4cout << "SDIDr: " << SDID << ", " << mass/kg << ", " << surface/cm2 << ", " << volume/cm3 << ", " << density/(g/cm3) << G4endl;
+					G4cout << "SDIDr: " << detectorId << ", " << mass/kg << ", "
+					       << surface/cm2 << ", " << solidVolume/cm3 << ", "
+					       << density/(g/cm3) << G4endl;
 					// populating the dictionaries
 				}
 				else {
-					G4cout << (*vit).value << " detector not found" << G4endl;
+					G4cout << auxiliary->value << " detector not found" << G4endl;
 				}
 			}
 		}
@@ -75,7 +82,8 @@ void DetectorConstruction::ConstructSDandField() {
 	// Debugging: printout the new vector data:
 	G4cout << "### AtRIS: printing detailed information about all materials" << G4endl;
 	if (kAtrisVerbose) G4cout << *(G4Material::GetMaterialTable()) << G4endl;
-	G4cout << "### AtRIS: gdml construction complete. In total we have " << nrofdetectors << " sensitive detectors" << G4endl;
+	G4cout << "### AtRIS: gdml construction complete. In total we have "
+	       << numberOfDetectors << " sensitive detectors" << G4endl;
 }
 
 DetectorConstruction::~DetectorConstruction(){

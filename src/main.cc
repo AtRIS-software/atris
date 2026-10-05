@@ -21,28 +21,29 @@
 #include <iomanip>
 #include <iostream>
 #include <fstream>
+#include <map>
 #include <sstream>
 
 G4String outputFileName;
 G4String simulationInputPrefix;
 G4String physicsListName;
 G4int    mode = -1;
-G4int    nrofdetectors=0;
+G4int    numberOfDetectors = 0;
 G4bool   hasExplicitSeeds = false;
 std::array<G4long, 2> explicitSeeds = {0, 0};
 
 // For holding phantom responses
-G4int nrphantoms;
-std::vector<G4int> useornot(atris::kLightParticleLookupSize, 0);
-std::map<G4int, G4int> heavy;
-std::vector<std::vector<G4double>> abso;
-std::vector<std::vector<G4double>> rate;
+G4int numberOfPhantoms;
+std::vector<G4int> lightParticleResponseIndices(atris::kLightParticleLookupSize, 0);
+std::map<G4int, G4int> ionResponseIndices;
+std::vector<std::vector<G4double>> radiationResponses;
+std::vector<std::vector<G4double>> countingResponses;
 
-std::vector<G4double> enbins;
-std::vector<G4double> detbins;
+std::vector<G4double> energyBins;
+std::vector<G4double> detectorBins;
 // Functions used by main.
-G4bool Phantoms(G4int howmany);
-void determine_nrofdetectors(const G4String& fname);
+G4bool LoadPhantoms(G4int count);
+void DetermineNumberOfDetectors(const G4String& fileName);
 
 struct SimulationRun {
 	G4String inputPrefix;
@@ -50,7 +51,7 @@ struct SimulationRun {
 	G4bool hasSeeds = false;
 };
 
-SimulationRun parseSimulationRun(const G4String& argument) {
+SimulationRun ParseSimulationRun(const G4String& argument) {
 	SimulationRun run;
 	std::string path = argument.c_str();
 	std::size_t pathSeparator = path.find_last_of("/\\");
@@ -71,7 +72,10 @@ SimulationRun parseSimulationRun(const G4String& argument) {
 	const std::size_t firstSeparator = name.rfind('_', secondSeparator - 1);
 	if (firstSeparator == std::string::npos || firstSeparator == 0) return run;
 
-	const std::string firstSeed = name.substr(firstSeparator + 1, secondSeparator - firstSeparator - 1);
+	const std::string firstSeed = name.substr(
+		firstSeparator + 1,
+		secondSeparator - firstSeparator - 1
+	);
 	const std::string secondSeed = name.substr(secondSeparator + 1);
 	if (firstSeed.size() != 6 || secondSeed.size() != 6) return run;
 	if (firstSeed.find_first_not_of("0123456789") != std::string::npos) return run;
@@ -98,11 +102,11 @@ int main(int argc,char** argv){
 	}
 	const auto totalStart = std::chrono::steady_clock::now();
 	mode = std::stoi(argv[3]);
-	nrphantoms = std::stoi(argv[4]);
+	numberOfPhantoms = std::stoi(argv[4]);
 	// The simulation name selects the geometry, energy bins, and macro inputs;
 	// the phantom count selects the numbered radiation and counting responses.
-	if (!Phantoms(nrphantoms)) return 1;
-	const SimulationRun simulation = parseSimulationRun(argv[2]);
+	if (!LoadPhantoms(numberOfPhantoms)) return 1;
+	const SimulationRun simulation = ParseSimulationRun(argv[2]);
 	outputFileName    = argv[2];
 	simulationInputPrefix = simulation.inputPrefix;
 	hasExplicitSeeds = simulation.hasSeeds;
@@ -110,26 +114,26 @@ int main(int argc,char** argv){
 		explicitSeeds[0] = simulation.seeds[0];
 		explicitSeeds[1] = simulation.seeds[1];
 	}
-	const G4String gdmlname = simulation.inputPrefix+".gdml";
-	determine_nrofdetectors(gdmlname);
+	const G4String gdmlName = simulation.inputPrefix+".gdml";
+	DetermineNumberOfDetectors(gdmlName);
 	G4cout << "### AtRIS: Generating detbins with the determined number of detectors" << G4endl;
-	for(int i=0;i<=nrofdetectors;i++){
-		detbins.push_back(i-0.5);
+	for(int i=0;i<=numberOfDetectors;i++){
+		detectorBins.push_back(i-0.5);
 	}
 	// Create the enbinsa for the histograms
-	const G4String binedgesFile = simulation.inputPrefix+".bins";
-	G4double newbinedge = 0;
-	std::ifstream is(binedgesFile);
-	G4int j=0;
-	while (is >> newbinedge){
-		enbins.push_back(newbinedge);
-		j++;
+	const G4String binEdgesFile = simulation.inputPrefix+".bins";
+	G4double newBinEdge = 0;
+	std::ifstream binEdges(binEdgesFile);
+	G4int binEdgeCount = 0;
+	while (binEdges >> newBinEdge){
+		energyBins.push_back(newBinEdge);
+		++binEdgeCount;
 	}
-	G4cout << "### AtRIS: read " << j  << " binedges." << G4endl;
+	G4cout << "### AtRIS: read " << binEdgeCount << " binedges." << G4endl;
 
 	// The log files could be necessary for the data analysis.
 	// Therefore, we redirect them to a file. 
-	G4UImanager* const UImanager = G4UImanager::GetUIpointer();
+	G4UImanager* const uiManager = G4UImanager::GetUIpointer();
 	G4Random::setTheEngine(new CLHEP::MTwistEngine); // Choose the Random engine
 	G4MTRunManager* const runManager = new G4MTRunManager;   // Instantiate the run manager
 	if (simulation.hasSeeds) {
@@ -141,16 +145,18 @@ int main(int argc,char** argv){
 		runManager->SetNumberOfThreads(G4Threading::G4GetNumberOfCores());
 	}
 	G4GDMLParser parser;                             //instantiate a GDML parser
-	parser.Read(gdmlname);	 //parse the 
+	parser.Read(gdmlName);
 	atris::DetectorConstruction* const detector = new atris::DetectorConstruction(parser);
 	runManager->SetUserInitialization(detector);
 	const G4String physics = argv[1]; 			 //Setting up the physics list
 	physicsListName = physics;
 	G4PhysListFactory factory;                       // initialize physics list
-	if (factory.IsReferencePhysList(physics) or (factory.IsReferencePhysList(physics.substr(0,physics.size()-4)))) {
-		G4VModularPhysicsList* const physlist = factory.GetReferencePhysList(physics);
-		physlist->RegisterPhysics(new G4StepLimiterPhysics());
-		runManager->SetUserInitialization(physlist);
+	const G4bool validPhysicsList = factory.IsReferencePhysList(physics)
+		|| factory.IsReferencePhysList(physics.substr(0,physics.size()-4));
+	if (validPhysicsList) {
+		G4VModularPhysicsList* const physicsList = factory.GetReferencePhysList(physics);
+		physicsList->RegisterPhysics(new G4StepLimiterPhysics());
+		runManager->SetUserInitialization(physicsList);
 	} else {
 		G4cout << "### AtRIS: " << physics << " is not valid! use: "<<G4endl;
 		const std::vector<G4String> available = factory.AvailablePhysLists();
@@ -168,8 +174,8 @@ int main(int argc,char** argv){
 		       << outputFileName << "; output may be very large" << G4endl;
 	}
 
-	atris::UserActionInitialization* const useract = new atris::UserActionInitialization();
-	runManager->SetUserInitialization(useract);
+	atris::UserActionInitialization* const userAction = new atris::UserActionInitialization();
+	runManager->SetUserInitialization(userAction);
 
 
 	// Get the pointer to the user interface manager and start the batch mode
@@ -179,11 +185,11 @@ int main(int argc,char** argv){
 		std::ifstream chunkMacro(chunkMacroName);
 		if (chunkMacro.good()) macroName = chunkMacroName;
 	}
-	const G4String tempString = "/control/execute "+macroName;
+	const G4String command = "/control/execute "+macroName;
 	G4cout << "### AtRIS: executing macro " << macroName << G4endl;
 	G4cout << "### AtRIS: Starting the simulation " << G4endl;
 	const auto macroStart = std::chrono::steady_clock::now();
-	const G4int commandStatus = UImanager->ApplyCommand(tempString);
+	const G4int commandStatus = uiManager->ApplyCommand(command);
 	const auto macroEnd = std::chrono::steady_clock::now();
 	const G4int workerThreads = runManager->GetNumberOfThreads();
 	G4cout << "### AtRIS: simulation used " << workerThreads << " worker thread(s)" << G4endl;
@@ -214,119 +220,143 @@ int main(int argc,char** argv){
 	return commandStatus == 0 ? 0 : 1;
 }
 
-void determine_nrofdetectors(const G4String& fname){
-	// One approach is to get it as an additional argument
-	// Better: open the gdml file, count "<auxiliary", this is the number of sensitive detectors
-	G4String line_of_text;
-	const G4String auxvalue = "<auxiliary";
-	G4String temp2;
-	std::ifstream is(fname);
-	while (std::getline(is, line_of_text)) {
-		std::stringstream ss(line_of_text);
-		while (ss >> temp2) {
-			if (temp2 == auxvalue) nrofdetectors +=1;
-			if (temp2 == "</gdml>") return;
+void DetermineNumberOfDetectors(const G4String& fileName)
+{
+	// Each GDML auxiliary tag marks one sensitive detector.
+	G4String line;
+	const G4String auxiliaryTag = "<auxiliary";
+	G4String token;
+	std::ifstream input(fileName);
+	while (std::getline(input, line)) {
+		std::stringstream words(line);
+		while (words >> token) {
+			if (token == auxiliaryTag) ++numberOfDetectors;
+			if (token == "</gdml>") return;
 		}
 	}
-	G4cout << "### AtRIS: nrofdetectors has been determined to be: " << nrofdetectors << G4endl;
+	G4cout << "### AtRIS: number of detectors: " << numberOfDetectors << G4endl;
 }
 
-G4bool Phantoms(G4int howmany){
-	G4int expected = 0; 
-	std::vector<G4int> expected_pdgs;
-	G4String expected_header_name;
-	G4cout << "### AtRIS: proceeding to load " << howmany << " phantom(s)." << G4endl << std::flush;
-	for (G4int phantom_index=0; phantom_index < howmany; phantom_index++){
-		std::vector<G4double> icru;
-		const G4String radiationPhantomName = "radiation_phantom" + std::to_string(phantom_index) + ".txt";
-		G4cout << "### AtRIS: loading radiation response matrix for phantom " << phantom_index << " from " << radiationPhantomName << G4endl << std::flush;
-		std::ifstream is(radiationPhantomName);
-		if (!is.is_open()) {
-			G4cerr << "### AtRIS: unable to open phantom file " << radiationPhantomName << G4endl;
+G4bool LoadPhantoms(G4int count)
+{
+	G4int expectedValueCount = 0;
+	std::vector<G4int> expectedPDGs;
+	G4String expectedHeaderName;
+	G4cout << "### AtRIS: proceeding to load " << count << " phantom(s)."
+	       << G4endl << std::flush;
+	for (G4int phantomIndex = 0; phantomIndex < count; ++phantomIndex) {
+		std::vector<G4double> radiationResponse;
+		const G4String radiationPhantomName =
+			"radiation_phantom" + std::to_string(phantomIndex) + ".txt";
+		G4cout << "### AtRIS: loading radiation response matrix for phantom "
+		       << phantomIndex << " from " << radiationPhantomName
+		       << G4endl << std::flush;
+		std::ifstream radiationFile(radiationPhantomName);
+		if (!radiationFile.is_open()) {
+			G4cerr << "### AtRIS: unable to open phantom file "
+			       << radiationPhantomName << G4endl;
 			return false;
 		}
 
-		G4String bLine;
-		std::getline(is,bLine);
-		std::stringstream header_stream(bLine);
+		G4String line;
+		std::getline(radiationFile, line);
+		std::stringstream header(line);
 		std::vector<G4int> pdgs;
-		G4int pdgfound;
-		while (header_stream >> pdgfound) pdgs.push_back(pdgfound);
+		G4int pdg;
+		while (header >> pdg) pdgs.push_back(pdg);
 		if (pdgs.empty()) {
-			G4cerr << "### AtRIS: phantom file has an empty PDG header: " << radiationPhantomName << G4endl;
+			G4cerr << "### AtRIS: phantom file has an empty PDG header: "
+			       << radiationPhantomName << G4endl;
 			return false;
 		}
 
-		if (phantom_index == 0){
-			// need to check which PDGs I've got and which are light&heavy.
-			expected_pdgs = pdgs;
-			expected_header_name = radiationPhantomName;
-			for (std::size_t j = 0; j < pdgs.size(); ++j) {
-				pdgfound = pdgs[j];
+		if (phantomIndex == 0) {
+			expectedPDGs = pdgs;
+			expectedHeaderName = radiationPhantomName;
+			for (std::size_t particleIndex = 0; particleIndex < pdgs.size(); ++particleIndex) {
+				pdg = pdgs[particleIndex];
 				// Common particles fit the dense signed-PDG lookup. Ion PDG codes
-				// are sparse and therefore use the separate `heavy` map.
-				if (std::abs(pdgfound) < atris::kLightParticlePDGLimit){
-					const G4int lookupIndex = pdgfound + atris::kLightParticlePDGOffset;
-					G4cout << j << " adding sensitivity for light particle with PDG= " << pdgfound << " "<<  "  at index " << lookupIndex << G4endl;
-					useornot[lookupIndex] = j;
-				}else {
-					G4cout << "Added sensitivity for heavy particle with PDG= " << pdgfound << " under the index j=" << j << G4endl;
-					heavy[pdgfound] = j;
+				// are sparse and therefore use a separate map.
+				if (std::abs(pdg) < atris::kLightParticlePDGLimit) {
+					const G4int lookupIndex = pdg + atris::kLightParticlePDGOffset;
+					G4cout << particleIndex
+					       << " adding sensitivity for light particle with PDG= "
+					       << pdg << " at index " << lookupIndex << G4endl;
+					lightParticleResponseIndices[lookupIndex] =
+						static_cast<G4int>(particleIndex);
+				} else {
+					G4cout << "Added sensitivity for heavy particle with PDG= "
+					       << pdg << " under the index j=" << particleIndex << G4endl;
+					ionResponseIndices[pdg] = static_cast<G4int>(particleIndex);
 				}
 			}
 			G4cout << "total" << pdgs.size() << G4endl;
-			expected = atris::kPhantomResponseEnergyBins * pdgs.size();
-			G4cout << " ### AtRIS: nricrubins is:" << atris::kPhantomResponseEnergyBins << " and nrpdgs is : "<< pdgs.size() << ". We are expecting: " << expected << " data points in the phantom file." << G4endl;
-		} else if (pdgs != expected_pdgs) {
+			expectedValueCount = static_cast<G4int>(
+				atris::kPhantomResponseEnergyBins * pdgs.size()
+			);
+			G4cout << " ### AtRIS: nricrubins is:"
+			       << atris::kPhantomResponseEnergyBins << " and nrpdgs is : "
+			       << pdgs.size() << ". We are expecting: " << expectedValueCount
+			       << " data points in the phantom file." << G4endl;
+		} else if (pdgs != expectedPDGs) {
 			G4cerr << "### AtRIS: PDG header mismatch: " << radiationPhantomName
-			       << " does not match " << expected_header_name << G4endl;
+			       << " does not match " << expectedHeaderName << G4endl;
 			return false;
 		}
 
-		G4double f;
-		G4int count = 0;
-		while ( std::getline(is,bLine)){
-			std::stringstream dd(bLine);
-			while (dd >> f){
-				icru.push_back(f);
-				count++;
+		G4double responseValue;
+		G4int valueCount = 0;
+		while (std::getline(radiationFile, line)) {
+			std::stringstream values(line);
+			while (values >> responseValue) {
+				radiationResponse.push_back(responseValue);
+				++valueCount;
 			}
 		}
-		G4cout << "### AtRIS: found " << count << " out of expected "<< expected  << G4endl;
-		if (count != expected) G4cout << " ### AtRIS: check phantoms file for empty ending charachters!!" << G4endl;
-		abso.push_back(icru);
-		G4cout << "### AtRIS: adding the radiation vector to the abso nested vector" << G4endl;
+		G4cout << "### AtRIS: found " << valueCount << " out of expected "
+		       << expectedValueCount << G4endl;
+		if (valueCount != expectedValueCount) {
+			G4cout << " ### AtRIS: check phantoms file for empty ending characters!"
+			       << G4endl;
+		}
+		radiationResponses.push_back(radiationResponse);
 
-		// Now we do the counting phantom
-		std::vector<G4double> cicru;
-		const G4String countingPhantomName = "counting_phantom" + std::to_string(phantom_index) + ".txt";
-		G4cout << "### AtRIS: loading counting response matrix for phantom " << phantom_index << " from " << countingPhantomName << G4endl << std::flush;
-		count = 0;
-		std::ifstream cs(countingPhantomName);
-		if (!cs.is_open()) {
-			G4cerr << "### AtRIS: unable to open phantom file " << countingPhantomName << G4endl;
+		std::vector<G4double> countingResponse;
+		const G4String countingPhantomName =
+			"counting_phantom" + std::to_string(phantomIndex) + ".txt";
+		G4cout << "### AtRIS: loading counting response matrix for phantom "
+		       << phantomIndex << " from " << countingPhantomName
+		       << G4endl << std::flush;
+		valueCount = 0;
+		std::ifstream countingFile(countingPhantomName);
+		if (!countingFile.is_open()) {
+			G4cerr << "### AtRIS: unable to open phantom file "
+			       << countingPhantomName << G4endl;
 			return false;
 		}
-		std::getline(cs, bLine);
-		std::stringstream counting_header_stream(bLine);
+		std::getline(countingFile, line);
+		std::stringstream countingHeader(line);
 		pdgs.clear();
-		while (counting_header_stream >> pdgfound) pdgs.push_back(pdgfound);
-		if (pdgs != expected_pdgs) {
+		while (countingHeader >> pdg) pdgs.push_back(pdg);
+		if (pdgs != expectedPDGs) {
 			G4cerr << "### AtRIS: PDG header mismatch: " << countingPhantomName
-			       << " does not match " << expected_header_name << G4endl;
+			       << " does not match " << expectedHeaderName << G4endl;
 			return false;
 		}
-		while ( std::getline(cs,bLine)){
-			std::stringstream dd(bLine);
-			while (dd >> f){
-				cicru.push_back(f);
-				count++;
+		while (std::getline(countingFile, line)) {
+			std::stringstream values(line);
+			while (values >> responseValue) {
+				countingResponse.push_back(responseValue);
+				++valueCount;
 			}
 		}
-		G4cout << "### AtRIS: found " << count << " out of expected "<< expected  << G4endl;
-		if (count != expected) G4cout << " ### AtRIS: check phantoms file for empty ending charachters!!" << G4endl;
-		G4cout << "### AtRIS: adding the counting vector to the rate nested vector" << G4endl;
-		rate.push_back(cicru);
+		G4cout << "### AtRIS: found " << valueCount << " out of expected "
+		       << expectedValueCount << G4endl;
+		if (valueCount != expectedValueCount) {
+			G4cout << " ### AtRIS: check phantoms file for empty ending characters!"
+			       << G4endl;
+		}
+		countingResponses.push_back(countingResponse);
 	}
 	return true;
 }

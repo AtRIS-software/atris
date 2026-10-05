@@ -1,5 +1,6 @@
 #include "HistoManager.hh"
 #include "NtupleSchema.hh"
+#include "PhantomResponseSchema.hh"
 #include "G4AnalysisManager.hh"
 #include "G4Threading.hh"
 #include "G4UnitsTable.hh"
@@ -16,9 +17,9 @@
 #include <fstream>
 #include <algorithm>
 
-extern std::vector<G4double> enbins;
-extern std::vector<G4double> detbins;
-extern G4int nrphantoms;
+extern std::vector<G4double> energyBins;
+extern std::vector<G4double> detectorBins;
+extern G4int numberOfPhantoms;
 extern G4int mode;
 extern G4String simulationInputPrefix;
 extern G4String physicsListName;
@@ -51,7 +52,7 @@ void AnnotateHistogram(
 	histogram->add_annotation("atris.input_prefix", simulationInputPrefix);
 	histogram->add_annotation("atris.physics_list", physicsListName);
 	histogram->add_annotation("atris.output_mode", std::to_string(mode));
-	histogram->add_annotation("atris.phantom_count", std::to_string(nrphantoms));
+	histogram->add_annotation("atris.phantom_count", std::to_string(numberOfPhantoms));
 	if (hasExplicitSeeds) {
 		histogram->add_annotation(
 			"atris.random_seed_pairs",
@@ -83,7 +84,7 @@ void HistoManager::Book() const
 	G4cout << "### AtRIS: configuring analysis histograms. " << G4endl;
 	analysis->SetVerboseLevel(0);
 	analysis->SetActivation(true);     //enable inactivation of histos, nTuples
-	G4int id = analysis->CreateH1("h1.1", "Primary kinetic energy", enbins, "MeV");
+	G4int id = analysis->CreateH1("h1.1", "Primary kinetic energy", energyBins, "MeV");
 	auto* const primaryEnergy = analysis->GetH1(id);
 	AnnotateHistogram(
 		primaryEnergy,
@@ -125,7 +126,7 @@ void HistoManager::Book() const
 	// Now we activate the phantom histograms, 3 per phantom
 	// This is the new ionization energy histogram, it gets the ID 2
 	id = analysis->CreateH2(
-		"h2.ion", "Ionizing energy deposition", enbins, detbins,
+		"h2.ion", "Ionizing energy deposition", energyBins, detectorBins,
 		"MeV", "none", "none", "none"
 	);
 	AnnotateHistogram(
@@ -141,7 +142,7 @@ void HistoManager::Book() const
 	// Total local energy deposition, retained separately so that atmospheric
 	// heating estimates do not have to rely on the ionizing component alone.
 	id = analysis->CreateH2(
-		"h2.edep", "Total energy deposition", enbins, detbins,
+		"h2.edep", "Total energy deposition", energyBins, detectorBins,
 		"MeV", "none", "none", "none"
 	);
 	AnnotateHistogram(
@@ -154,12 +155,15 @@ void HistoManager::Book() const
 	analysis->SetH2YAxisTitle(id, "Sensitive detector ID");
 	analysis->SetH2ZAxisTitle(id, "Total energy deposited [MeV]");
 	analysis->SetH2Activation(id,true);
-	for (G4int phantomnr = 0; phantomnr < nrphantoms; phantomnr++){
-		G4cout << "### AtRIS: Initializing higher order histograms for " << nrphantoms << " phantoms, with a total number of histograms equal to " << nrphantoms*3 + 5 <<G4endl;
-		// For the DIID, we need less detbins, but we will keep this here and remove it latter when writing out the custom output
-		const G4String suffix = std::to_string(phantomnr);
+	for (G4int phantomIndex = 0; phantomIndex < numberOfPhantoms; ++phantomIndex){
+		G4cout << "### AtRIS: Initializing higher order histograms for "
+		       << numberOfPhantoms << " phantoms, with a total number of histograms "
+		       << "equal to "
+		       << numberOfPhantoms*kPhantomHistogramsPerPhantom + 5 << G4endl;
+		// Post-processing removes the extra detector boundary from interface data.
+		const G4String suffix = std::to_string(phantomIndex);
 		id = analysis->CreateH2(
-			"h2.dos" + suffix, "Phantom energy response", enbins, detbins,
+			"h2.dos" + suffix, "Phantom energy response", energyBins, detectorBins,
 			"MeV", "none", "none", "none"
 		);
 		auto* const dose = analysis->GetH2(id);
@@ -177,7 +181,7 @@ void HistoManager::Book() const
 		// same as above, but only for the equivalent dose rate
 		id = analysis->CreateH2(
 			"h2.equi" + suffix, "Radiation-weighted phantom energy response",
-			enbins, detbins, "MeV", "none", "none", "none"
+			energyBins, detectorBins, "MeV", "none", "none", "none"
 		);
 		auto* const equivalentDose = analysis->GetH2(id);
 		AnnotateHistogram(
@@ -195,7 +199,7 @@ void HistoManager::Book() const
 		analysis->SetH2Activation(id,true);
 		// a histogram to hold the count rates if the first phantom
 		id = analysis->CreateH2(
-			"h2.rates" + suffix, "Phantom counting response", enbins, detbins,
+			"h2.rates" + suffix, "Phantom counting response", energyBins, detectorBins,
 			"MeV", "none", "none", "none"
 		);
 		auto* const countRate = analysis->GetH2(id);
@@ -282,7 +286,7 @@ void HistoManager::FillMetadata() const
 	);
 	analysis->FillNtupleIColumn(kMetadataNtupleId, kMetadataOutputMode, mode);
 	analysis->FillNtupleIColumn(
-		kMetadataNtupleId, kMetadataPhantomCount, nrphantoms
+		kMetadataNtupleId, kMetadataPhantomCount, numberOfPhantoms
 	);
 	analysis->FillNtupleIColumn(
 		kMetadataNtupleId, kMetadataSeedsExplicit, hasExplicitSeeds

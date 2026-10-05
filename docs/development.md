@@ -6,17 +6,21 @@ behaviour unless that change is explicitly documented and validated.
 
 ## C++ conventions
 
-AtRIS aims to follow the [Geant4 coding guidelines](https://geant4.web.cern.ch/collaboration/working_groups/novextExamples/codingGuidelines.v2.2.html)
-so that its C++ code is familiar to Geant4 users and contributors. New and
-modified code should use `UpperCamelCase` member functions,
-`fUpperCamelCase` data members, `lowerCamelCase` local variables and arguments,
-and `kUpperCamelCase` named compile-time constants. Use `constexpr` for values
-known at compile time and `const` for other values that do not change.
+AtRIS aims to follow Geant4's [example coding guidelines][g4-example-style] and
+[modern C++ guidance][g4-modern-cpp] so that its C++ code is familiar to Geant4
+users and contributors. New and modified code should use `UpperCamelCase`
+member functions, `fUpperCamelCase` data members, `lowerCamelCase` local
+variables and arguments, and `kUpperCamelCase` named compile-time constants.
+Use `constexpr` for values known at compile time and `const` for other values
+that do not change.
 
 Existing code should be brought into line incrementally when related work is
 already changing it. Non-obvious numerical boundaries and scientific constants
 must be given descriptive names or explained where they are used; their meaning
 should not have to be inferred from a value such as a PDG particle code.
+
+[g4-example-style]: https://geant4.web.cern.ch/collaboration/working_groups/novextExamples/codingGuidelines.v2.2.html
+[g4-modern-cpp]: https://geant4.web.cern.ch/assets/c11_guidelines.pdf
 
 ## Remaining goals
 

@@ -28,16 +28,26 @@
 #include <map>
 #include <vector>
 extern G4int mode;                      // from src/main.cc
-extern G4int nrofdetectors;             // from src/main.cc
-extern std::vector<G4int> useornot;     // 
-extern std::vector<std::vector<G4double>> abso;      //
-extern std::vector<std::vector<G4double>> rate;      //
-extern G4int nrphantoms;
-extern std::map<G4int, G4int> heavy;    //
+extern G4int numberOfDetectors;
+extern std::vector<G4int> lightParticleResponseIndices;
+extern std::vector<std::vector<G4double>> radiationResponses;
+extern std::vector<std::vector<G4double>> countingResponses;
+extern G4int numberOfPhantoms;
+extern std::map<G4int, G4int> ionResponseIndices;
 
 namespace atris {
 
-G4Allocator<SDHit>* SDHit::SDHitAllocator = nullptr;
+namespace {
+
+constexpr G4double kDefaultRadiationWeight = 1.;
+constexpr G4double kProtonPionRadiationWeight = 2.;
+constexpr G4double kHeavyIonRadiationWeight = 20.;
+constexpr G4double kLowNeutronEnergyLimit = 1.*MeV;
+constexpr G4double kHighNeutronEnergyLimit = 50.*MeV;
+
+}  // namespace
+
+G4Allocator<SDHit>* SDHit::fgAllocator = nullptr;
 
 
 SDHit::SDHit()
@@ -63,27 +73,28 @@ void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
 	// Create hits collection
 	fHitsCollection	= new SDHitsCollection(SensitiveDetectorName, collectionName[0]);
 	// Add this collection in hce
-	const G4int hcID = G4SDManager::GetSDMpointer()->GetCollectionID(collectionName[0]);
-	hce->AddHitsCollection( hcID, fHitsCollection );
+	const G4int hitsCollectionId =
+		G4SDManager::GetSDMpointer()->GetCollectionID(collectionName[0]);
+	hce->AddHitsCollection(hitsCollectionId, fHitsCollection);
 }
 
 G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
-	G4Track* const trk = step->GetTrack();
-	const G4double edep = step->GetTotalEnergyDeposit();
-	auto* const sourcedata = G4GeneralParticleSourceData::Instance();
-	auto* const theGun = sourcedata->GetCurrentSource();
-	const G4double einp = theGun->GetParticleEnergy();
+	G4Track* const track = step->GetTrack();
+	const G4double energyDeposit = step->GetTotalEnergyDeposit();
+	auto* const sourceData = G4GeneralParticleSourceData::Instance();
+	auto* const source = sourceData->GetCurrentSource();
+	const G4double primaryEnergy = source->GetParticleEnergy();
 	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 
-	const G4int detid = std::stoi(this->GetName());
-	const G4double nioni = step->GetNonIonizingEnergyDeposit();
+	const G4int detectorId = std::stoi(this->GetName());
+	const G4double nonionizingEnergyDeposit = step->GetNonIonizingEnergyDeposit();
 	if (mode == 1) {
 		const G4Event* const event = G4RunManager::GetRunManager()->GetCurrentEvent();
 		const G4StepPoint* const prePoint = step->GetPreStepPoint();
 		const G4StepPoint* const postPoint = step->GetPostStepPoint();
 		const G4ThreeVector& prePosition = prePoint->GetPosition();
 		const G4ThreeVector& postPosition = postPoint->GetPosition();
-		const G4VProcess* const creatorProcess = trk->GetCreatorProcess();
+		const G4VProcess* const creatorProcess = track->GetCreatorProcess();
 		const G4VProcess* const definingProcess = postPoint->GetProcessDefinedStep();
 		const G4String creatorName = creatorProcess
 			? creatorProcess->GetProcessName()
@@ -97,19 +108,19 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			kStepEventId,
 			event ? event->GetEventID() : -1
 		);
-		analysis->FillNtupleIColumn(kStepNtupleId, kStepTrackId, trk->GetTrackID());
-		analysis->FillNtupleIColumn(kStepNtupleId, kStepParentId, trk->GetParentID());
+		analysis->FillNtupleIColumn(kStepNtupleId, kStepTrackId, track->GetTrackID());
+		analysis->FillNtupleIColumn(kStepNtupleId, kStepParentId, track->GetParentID());
 		analysis->FillNtupleIColumn(
 			kStepNtupleId,
 			kStepId,
-			trk->GetCurrentStepNumber()
+			track->GetCurrentStepNumber()
 		);
 		analysis->FillNtupleIColumn(
 			kStepNtupleId,
 			kStepPDG,
-			trk->GetParticleDefinition()->GetPDGEncoding()
+			track->GetParticleDefinition()->GetPDGEncoding()
 		);
-		analysis->FillNtupleIColumn(kStepNtupleId, kStepDetectorId, detid);
+		analysis->FillNtupleIColumn(kStepNtupleId, kStepDetectorId, detectorId);
 		analysis->FillNtupleDColumn(kStepNtupleId, kStepPreXKm, prePosition.x()/km);
 		analysis->FillNtupleDColumn(kStepNtupleId, kStepPreYKm, prePosition.y()/km);
 		analysis->FillNtupleDColumn(kStepNtupleId, kStepPreZKm, prePosition.z()/km);
@@ -126,11 +137,13 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			kStepPostKineticEnergyMeV,
 			postPoint->GetKineticEnergy()/MeV
 		);
-		analysis->FillNtupleDColumn(kStepNtupleId, kStepEnergyDepositMeV, edep/MeV);
+		analysis->FillNtupleDColumn(
+			kStepNtupleId, kStepEnergyDepositMeV, energyDeposit/MeV
+		);
 		analysis->FillNtupleDColumn(
 			kStepNtupleId,
 			kStepNonionizingEnergyDepositMeV,
-			nioni/MeV
+			nonionizingEnergyDeposit/MeV
 		);
 		analysis->FillNtupleDColumn(
 			kStepNtupleId,
@@ -142,22 +155,34 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			kStepGlobalTimeNs,
 			postPoint->GetGlobalTime()/ns
 		);
-		analysis->FillNtupleDColumn(kStepNtupleId, kStepPrimaryEnergyMeV, einp/MeV);
+		analysis->FillNtupleDColumn(
+			kStepNtupleId, kStepPrimaryEnergyMeV, primaryEnergy/MeV
+		);
 		analysis->FillNtupleSColumn(kStepNtupleId, kStepCreatorProcess, creatorName);
 		analysis->FillNtupleSColumn(kStepNtupleId, kStepProcess, stepProcessName);
 		analysis->AddNtupleRow(kStepNtupleId);
 	}
-	if (detid == 0){
-		trk->SetTrackStatus(fStopAndKill);
+	if (detectorId == 0){
+		track->SetTrackStatus(fStopAndKill);
 		return false;
 	}
-	if (detid == (nrofdetectors-1)){
-		trk->SetTrackStatus(fStopAndKill);
+	if (detectorId == (numberOfDetectors-1)){
+		track->SetTrackStatus(fStopAndKill);
 		return false;
 	}
-	const G4double ioni = edep - nioni;
-	analysis->FillH2(2,einp,detid,ioni/MeV);
-	analysis->FillH2(3,einp,detid,edep/MeV);
+	const G4double ionizingEnergyDeposit = energyDeposit - nonionizingEnergyDeposit;
+	analysis->FillH2(
+		kIonizingEnergyHistogramId,
+		primaryEnergy,
+		detectorId,
+		ionizingEnergyDeposit/MeV
+	);
+	analysis->FillH2(
+		kTotalEnergyHistogramId,
+		primaryEnergy,
+		detectorId,
+		energyDeposit/MeV
+	);
 	// mode -1:      dose rate determination
 	// mode 0:   	 output data for all atmospheric sheets, at sheet interface
 	//         	 purpose: altitude particle profiles
@@ -165,73 +190,109 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	//           	 purpose: shower visualization
 
 	//before the step, the particle should have been at the boundary. 
-	const G4StepPoint* const pre = step->GetPreStepPoint();
-	if (pre->GetStepStatus() == fGeomBoundary){
+	const G4StepPoint* const preStepPoint = step->GetPreStepPoint();
+	if (preStepPoint->GetStepStatus() == fGeomBoundary){
 		//Let's check which sdid we have:
-		const G4double ekin = pre->GetKineticEnergy();
-		const G4ThreeVector position = pre->GetPosition().unit();
-		const G4ThreeVector direction = pre->GetMomentumDirection();
+		const G4double kineticEnergy = preStepPoint->GetKineticEnergy();
+		const G4ThreeVector position = preStepPoint->GetPosition().unit();
+		const G4ThreeVector direction = preStepPoint->GetMomentumDirection();
 		const G4double inclination = std::acos(position*direction);
 		const bool upward = inclination < halfpi;
-		const G4int diid = detid - (1*upward);
-		const G4int partPDG = trk->GetParticleDefinition()->GetPDGEncoding();
-		const G4int apartPDG = std::abs(partPDG);
-		const G4int k = std::max(
+		const G4int interfaceId = detectorId - upward;
+		const G4int particlePDG = track->GetParticleDefinition()->GetPDGEncoding();
+		const G4int absolutePDG = std::abs(particlePDG);
+		const G4int responseEnergyBin = std::max(
 			0,
-			static_cast<G4int>(std::log10(ekin/eV)/kPhantomResponseLogEnergyStep)
+			static_cast<G4int>(
+				std::log10(kineticEnergy/eV) / kPhantomResponseLogEnergyStep
+			)
 		);
 		// PDG codes below this boundary fit the dense signed-PDG response lookup;
 		// ion codes are handled separately below.
-		if (apartPDG < kLightParticlePDGLimit) {
-			const G4int dpartPDG = partPDG + kLightParticlePDGOffset;
-			const bool use = ((useornot[dpartPDG]) or (partPDG == kPhotonPDG));
-			if (use) { // light relevant particles
-				const G4int j = useornot[dpartPDG] * kPhantomResponseEnergyBins + k;
-				// ##########################
-				// Extension: equivalent dose
-				//            factor = 1 for all particles except:
-				//                     2 for protons and pions
-				//                    20 for heavy nuclei and fission fragments
-				//                       for neutrons, we have a continious function wneut
-				G4double wfactor = 1;
-				if ((apartPDG == kProtonPDG) or (apartPDG == kNeutralPionPDG)) wfactor=2;
-				if (apartPDG == kNeutronPDG){
-					if (ekin <= 1/MeV) {
-						wfactor = 3.5 + 18.2*std::exp(-std::log(std::pow(ekin/MeV,2.0))/6.0) ;
-					} else if (ekin <= 50/MeV) {
-						wfactor = 5.0 + 17.0*std::exp(-std::log(std::pow(2*ekin/MeV,2.0))/6.0) ;
-					} else if (ekin > 50/MeV) {
-						wfactor = 2.5 + 3.25*std::exp(-std::log(std::pow(0.04*ekin/MeV,2.0))/6.0) ;
+		if (absolutePDG < kLightParticlePDGLimit) {
+			const G4int lookupIndex = particlePDG + kLightParticlePDGOffset;
+			const bool hasResponse =
+				lightParticleResponseIndices[lookupIndex] || particlePDG == kPhotonPDG;
+			if (hasResponse) {
+				const G4int responseIndex =
+					lightParticleResponseIndices[lookupIndex]
+					* kPhantomResponseEnergyBins + responseEnergyBin;
+				// Radiation weighting is 1 by default, 2 for protons and pions,
+				// and 20 for heavy ions. Neutrons retain the legacy AtRIS
+				// piecewise energy-dependent expression below.
+				G4double radiationWeight = kDefaultRadiationWeight;
+				if (absolutePDG == kProtonPDG || absolutePDG == kNeutralPionPDG) {
+					radiationWeight = kProtonPionRadiationWeight;
+				}
+				if (absolutePDG == kNeutronPDG) {
+					if (kineticEnergy <= kLowNeutronEnergyLimit) {
+						radiationWeight = 3.5 + 18.2*std::exp(-std::log(std::pow(kineticEnergy/MeV,2.0))/6.0) ;
+					} else if (kineticEnergy <= kHighNeutronEnergyLimit) {
+						radiationWeight = 5.0 + 17.0*std::exp(-std::log(std::pow(2*kineticEnergy/MeV,2.0))/6.0) ;
+					} else if (kineticEnergy > kHighNeutronEnergyLimit) {
+						radiationWeight = 2.5 + 3.25*std::exp(-std::log(std::pow(0.04*kineticEnergy/MeV,2.0))/6.0) ;
 					}
 				}
-				for (G4int pidx=0;pidx<nrphantoms;pidx++){
-					const G4int offset = 4 + 3*pidx;
-					analysis->FillH2(offset+0,einp,diid,abso[pidx][j]*ekin/eV );
-					analysis->FillH2(offset+1,einp,diid,abso[pidx][j]*ekin/eV*wfactor);
-					analysis->FillH2(offset+2,einp,diid,rate[pidx][j]);
+				for (G4int phantomIndex = 0; phantomIndex < numberOfPhantoms; ++phantomIndex) {
+					const G4int offset = kFirstPhantomHistogramId
+						+ kPhantomHistogramsPerPhantom*phantomIndex;
+					analysis->FillH2(
+						offset + kPhantomDoseHistogramOffset,
+						primaryEnergy, interfaceId,
+						radiationResponses[phantomIndex][responseIndex]
+							* kineticEnergy/eV
+					);
+					analysis->FillH2(
+						offset + kPhantomEquivalentDoseHistogramOffset,
+						primaryEnergy, interfaceId,
+						radiationResponses[phantomIndex][responseIndex]
+							* kineticEnergy/eV * radiationWeight
+					);
+					analysis->FillH2(
+						offset + kPhantomCountingHistogramOffset,
+						primaryEnergy, interfaceId,
+						countingResponses[phantomIndex][responseIndex]
+					);
 				}
 
 
 			}
-		} else if (partPDG >= kFirstSupportedIonPDG) {
+		} else if (particlePDG >= kFirstSupportedIonPDG) {
 			// We first check if we are dealing with one of the smaller, relevant isotopes
 			// We then check if we are dealing with one of: H2, H3, He3, He4
 			// If so, we add the contribution to the dose-rate histogram
-			if (heavy.find(partPDG) != heavy.end()){
-				const G4int j = heavy[partPDG] * kPhantomResponseEnergyBins + k;
-				const G4double wfactor = 20;
-				for (G4int pidx=0;pidx<nrphantoms;pidx++){
-					const G4int offset = 4 + 3*pidx;
-					analysis->FillH2(offset+0,einp,diid,abso[pidx][j]*ekin/eV );
-					analysis->FillH2(offset+1,einp,diid,abso[pidx][j]*ekin/eV*wfactor);
-					analysis->FillH2(offset+2,einp,diid,rate[pidx][j]);
+			if (ionResponseIndices.find(particlePDG) != ionResponseIndices.end()){
+				const G4int responseIndex =
+					ionResponseIndices[particlePDG] * kPhantomResponseEnergyBins
+					+ responseEnergyBin;
+				const G4double radiationWeight = kHeavyIonRadiationWeight;
+				for (G4int phantomIndex = 0; phantomIndex < numberOfPhantoms; ++phantomIndex) {
+					const G4int offset = kFirstPhantomHistogramId
+						+ kPhantomHistogramsPerPhantom*phantomIndex;
+					analysis->FillH2(
+						offset + kPhantomDoseHistogramOffset,
+						primaryEnergy, interfaceId,
+						radiationResponses[phantomIndex][responseIndex]
+							* kineticEnergy/eV
+					);
+					analysis->FillH2(
+						offset + kPhantomEquivalentDoseHistogramOffset,
+						primaryEnergy, interfaceId,
+						radiationResponses[phantomIndex][responseIndex]
+							* kineticEnergy/eV * radiationWeight
+					);
+					analysis->FillH2(
+						offset + kPhantomCountingHistogramOffset,
+						primaryEnergy, interfaceId,
+						countingResponses[phantomIndex][responseIndex]
+					);
 				}
 			}
 		}
 
 		if (mode == 0 || mode == 1) {
-			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfacePDG, partPDG);
-			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfaceId, diid);
+			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfacePDG, particlePDG);
+			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfaceId, interfaceId);
 			analysis->FillNtupleIColumn(
 				kInterfaceNtupleId,
 				kInterfaceAngleDegrees,
@@ -240,12 +301,12 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			analysis->FillNtupleDColumn(
 				kInterfaceNtupleId,
 				kInterfaceKineticEnergyMeV,
-				pre->GetKineticEnergy()/MeV
+				preStepPoint->GetKineticEnergy()/MeV
 			);
 			analysis->FillNtupleDColumn(
 				kInterfaceNtupleId,
 				kInterfacePrimaryEnergyMeV,
-				einp/MeV
+				primaryEnergy/MeV
 			);
 			analysis->AddNtupleRow(kInterfaceNtupleId);
 		}

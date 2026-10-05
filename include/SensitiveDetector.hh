@@ -1,9 +1,10 @@
 #ifndef SensitiveDetector_hh
-#define SensitiveDetector_hh
+#define SensitiveDetector_hh 1
 
 #include "G4VSensitiveDetector.hh"
 #include "G4UImessenger.hh"
 
+#include <cstddef>
 #include <vector>
 
 #include "G4VHit.hh"
@@ -22,51 +23,47 @@ class SDHit;
 
 class SDHit : public G4VHit
 {
-public:
-	SDHit();
-	virtual ~SDHit();
+  public:
+    SDHit();
+    ~SDHit() override;
 
-	inline void* operator new(size_t);
-	inline void  operator delete(void*);
+    inline void* operator new(std::size_t);
+    inline void  operator delete(void*);
 
-	virtual void Print();
+    void Print() override;
 
-	G4double ioni, nioni;
-	G4String det, part;
-	G4int detid, stepid;
-	
+    G4double fIonizingEnergy, fNonionizingEnergy;
+    G4String fDetector, fParticle;
+    G4int fDetectorId, fStepId;
 
-	static G4Allocator<SDHit>* SDHitAllocator;
+    static G4Allocator<SDHit>* fgAllocator;
 };
 
 using SDHitsCollection = G4THitsCollection<SDHit>;
 
-inline void* SDHit::operator new(size_t)
+inline void* SDHit::operator new(std::size_t)
 {
-	if(!SDHitAllocator)
-		SDHitAllocator = new G4Allocator<SDHit>;
-	return (void *) SDHitAllocator->MallocSingle();
+	if (!fgAllocator) fgAllocator = new G4Allocator<SDHit>;
+	return static_cast<void*>(fgAllocator->MallocSingle());
 }
 
-inline void SDHit::operator delete(void *hit)
+inline void SDHit::operator delete(void* hit)
 {
-	SDHitAllocator->FreeSingle((SDHit*) hit);
+	fgAllocator->FreeSingle(static_cast<SDHit*>(hit));
 }
 
 
 class SensitiveDetector : public G4VSensitiveDetector, public G4UImessenger
 {
-public:
-	explicit SensitiveDetector(const G4String& name);
-	virtual ~SensitiveDetector();
+  public:
+    explicit SensitiveDetector(const G4String& name);
+    ~SensitiveDetector() override;
 
-	// methods from base class
-	virtual void   Initialize(G4HCofThisEvent* hitCollection);
-	virtual G4bool ProcessHits(G4Step* step, G4TouchableHistory* history);
+    void Initialize(G4HCofThisEvent* hitCollection) override;
+    G4bool ProcessHits(G4Step* step, G4TouchableHistory* history) override;
 
-private:
-
-	SDHitsCollection* fHitsCollection;
+  private:
+    SDHitsCollection* fHitsCollection;
 
 };
 

@@ -17,15 +17,15 @@ UserActionInitialization::~UserActionInitialization()
 
 void UserActionInitialization::BuildForMaster() const
 {
-  auto* const runaction = new RunAction(true);
-  SetUserAction(runaction);
+  auto* const runAction = new RunAction(true);
+  SetUserAction(runAction);
 }
 
 void UserActionInitialization::Build() const
 {
   G4cout << "Starting build of UserActionInitialization for workers" << G4endl;
-  auto* const runaction = new RunAction(false);
-  SetUserAction(runaction);
+  auto* const runAction = new RunAction(false);
+  SetUserAction(runAction);
 
  
   G4cout << "Proceeding with build of UserActionInitialization for workers" << G4endl;
