@@ -173,7 +173,7 @@ int main(int argc,char** argv){
 		       << outputFileName << "; output may be very large" << G4endl;
 	}
 
-	atris::UserActionInitialization* useract = new atris::UserActionInitialization(detector);
+	atris::UserActionInitialization* useract = new atris::UserActionInitialization();
 	runManager->SetUserInitialization(useract);
 
 

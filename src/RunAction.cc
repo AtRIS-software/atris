@@ -7,7 +7,6 @@
 #include "G4PhysicalConstants.hh"
 #include "HistoManager.hh"
 #include "G4AnalysisManager.hh"
-#include "DetectorConstruction.hh"
 #include "G4UnitsTable.hh"
 #include <vector>
 #include <cmath>
@@ -21,10 +20,9 @@ extern G4int mode;
 
 namespace atris {
 
-RunAction::RunAction(DetectorConstruction* detector, G4bool role)
+RunAction::RunAction(G4bool role)
   : fHisto(nullptr)
 {
-  (void)detector;
   SetMaster(role);
 
   if (!(G4ParticleTable::GetParticleTable()->GetReadiness()))

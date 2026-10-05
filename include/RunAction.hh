@@ -7,13 +7,12 @@ class G4Run;
 
 namespace atris {
 
-class DetectorConstruction;
 class HistoManager;
 
 class RunAction : public ::G4UserRunAction
 {
   public:
-    RunAction(DetectorConstruction* detector, G4bool role);
+    explicit RunAction(G4bool role);
     ~RunAction() override;
 
     G4Run* GenerateRun() override;
