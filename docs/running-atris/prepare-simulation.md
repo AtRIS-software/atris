@@ -76,8 +76,10 @@ The phantom tables define the response accumulated during particle transport.
 Changing them later does not change the response already recorded in the
 histograms, so select them as part of the physical setup before preparing the
 particle sampling.
-See [the cost of phantom responses](../background/what-determines-runtime.md#phantom-responses) when
-assessing the resources needed for your selection.
+A modest phantom selection is normally a comparatively small addition because
+all phantoms share the same transported particle shower. See
+[the cost of phantom responses](../background/what-determines-runtime.md#phantom-responses)
+when assessing the resources needed for a larger selection.
 
 ## Prepare particle inputs
 

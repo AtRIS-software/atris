@@ -30,6 +30,28 @@ also adds table and histogram memory, plus merging and writing work. Total
 runtime therefore grows by the additional scoring and output cost, without
 repeating the particle shower.
 
+For a modest phantom selection, transport normally remains the larger cost, so
+phantoms are comparatively cheap. A useful qualitative model is
+$T(N) \approx T_{\mathrm{transport}} + N T_{\mathrm{phantom}}$: doubling the
+phantom count doubles only the phantom-scoring term, not the complete runtime.
+The cost can still become important when many phantoms are selected. Measure a
+representative chunk when planning a large selection because the number of
+eligible crossings, and therefore the cost per phantom, depends on the
+simulation.
+
+## Threads and fixed work
+
+Geant4 distributes complete events among the worker threads. Particle transport
+and the associated phantom scoring therefore run in parallel across events;
+within one event, its worker processes the selected phantoms in sequence.
+
+Input loading, geometry and run setup, worker coordination, result merging, and
+final output contain work that does not scale in the same way. More threads can
+shorten event transport without removing those fixed costs, so benchmark total
+throughput rather than assuming that doubling the thread count halves runtime.
+See [runtime settings](../reference/runtime.md#thread-precedence) for selecting
+the number of threads.
+
 ## Output mode
 
 `response` accumulates histograms. `profile` adds interface-crossing records,
