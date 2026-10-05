@@ -28,10 +28,10 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 	ParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle 
 
-	G4int current  = anEvent->GetEventID();
+	const G4int current = anEvent->GetEventID();
 	if (current % 100 == 0){
 		if (current != 0){
-		G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;
+		const G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;
 		speed = (G4double) current / (G4double) elapsed;
 		G4cout << "Processing event: " << current << ", " <<  elapsed << " secoonds have passed. We are processing " << speed << " primaries per second."  << G4endl;
 		} else {
@@ -39,19 +39,21 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 		}
 	}
 	// Calculate direction
-	G4ThreeVector dir = ParticleGenerator->GetParticleMomentumDirection();
-	G4double dirtheta = dir.theta(), dirphi=dir.phi();
+	const G4ThreeVector dir = ParticleGenerator->GetParticleMomentumDirection();
+	const G4double dirtheta = dir.theta();
+	G4double dirphi = dir.phi();
 	if (dirphi < 0.) dirphi += twopi;
-	G4double dircost  = std::cos(dirtheta);
+	const G4double dircost = std::cos(dirtheta);
 
 	// Get kinetic energy
-	G4double primary_vertex_energy = ParticleGenerator->GetParticleEnergy();
+	const G4double primary_vertex_energy = ParticleGenerator->GetParticleEnergy();
 
 	// Calculate position
-	G4ThreeVector pos = ParticleGenerator->GetParticlePosition();
-	G4double postheta=pos.theta(), posphi=pos.phi();
+	const G4ThreeVector pos = ParticleGenerator->GetParticlePosition();
+	const G4double postheta = pos.theta();
+	G4double posphi = pos.phi();
 	if (posphi < 0.) posphi += twopi;
-	G4double poscost = std::cos(postheta);
+	const G4double poscost = std::cos(postheta);
 
 	// now we fil the histograms
 	// Unit weights preserve per-energy primary counts in CSV and ROOT output.

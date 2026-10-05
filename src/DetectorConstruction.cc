@@ -36,7 +36,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct()
 }
 void DetectorConstruction::ConstructSDandField() {
 	// We increase the precision of G4cout
-	G4int prec = G4cout.precision(15);
+	const G4int prec = G4cout.precision(15);
 	G4cout << "### AtRIS: increased precission to " << prec << " printing pi=" << pi << G4endl;
 	G4cout << "### AtRIS: proceeding with Detector contruction. " << G4endl;
 	G4SDManager* const SDman = G4SDManager::GetSDMpointer();
@@ -47,8 +47,8 @@ void DetectorConstruction::ConstructSDandField() {
 		for (G4GDMLAuxListType::const_iterator vit=(*iter).second.begin(); vit!=(*iter).second.end();vit++) {
 			if ((*vit).type=="SensDet") {
 				if (ATRIS_VERBOSE) G4cout << "SD " << (*vit).value << " to " << ((*iter).first)->GetName() << ", ";
-				G4String detname            = (*vit).value;
-				G4int SDID                  = std::stoi(detname);
+				const G4String detname = (*vit).value;
+				const G4int SDID = std::stoi(detname);
 				SensitiveDetector* const detSD = new SensitiveDetector(detname);
 				SDman->AddNewDetector( detSD);
 				G4VSensitiveDetector* const mydet = SDman->FindSensitiveDetector((*vit).value);
@@ -56,11 +56,11 @@ void DetectorConstruction::ConstructSDandField() {
 					G4LogicalVolume* const myvol = (*iter).first;
 					myvol->SetSensitiveDetector(mydet);
 					// At this point we implement the calculation of volume, mass, surface
-					G4double mass     = myvol->GetMass();
+					const G4double mass = myvol->GetMass();
 					G4VSolid* const mysol = myvol->GetSolid();
-					G4double surface  = mysol->GetSurfaceArea();
-					G4double volume   = mysol->GetCubicVolume();
-					G4double density  = mass / volume;
+					const G4double surface = mysol->GetSurfaceArea();
+					const G4double volume = mysol->GetCubicVolume();
+					const G4double density = mass / volume;
 					// Print detector ID, mass, surface area, volume, and density.
 					G4cout << "SDIDr: " << SDID << ", " << mass/kg << ", " << surface/cm2 << ", " << volume/cm3 << ", " << density/(g/cm3) << G4endl;
 					// populating the dictionaries

@@ -159,7 +159,7 @@ void HistoManager::Book() const
 	for (G4int phantomnr = 0; phantomnr < nrphantoms; phantomnr++){
 		G4cout << "### AtRIS: Initializing higher order histograms for " << nrphantoms << " phantoms, with a total number of histograms equal to " << nrphantoms*3 + 5 <<G4endl;
 		// For the DIID, we need less detbins, but we will keep this here and remove it latter when writing out the custom output
-		G4String suffix = std::to_string(phantomnr);
+		const G4String suffix = std::to_string(phantomnr);
 		id = analysis->CreateH2(
 			"h2.dos" + suffix, "Phantom energy response", enbins, detbins,
 			"MeV", "none", "none", "none"

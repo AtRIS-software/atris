@@ -73,14 +73,14 @@ void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
 
 G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	G4Track* const trk = step->GetTrack();
-	G4double edep     = step->GetTotalEnergyDeposit();
+	const G4double edep = step->GetTotalEnergyDeposit();
 	auto* const sourcedata = G4GeneralParticleSourceData::Instance();
 	auto* const theGun = sourcedata->GetCurrentSource();
-	G4double einp     = theGun->GetParticleEnergy();
+	const G4double einp = theGun->GetParticleEnergy();
 	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 
-	G4int    detid = std::stoi(this->GetName());
-	G4double nioni = step->GetNonIonizingEnergyDeposit();
+	const G4int detid = std::stoi(this->GetName());
+	const G4double nioni = step->GetNonIonizingEnergyDeposit();
 	if (mode == 1) {
 		const G4Event* const event = G4RunManager::GetRunManager()->GetCurrentEvent();
 		const G4StepPoint* const prePoint = step->GetPreStepPoint();
@@ -159,7 +159,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		trk->SetTrackStatus(fStopAndKill);
 		return false;
 	}
-	G4double ioni  = edep - nioni;
+	const G4double ioni = edep - nioni;
 	analysis->FillH2(2,einp,detid,ioni/MeV);
 	analysis->FillH2(3,einp,detid,edep/MeV);
 	// mode -1:      dose rate determination
@@ -172,21 +172,21 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	const G4StepPoint* const pre = step->GetPreStepPoint();
 	if (pre->GetStepStatus() == fGeomBoundary){
 		//Let's check which sdid we have:
-		G4double ekin = pre->GetKineticEnergy();
-		G4ThreeVector position     = pre->GetPosition().unit();
-		G4ThreeVector direction    = pre->GetMomentumDirection();
-		G4double inclination       = std::acos(position*direction); 
-		bool upward                = inclination < halfpi;
-		G4int diid                 = detid - (1*upward);
-		G4int    partPDG           = trk->GetParticleDefinition()->GetPDGEncoding();
-		G4int    apartPDG          = std::abs(partPDG);
+		const G4double ekin = pre->GetKineticEnergy();
+		const G4ThreeVector position = pre->GetPosition().unit();
+		const G4ThreeVector direction = pre->GetMomentumDirection();
+		const G4double inclination = std::acos(position*direction);
+		const bool upward = inclination < halfpi;
+		const G4int diid = detid - (1*upward);
+		const G4int partPDG = trk->GetParticleDefinition()->GetPDGEncoding();
+		const G4int apartPDG = std::abs(partPDG);
 		G4int    k = static_cast<G4int>(std::log10(ekin/eV)/ICRU_LOG_ENERGY_STEP);
 		if (k < 0) k=0;
 		if (apartPDG<2214) {
-			G4int    dpartPDG          = partPDG + 2213;
-			bool use = ((useornot[dpartPDG]) or (partPDG==22));
+			const G4int dpartPDG = partPDG + 2213;
+			const bool use = ((useornot[dpartPDG]) or (partPDG==22));
 			if (use) { // light relevant particles
-				G4int j = useornot[dpartPDG]*650+k;
+				const G4int j = useornot[dpartPDG]*650+k;
 				// ##########################
 				// Extension: equivalent dose
 				//            factor = 1 for all particles except:
@@ -205,7 +205,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 					}
 				}
 				for (G4int pidx=0;pidx<nrphantoms;pidx++){
-					G4int offset = 4 + 3*pidx;
+					const G4int offset = 4 + 3*pidx;
 					analysis->FillH2(offset+0,einp,diid,abso[pidx][j]*ekin/eV );
 					analysis->FillH2(offset+1,einp,diid,abso[pidx][j]*ekin/eV*wfactor);
 					analysis->FillH2(offset+2,einp,diid,rate[pidx][j]);
@@ -218,10 +218,10 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			// We then check if we are dealing with one of: H2, H3, He3, He4
 			// If so, we add the contribution to the dose-rate histogram
 			if (heavy.find(partPDG) != heavy.end()){
-				G4int j = heavy[partPDG]*650+k;
-				G4double wfactor = 20;
+				const G4int j = heavy[partPDG]*650+k;
+				const G4double wfactor = 20;
 				for (G4int pidx=0;pidx<nrphantoms;pidx++){
-					G4int offset = 4 + 3*pidx;
+					const G4int offset = 4 + 3*pidx;
 					analysis->FillH2(offset+0,einp,diid,abso[pidx][j]*ekin/eV );
 					analysis->FillH2(offset+1,einp,diid,abso[pidx][j]*ekin/eV*wfactor);
 					analysis->FillH2(offset+2,einp,diid,rate[pidx][j]);

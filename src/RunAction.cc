@@ -27,7 +27,7 @@ RunAction::RunAction(G4bool role)
 
   if (!(G4ParticleTable::GetParticleTable()->GetReadiness()))
   {
-    G4String msg = " You are instantiating RunAction BEFORE your G4VUserPhysicsList \n";
+    const G4String msg = " You are instantiating RunAction BEFORE your G4VUserPhysicsList \n";
     G4Exception("atris::RunAction::RunAction()", "Run0041", FatalException, msg);
   }
 }
