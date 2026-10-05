@@ -4,6 +4,20 @@ Version 3.0 added scatter-gather support and placed the existing Python scripts
 in a small package. Structural work should not change scientific or numerical
 behaviour unless that change is explicitly documented and validated.
 
+## C++ conventions
+
+AtRIS aims to follow the [Geant4 coding guidelines](https://geant4.web.cern.ch/collaboration/working_groups/novextExamples/codingGuidelines.v2.2.html)
+so that its C++ code is familiar to Geant4 users and contributors. New and
+modified code should use `UpperCamelCase` member functions,
+`fUpperCamelCase` data members, `lowerCamelCase` local variables and arguments,
+and `kUpperCamelCase` named compile-time constants. Use `constexpr` for values
+known at compile time and `const` for other values that do not change.
+
+Existing code should be brought into line incrementally when related work is
+already changing it. Non-obvious numerical boundaries and scientific constants
+must be given descriptive names or explained where they are used; their meaning
+should not have to be inferred from a value such as a PDG particle code.
+
 ## Remaining goals
 
 The remaining goals are:
