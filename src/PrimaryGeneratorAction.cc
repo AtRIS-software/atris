@@ -9,6 +9,17 @@
 
 namespace atris {
 
+namespace {
+
+constexpr G4int kProgressEventInterval = 100;
+
+// These IDs match the H1 and H2 creation order in HistoManager::Book().
+constexpr G4int kPrimaryEnergyHistogramId = 0;
+constexpr G4int kSourceDirectionHistogramId = 0;
+constexpr G4int kSourcePositionHistogramId = 1;
+
+}  // namespace
+
 PrimaryGeneratorAction::PrimaryGeneratorAction()
 	: fParticleGenerator(new G4GeneralParticleSource),
 	  fStartTime(static_cast<G4int>(std::time(nullptr)))
@@ -25,7 +36,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	fParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle
 
 	const G4int current = anEvent->GetEventID();
-	if (current % 100 == 0){
+	if (current % kProgressEventInterval == 0){
 		if (current != 0){
 		const G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;
 		const G4double speed = (G4double) current / (G4double) elapsed;
@@ -55,9 +66,9 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 
 	// now we fil the histograms
 	// Unit weights preserve per-energy primary counts in CSV and ROOT output.
-	analysis->FillH1(0,primaryVertexEnergy);
-	analysis->FillH2(0,directionPhi,directionCosine);
-	analysis->FillH2(1,positionPhi,positionCosine);
+	analysis->FillH1(kPrimaryEnergyHistogramId,primaryVertexEnergy);
+	analysis->FillH2(kSourceDirectionHistogramId,directionPhi,directionCosine);
+	analysis->FillH2(kSourcePositionHistogramId,positionPhi,positionCosine);
 }
 
 }  // namespace atris

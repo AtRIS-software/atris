@@ -18,6 +18,7 @@ extern G4int numberOfDetectors;
 namespace {
 
 constexpr G4bool kAtrisVerbose = false;
+constexpr G4int kDiagnosticPrecision = 15;
 
 }  // namespace
 
@@ -36,7 +37,7 @@ G4VPhysicalVolume* DetectorConstruction::Construct()
 }
 void DetectorConstruction::ConstructSDandField() {
 	// We increase the precision of G4cout
-	const G4int prec = G4cout.precision(15);
+	const G4int prec = G4cout.precision(kDiagnosticPrecision);
 	G4cout << "### AtRIS: increased precission to " << prec << " printing pi=" << pi << G4endl;
 	G4cout << "### AtRIS: proceeding with Detector contruction. " << G4endl;
 	G4SDManager* const sdManager = G4SDManager::GetSDMpointer();

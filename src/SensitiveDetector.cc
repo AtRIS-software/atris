@@ -19,6 +19,7 @@
 #include "G4AnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
 #include "NtupleSchema.hh"
+#include "OutputMode.hh"
 #include "PhantomResponseSchema.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
@@ -88,7 +89,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 
 	const G4int detectorId = std::stoi(this->GetName());
 	const G4double nonionizingEnergyDeposit = step->GetNonIonizingEnergyDeposit();
-	if (mode == 1) {
+	if (WritesStepNtuple(mode)) {
 		const G4Event* const event = G4RunManager::GetRunManager()->GetCurrentEvent();
 		const G4StepPoint* const prePoint = step->GetPreStepPoint();
 		const G4StepPoint* const postPoint = step->GetPostStepPoint();
@@ -162,6 +163,8 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		analysis->FillNtupleSColumn(kStepNtupleId, kStepProcess, stepProcessName);
 		analysis->AddNtupleRow(kStepNtupleId);
 	}
+	// The first and last sensitive volumes are termination shells. Particles
+	// reaching either edge have left the simulated region and are discarded.
 	if (detectorId == 0){
 		track->SetTrackStatus(fStopAndKill);
 		return false;
@@ -183,12 +186,6 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		detectorId,
 		energyDeposit/MeV
 	);
-	// mode -1:      dose rate determination
-	// mode 0:   	 output data for all atmospheric sheets, at sheet interface
-	//         	 purpose: altitude particle profiles
-	// mode 1: 	 output data at each step
-	//           	 purpose: shower visualization
-
 	//before the step, the particle should have been at the boundary. 
 	const G4StepPoint* const preStepPoint = step->GetPreStepPoint();
 	if (preStepPoint->GetStepStatus() == fGeomBoundary){
@@ -198,6 +195,8 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		const G4ThreeVector direction = preStepPoint->GetMomentumDirection();
 		const G4double inclination = std::acos(position*direction);
 		const bool upward = inclination < halfpi;
+		// A crossing belongs to the shared interface below the current detector
+		// when the particle is moving upward, and above it when moving downward.
 		const G4int interfaceId = detectorId - upward;
 		const G4int particlePDG = track->GetParticleDefinition()->GetPDGEncoding();
 		const G4int absolutePDG = std::abs(particlePDG);
@@ -207,10 +206,10 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 				std::log10(kineticEnergy/eV) / kPhantomResponseLogEnergyStep
 			)
 		);
-		// PDG codes below this boundary fit the dense signed-PDG response lookup;
-		// ion codes are handled separately below.
 		if (absolutePDG < kLightParticlePDGLimit) {
 			const G4int lookupIndex = particlePDG + kLightParticlePDGOffset;
+			// Zero is both the first response-table row and the legacy "not found"
+			// sentinel. Supplied tables place photons first, so include them explicitly.
 			const bool hasResponse =
 				lightParticleResponseIndices[lookupIndex] || particlePDG == kPhotonPDG;
 			if (hasResponse) {
@@ -218,8 +217,8 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 					lightParticleResponseIndices[lookupIndex]
 					* kPhantomResponseEnergyBins + responseEnergyBin;
 				// Radiation weighting is 1 by default, 2 for protons and pions,
-				// and 20 for heavy ions. Neutrons retain the legacy AtRIS
-				// piecewise energy-dependent expression below.
+				// and 20 for heavy ions. The numerical coefficients below are the
+				// original AtRIS piecewise neutron radiation-weighting formula.
 				G4double radiationWeight = kDefaultRadiationWeight;
 				if (absolutePDG == kProtonPDG || absolutePDG == kNeutralPionPDG) {
 					radiationWeight = kProtonPionRadiationWeight;
@@ -290,7 +289,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			}
 		}
 
-		if (mode == 0 || mode == 1) {
+		if (WritesInterfaceNtuple(mode)) {
 			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfacePDG, particlePDG);
 			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfaceId, interfaceId);
 			analysis->FillNtupleIColumn(

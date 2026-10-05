@@ -5,12 +5,15 @@
 
 namespace atris {
 
+// Each particle row in a phantom response table contains 650 coefficients on
+// a log10(eV) energy grid with a spacing of 0.02 decades.
 constexpr G4int kPhantomResponseEnergyBins = 650;
 constexpr G4double kPhantomResponseLogEnergyStep = 0.02;
 
-// Common particles use a dense lookup indexed by signed PDG code. The offset
-// maps the supported range [-2213, 2213] onto [0, 4426]; nuclei use their full
-// ion PDG codes in a separate map.
+// The historical response lookup is an array indexed directly by signed PDG
+// code. Its exclusive bound 2214 includes proton and antiproton (PDG +/-2212)
+// while leaving one unused slot at each end. Sparse ion PDG codes are stored
+// separately rather than making this array enormous.
 constexpr G4int kLightParticlePDGLimit = 2214;
 constexpr G4int kLightParticlePDGOffset = kLightParticlePDGLimit - 1;
 constexpr G4int kLightParticleLookupSize = 2 * kLightParticlePDGOffset + 1;

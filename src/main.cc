@@ -5,6 +5,7 @@
 #include "G4GDMLParser.hh"
 
 #include "DetectorConstruction.hh"
+#include "OutputMode.hh"
 #include "PhantomResponseSchema.hh"
 #include "UserActionInitialization.hh"
 #include "Randomize.hh"
@@ -27,7 +28,7 @@
 G4String outputFileName;
 G4String simulationInputPrefix;
 G4String physicsListName;
-G4int    mode = -1;
+G4int    mode = atris::kResponseOutputMode;
 G4int    numberOfDetectors = 0;
 G4bool   hasExplicitSeeds = false;
 std::array<G4long, 2> explicitSeeds = {0, 0};
@@ -41,6 +42,16 @@ std::vector<std::vector<G4double>> countingResponses;
 
 std::vector<G4double> energyBins;
 std::vector<G4double> detectorBins;
+
+namespace {
+
+constexpr std::size_t kChunkSeedDigits = 6;
+constexpr G4double kDetectorBinHalfWidth = 0.5;
+constexpr std::size_t kLegacyPhysicsListSuffixLength = 4;
+constexpr G4int kTimingDecimalPlaces = 3;
+
+}  // namespace
+
 // Functions used by main.
 G4bool LoadPhantoms(G4int count);
 void DetermineNumberOfDetectors(const G4String& fileName);
@@ -77,7 +88,10 @@ SimulationRun ParseSimulationRun(const G4String& argument) {
 		secondSeparator - firstSeparator - 1
 	);
 	const std::string secondSeed = name.substr(secondSeparator + 1);
-	if (firstSeed.size() != 6 || secondSeed.size() != 6) return run;
+	if (
+		firstSeed.size() != kChunkSeedDigits
+		|| secondSeed.size() != kChunkSeedDigits
+	) return run;
 	if (firstSeed.find_first_not_of("0123456789") != std::string::npos) return run;
 	if (secondSeed.find_first_not_of("0123456789") != std::string::npos) return run;
 
@@ -118,7 +132,8 @@ int main(int argc,char** argv){
 	DetermineNumberOfDetectors(gdmlName);
 	G4cout << "### AtRIS: Generating detbins with the determined number of detectors" << G4endl;
 	for(int i=0;i<=numberOfDetectors;i++){
-		detectorBins.push_back(i-0.5);
+		// Integer detector IDs sit at the centers of these histogram bins.
+		detectorBins.push_back(i-kDetectorBinHalfWidth);
 	}
 	// Create the enbinsa for the histograms
 	const G4String binEdgesFile = simulation.inputPrefix+".bins";
@@ -151,8 +166,12 @@ int main(int argc,char** argv){
 	const G4String physics = argv[1]; 			 //Setting up the physics list
 	physicsListName = physics;
 	G4PhysListFactory factory;                       // initialize physics list
+	// Preserve the original launcher's compatibility check for a physics-list
+	// name with a four-character suffix. The full name is still passed to Geant4.
 	const G4bool validPhysicsList = factory.IsReferencePhysList(physics)
-		|| factory.IsReferencePhysList(physics.substr(0,physics.size()-4));
+		|| factory.IsReferencePhysList(
+			physics.substr(0,physics.size()-kLegacyPhysicsListSuffixLength)
+		);
 	if (validPhysicsList) {
 		G4VModularPhysicsList* const physicsList = factory.GetReferencePhysList(physics);
 		physicsList->RegisterPhysics(new G4StepLimiterPhysics());
@@ -165,11 +184,11 @@ int main(int argc,char** argv){
 		}
 		return -1;
 	}
-	if (mode == 0) {
+	if (mode == atris::kInterfaceOutputMode) {
 		G4cout << "### AtRIS: mode 0 writes histograms and interface ntuples to "
 		       << outputFileName << G4endl;
 	}
-	if (mode == 1) {
+	if (mode == atris::kStepOutputMode) {
 		G4cout << "### AtRIS: mode 1 writes histograms, interface, and transport-step ntuples to "
 		       << outputFileName << "; output may be very large" << G4endl;
 	}
@@ -205,7 +224,7 @@ int main(int argc,char** argv){
 	const double totalSeconds =
 		std::chrono::duration<double>(totalEnd - totalStart).count();
 	std::ostringstream timingOutput;
-	timingOutput << std::fixed << std::setprecision(3)
+	timingOutput << std::fixed << std::setprecision(kTimingDecimalPlaces)
 		<< "### AtRIS timing: Geant4 macro wall time: " << macroSeconds
 		<< " s using " << workerThreads << " worker thread(s)\n"
 		<< "### AtRIS timing: setup/cleanup wall time: "

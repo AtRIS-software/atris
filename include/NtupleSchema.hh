@@ -5,6 +5,9 @@
 
 namespace atris {
 
+// Increment this when the meaning or layout of persisted analysis data changes.
+constexpr G4int kOutputSchemaVersion = 1;
+
 constexpr G4int kMetadataNtupleId = 0;
 enum MetadataNtupleColumn : G4int {
 	kMetadataSchema = 0,

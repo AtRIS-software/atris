@@ -1,5 +1,6 @@
 #include "HistoManager.hh"
 #include "NtupleSchema.hh"
+#include "OutputMode.hh"
 #include "PhantomResponseSchema.hh"
 #include "G4AnalysisManager.hh"
 #include "G4Threading.hh"
@@ -34,6 +35,8 @@ constexpr G4double kSourceAzimuthMin = 0.;
 constexpr G4double kSourceAzimuthMax = twopi;
 constexpr G4double kSourceCosineMin = -1.;
 constexpr G4double kSourceCosineMax = 1.;
+// One primary-energy H1 and four non-phantom H2 histograms are always booked.
+constexpr G4int kBaseHistogramCount = 5;
 
 template <typename Histogram>
 void AnnotateHistogram(
@@ -44,7 +47,10 @@ void AnnotateHistogram(
 )
 {
 	if (histogram == nullptr) return;
-	histogram->add_annotation("atris.csv_schema", "1");
+	histogram->add_annotation(
+		"atris.csv_schema",
+		std::to_string(atris::kOutputSchemaVersion)
+	);
 	histogram->add_annotation("atris.version", ATRIS_VERSION);
 	histogram->add_annotation("atris.histogram_name", name);
 	histogram->add_annotation("atris.quantity", quantity);
@@ -159,7 +165,8 @@ void HistoManager::Book() const
 		G4cout << "### AtRIS: Initializing higher order histograms for "
 		       << numberOfPhantoms << " phantoms, with a total number of histograms "
 		       << "equal to "
-		       << numberOfPhantoms*kPhantomHistogramsPerPhantom + 5 << G4endl;
+		       << numberOfPhantoms*kPhantomHistogramsPerPhantom
+		          + kBaseHistogramCount << G4endl;
 		// Post-processing removes the extra detector boundary from interface data.
 		const G4String suffix = std::to_string(phantomIndex);
 		id = analysis->CreateH2(
@@ -217,7 +224,7 @@ void HistoManager::Book() const
 
 	}
 
-	if (mode != 0 && mode != 1) return;
+	if (!WritesInterfaceNtuple(mode)) return;
 
 	id = analysis->CreateNtuple("metadata", "AtRIS output metadata");
 	analysis->CreateNtupleIColumn(id, "schema");
@@ -240,7 +247,7 @@ void HistoManager::Book() const
 	analysis->CreateNtupleDColumn(id, "kinetic_energy_MeV");
 	analysis->CreateNtupleDColumn(id, "primary_energy_MeV");
 	analysis->FinishNtuple(id);
-	if (mode != 1) return;
+	if (!WritesStepNtuple(mode)) return;
 
 	id = analysis->CreateNtuple("steps", "Particle transport steps");
 	analysis->CreateNtupleIColumn(id, "event_id");
@@ -270,11 +277,15 @@ void HistoManager::Book() const
 
 void HistoManager::FillMetadata() const
 {
-	if (mode != 0 && mode != 1) return;
+	if (!WritesInterfaceNtuple(mode)) return;
 	// One worker records the shared run metadata while Geant4 merges all ntuples.
 	if (G4Threading::G4GetThreadId() != 0) return;
 	auto* const analysis = G4AnalysisManager::Instance();
-	analysis->FillNtupleIColumn(kMetadataNtupleId, kMetadataSchema, 1);
+	analysis->FillNtupleIColumn(
+		kMetadataNtupleId,
+		kMetadataSchema,
+		kOutputSchemaVersion
+	);
 	analysis->FillNtupleSColumn(
 		kMetadataNtupleId, kMetadataAtrisVersion, ATRIS_VERSION
 	);
