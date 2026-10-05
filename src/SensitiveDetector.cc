@@ -19,6 +19,7 @@
 #include "G4AnalysisManager.hh"
 #include "G4PhysicalConstants.hh"
 #include "NtupleSchema.hh"
+#include "PhantomResponseSchema.hh"
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
 #include "G4VProcess.hh"
@@ -35,12 +36,6 @@ extern G4int nrphantoms;
 extern std::map<G4int, G4int> heavy;    //
 
 namespace atris {
-
-namespace {
-
-const G4double ICRU_LOG_ENERGY_STEP = 0.02;
-
-}  // namespace
 
 G4Allocator<SDHit>* SDHit::SDHitAllocator = nullptr;
 
@@ -98,59 +93,59 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 			: "none";
 
 		analysis->FillNtupleIColumn(
-			stepNtupleId,
-			stepEventId,
+			kStepNtupleId,
+			kStepEventId,
 			event ? event->GetEventID() : -1
 		);
-		analysis->FillNtupleIColumn(stepNtupleId, stepTrackId, trk->GetTrackID());
-		analysis->FillNtupleIColumn(stepNtupleId, stepParentId, trk->GetParentID());
+		analysis->FillNtupleIColumn(kStepNtupleId, kStepTrackId, trk->GetTrackID());
+		analysis->FillNtupleIColumn(kStepNtupleId, kStepParentId, trk->GetParentID());
 		analysis->FillNtupleIColumn(
-			stepNtupleId,
-			stepId,
+			kStepNtupleId,
+			kStepId,
 			trk->GetCurrentStepNumber()
 		);
 		analysis->FillNtupleIColumn(
-			stepNtupleId,
-			stepPdg,
+			kStepNtupleId,
+			kStepPDG,
 			trk->GetParticleDefinition()->GetPDGEncoding()
 		);
-		analysis->FillNtupleIColumn(stepNtupleId, stepDetectorId, detid);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPreXKm, prePosition.x()/km);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPreYKm, prePosition.y()/km);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPreZKm, prePosition.z()/km);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPostXKm, postPosition.x()/km);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPostYKm, postPosition.y()/km);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPostZKm, postPosition.z()/km);
+		analysis->FillNtupleIColumn(kStepNtupleId, kStepDetectorId, detid);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPreXKm, prePosition.x()/km);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPreYKm, prePosition.y()/km);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPreZKm, prePosition.z()/km);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPostXKm, postPosition.x()/km);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPostYKm, postPosition.y()/km);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPostZKm, postPosition.z()/km);
 		analysis->FillNtupleDColumn(
-			stepNtupleId,
-			stepPreKineticEnergyMeV,
+			kStepNtupleId,
+			kStepPreKineticEnergyMeV,
 			prePoint->GetKineticEnergy()/MeV
 		);
 		analysis->FillNtupleDColumn(
-			stepNtupleId,
-			stepPostKineticEnergyMeV,
+			kStepNtupleId,
+			kStepPostKineticEnergyMeV,
 			postPoint->GetKineticEnergy()/MeV
 		);
-		analysis->FillNtupleDColumn(stepNtupleId, stepEnergyDepositMeV, edep/MeV);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepEnergyDepositMeV, edep/MeV);
 		analysis->FillNtupleDColumn(
-			stepNtupleId,
-			stepNonionizingEnergyDepositMeV,
+			kStepNtupleId,
+			kStepNonionizingEnergyDepositMeV,
 			nioni/MeV
 		);
 		analysis->FillNtupleDColumn(
-			stepNtupleId,
-			stepLengthM,
+			kStepNtupleId,
+			kStepLengthM,
 			step->GetStepLength()/m
 		);
 		analysis->FillNtupleDColumn(
-			stepNtupleId,
-			stepGlobalTimeNs,
+			kStepNtupleId,
+			kStepGlobalTimeNs,
 			postPoint->GetGlobalTime()/ns
 		);
-		analysis->FillNtupleDColumn(stepNtupleId, stepPrimaryEnergyMeV, einp/MeV);
-		analysis->FillNtupleSColumn(stepNtupleId, stepCreatorProcess, creatorName);
-		analysis->FillNtupleSColumn(stepNtupleId, stepProcess, stepProcessName);
-		analysis->AddNtupleRow(stepNtupleId);
+		analysis->FillNtupleDColumn(kStepNtupleId, kStepPrimaryEnergyMeV, einp/MeV);
+		analysis->FillNtupleSColumn(kStepNtupleId, kStepCreatorProcess, creatorName);
+		analysis->FillNtupleSColumn(kStepNtupleId, kStepProcess, stepProcessName);
+		analysis->AddNtupleRow(kStepNtupleId);
 	}
 	if (detid == 0){
 		trk->SetTrackStatus(fStopAndKill);
@@ -183,13 +178,15 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		const G4int apartPDG = std::abs(partPDG);
 		const G4int k = std::max(
 			0,
-			static_cast<G4int>(std::log10(ekin/eV)/ICRU_LOG_ENERGY_STEP)
+			static_cast<G4int>(std::log10(ekin/eV)/kPhantomResponseLogEnergyStep)
 		);
-		if (apartPDG<2214) {
-			const G4int dpartPDG = partPDG + 2213;
-			const bool use = ((useornot[dpartPDG]) or (partPDG==22));
+		// PDG codes below this boundary fit the dense signed-PDG response lookup;
+		// ion codes are handled separately below.
+		if (apartPDG < kLightParticlePDGLimit) {
+			const G4int dpartPDG = partPDG + kLightParticlePDGOffset;
+			const bool use = ((useornot[dpartPDG]) or (partPDG == kPhotonPDG));
 			if (use) { // light relevant particles
-				const G4int j = useornot[dpartPDG]*650+k;
+				const G4int j = useornot[dpartPDG] * kPhantomResponseEnergyBins + k;
 				// ##########################
 				// Extension: equivalent dose
 				//            factor = 1 for all particles except:
@@ -197,8 +194,8 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 				//                    20 for heavy nuclei and fission fragments
 				//                       for neutrons, we have a continious function wneut
 				G4double wfactor = 1;
-				if ((apartPDG == 2212) or (apartPDG == 111)) wfactor=2;
-				if (apartPDG == 2112){
+				if ((apartPDG == kProtonPDG) or (apartPDG == kNeutralPionPDG)) wfactor=2;
+				if (apartPDG == kNeutronPDG){
 					if (ekin <= 1/MeV) {
 						wfactor = 3.5 + 18.2*std::exp(-std::log(std::pow(ekin/MeV,2.0))/6.0) ;
 					} else if (ekin <= 50/MeV) {
@@ -216,12 +213,12 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 
 
 			}
-		} else if (1000010019 < partPDG) {
+		} else if (partPDG >= kFirstSupportedIonPDG) {
 			// We first check if we are dealing with one of the smaller, relevant isotopes
 			// We then check if we are dealing with one of: H2, H3, He3, He4
 			// If so, we add the contribution to the dose-rate histogram
 			if (heavy.find(partPDG) != heavy.end()){
-				const G4int j = heavy[partPDG]*650+k;
+				const G4int j = heavy[partPDG] * kPhantomResponseEnergyBins + k;
 				const G4double wfactor = 20;
 				for (G4int pidx=0;pidx<nrphantoms;pidx++){
 					const G4int offset = 4 + 3*pidx;
@@ -233,24 +230,24 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		}
 
 		if (mode == 0 || mode == 1) {
-			analysis->FillNtupleIColumn(interfaceNtupleId, interfacePdg, partPDG);
-			analysis->FillNtupleIColumn(interfaceNtupleId, interfaceId, diid);
+			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfacePDG, partPDG);
+			analysis->FillNtupleIColumn(kInterfaceNtupleId, kInterfaceId, diid);
 			analysis->FillNtupleIColumn(
-				interfaceNtupleId,
-				interfaceAngleDegrees,
+				kInterfaceNtupleId,
+				kInterfaceAngleDegrees,
 				static_cast<G4int>(std::round(inclination/deg))
 			);
 			analysis->FillNtupleDColumn(
-				interfaceNtupleId,
-				interfaceKineticEnergyMeV,
+				kInterfaceNtupleId,
+				kInterfaceKineticEnergyMeV,
 				pre->GetKineticEnergy()/MeV
 			);
 			analysis->FillNtupleDColumn(
-				interfaceNtupleId,
-				interfacePrimaryEnergyMeV,
+				kInterfaceNtupleId,
+				kInterfacePrimaryEnergyMeV,
 				einp/MeV
 			);
-			analysis->AddNtupleRow(interfaceNtupleId);
+			analysis->AddNtupleRow(kInterfaceNtupleId);
 		}
 	}
 

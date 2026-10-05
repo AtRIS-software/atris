@@ -13,7 +13,7 @@
 namespace atris {
 
 PrimaryGeneratorAction::PrimaryGeneratorAction()
-	: ParticleGenerator(new G4GeneralParticleSource),
+	: fParticleGenerator(new G4GeneralParticleSource),
 	  fStartTime(static_cast<G4int>(std::time(nullptr)))
 {
 	G4cout << "### AtRIS: Created the particle gun." << G4endl;
@@ -25,7 +25,7 @@ PrimaryGeneratorAction::~PrimaryGeneratorAction(){
 
 void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
-	ParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle 
+	fParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle
 
 	const G4int current = anEvent->GetEventID();
 	if (current % 100 == 0){
@@ -38,17 +38,17 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 		}
 	}
 	// Calculate direction
-	const G4ThreeVector dir = ParticleGenerator->GetParticleMomentumDirection();
+	const G4ThreeVector dir = fParticleGenerator->GetParticleMomentumDirection();
 	const G4double dirtheta = dir.theta();
 	G4double dirphi = dir.phi();
 	if (dirphi < 0.) dirphi += twopi;
 	const G4double dircost = std::cos(dirtheta);
 
 	// Get kinetic energy
-	const G4double primary_vertex_energy = ParticleGenerator->GetParticleEnergy();
+	const G4double primaryVertexEnergy = fParticleGenerator->GetParticleEnergy();
 
 	// Calculate position
-	const G4ThreeVector pos = ParticleGenerator->GetParticlePosition();
+	const G4ThreeVector pos = fParticleGenerator->GetParticlePosition();
 	const G4double postheta = pos.theta();
 	G4double posphi = pos.phi();
 	if (posphi < 0.) posphi += twopi;
@@ -56,7 +56,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 
 	// now we fil the histograms
 	// Unit weights preserve per-energy primary counts in CSV and ROOT output.
-	analysis->FillH1(0,primary_vertex_energy);
+	analysis->FillH1(0,primaryVertexEnergy);
 	analysis->FillH2(0,dirphi,dircost);
 	analysis->FillH2(1,posphi,poscost);
 }

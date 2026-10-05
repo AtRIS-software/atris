@@ -27,12 +27,12 @@ extern std::array<G4long, 2> explicitSeeds;
 
 namespace {
 
-const G4int SOURCE_AZIMUTH_BINS = 120;
-const G4int SOURCE_COSINE_BINS = 60;
-const G4double SOURCE_AZIMUTH_MIN = 0.;
-const G4double SOURCE_AZIMUTH_MAX = twopi;
-const G4double SOURCE_COSINE_MIN = -1.;
-const G4double SOURCE_COSINE_MAX = 1.;
+constexpr G4int kSourceAzimuthBins = 120;
+constexpr G4int kSourceCosineBins = 60;
+constexpr G4double kSourceAzimuthMin = 0.;
+constexpr G4double kSourceAzimuthMax = twopi;
+constexpr G4double kSourceCosineMin = -1.;
+constexpr G4double kSourceCosineMax = 1.;
 
 template <typename Histogram>
 void AnnotateHistogram(
@@ -96,8 +96,8 @@ void HistoManager::Book() const
 	analysis->SetH1Activation(id, true);
 	// This is the direction histogram
 	id = analysis->CreateH2("h2.dir", "Primary source direction",
-				SOURCE_AZIMUTH_BINS, SOURCE_AZIMUTH_MIN, SOURCE_AZIMUTH_MAX,
-				SOURCE_COSINE_BINS, SOURCE_COSINE_MIN, SOURCE_COSINE_MAX);
+				kSourceAzimuthBins, kSourceAzimuthMin, kSourceAzimuthMax,
+				kSourceCosineBins, kSourceCosineMin, kSourceCosineMax);
 	AnnotateHistogram(
 		analysis->GetH2(id),
 		"h2.dir",
@@ -110,8 +110,8 @@ void HistoManager::Book() const
 	analysis->SetH2Activation(id,true);
 	// This is the position histogram.
 	id = analysis->CreateH2("h2.pos", "Primary source position",
-				SOURCE_AZIMUTH_BINS, SOURCE_AZIMUTH_MIN, SOURCE_AZIMUTH_MAX,
-				SOURCE_COSINE_BINS, SOURCE_COSINE_MIN, SOURCE_COSINE_MAX);
+				kSourceAzimuthBins, kSourceAzimuthMin, kSourceAzimuthMax,
+				kSourceCosineBins, kSourceCosineMin, kSourceCosineMax);
 	AnnotateHistogram(
 		analysis->GetH2(id),
 		"h2.pos",
@@ -270,30 +270,30 @@ void HistoManager::FillMetadata() const
 	// One worker records the shared run metadata while Geant4 merges all ntuples.
 	if (G4Threading::G4GetThreadId() != 0) return;
 	auto* const analysis = G4AnalysisManager::Instance();
-	analysis->FillNtupleIColumn(metadataNtupleId, metadataSchema, 1);
+	analysis->FillNtupleIColumn(kMetadataNtupleId, kMetadataSchema, 1);
 	analysis->FillNtupleSColumn(
-		metadataNtupleId, metadataAtrisVersion, ATRIS_VERSION
-	);
-	analysis->FillNtupleSColumn(
-		metadataNtupleId, metadataInputPrefix, simulationInputPrefix
+		kMetadataNtupleId, kMetadataAtrisVersion, ATRIS_VERSION
 	);
 	analysis->FillNtupleSColumn(
-		metadataNtupleId, metadataPhysicsList, physicsListName
+		kMetadataNtupleId, kMetadataInputPrefix, simulationInputPrefix
 	);
-	analysis->FillNtupleIColumn(metadataNtupleId, metadataOutputMode, mode);
-	analysis->FillNtupleIColumn(
-		metadataNtupleId, metadataPhantomCount, nrphantoms
+	analysis->FillNtupleSColumn(
+		kMetadataNtupleId, kMetadataPhysicsList, physicsListName
 	);
+	analysis->FillNtupleIColumn(kMetadataNtupleId, kMetadataOutputMode, mode);
 	analysis->FillNtupleIColumn(
-		metadataNtupleId, metadataSeedsExplicit, hasExplicitSeeds
-	);
-	analysis->FillNtupleIColumn(
-		metadataNtupleId, metadataRandomSeed1, explicitSeeds[0]
+		kMetadataNtupleId, kMetadataPhantomCount, nrphantoms
 	);
 	analysis->FillNtupleIColumn(
-		metadataNtupleId, metadataRandomSeed2, explicitSeeds[1]
+		kMetadataNtupleId, kMetadataSeedsExplicit, hasExplicitSeeds
 	);
-	analysis->AddNtupleRow(metadataNtupleId);
+	analysis->FillNtupleIColumn(
+		kMetadataNtupleId, kMetadataRandomSeed1, explicitSeeds[0]
+	);
+	analysis->FillNtupleIColumn(
+		kMetadataNtupleId, kMetadataRandomSeed2, explicitSeeds[1]
+	);
+	analysis->AddNtupleRow(kMetadataNtupleId);
 }
 
 }  // namespace atris

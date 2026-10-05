@@ -5,6 +5,7 @@
 #include "G4GDMLParser.hh"
 
 #include "DetectorConstruction.hh"
+#include "PhantomResponseSchema.hh"
 #include "UserActionInitialization.hh"
 #include "Randomize.hh"
 #include "G4PhysListFactory.hh"
@@ -32,7 +33,7 @@ std::array<G4long, 2> explicitSeeds = {0, 0};
 
 // For holding phantom responses
 G4int nrphantoms;
-std::vector<G4int> useornot(4427,0);
+std::vector<G4int> useornot(atris::kLightParticleLookupSize, 0);
 std::map<G4int, G4int> heavy;
 std::vector<std::vector<G4double>> abso;
 std::vector<std::vector<G4double>> rate;
@@ -262,18 +263,20 @@ G4bool Phantoms(G4int howmany){
 			expected_header_name = radiationPhantomName;
 			for (std::size_t j = 0; j < pdgs.size(); ++j) {
 				pdgfound = pdgs[j];
-				if (std::abs(pdgfound)<2214){
-					G4cout << j << " adding sensitivity for light particle with PDG= " << pdgfound << " "<<  "  at index " << pdgfound + 2213 << G4endl;
-					useornot[pdgfound+2213] = j; // modify the corresponding useornot location to j
-					// this offset is for antiparticles up to neutron and proton!
+				// Common particles fit the dense signed-PDG lookup. Ion PDG codes
+				// are sparse and therefore use the separate `heavy` map.
+				if (std::abs(pdgfound) < atris::kLightParticlePDGLimit){
+					const G4int lookupIndex = pdgfound + atris::kLightParticlePDGOffset;
+					G4cout << j << " adding sensitivity for light particle with PDG= " << pdgfound << " "<<  "  at index " << lookupIndex << G4endl;
+					useornot[lookupIndex] = j;
 				}else {
 					G4cout << "Added sensitivity for heavy particle with PDG= " << pdgfound << " under the index j=" << j << G4endl;
 					heavy[pdgfound] = j;
 				}
 			}
 			G4cout << "total" << pdgs.size() << G4endl;
-			expected = 650 * pdgs.size();
-			G4cout << " ### AtRIS: nricrubins is:" << 650 << " and nrpdgs is : "<< pdgs.size() << ". We are expecting: " << expected << " data points in the phantom file." << G4endl;
+			expected = atris::kPhantomResponseEnergyBins * pdgs.size();
+			G4cout << " ### AtRIS: nricrubins is:" << atris::kPhantomResponseEnergyBins << " and nrpdgs is : "<< pdgs.size() << ". We are expecting: " << expected << " data points in the phantom file." << G4endl;
 		} else if (pdgs != expected_pdgs) {
 			G4cerr << "### AtRIS: PDG header mismatch: " << radiationPhantomName
 			       << " does not match " << expected_header_name << G4endl;

@@ -5,51 +5,51 @@
 
 namespace atris {
 
-const G4int metadataNtupleId = 0;
+constexpr G4int kMetadataNtupleId = 0;
 enum MetadataNtupleColumn : G4int {
-	metadataSchema = 0,
-	metadataAtrisVersion,
-	metadataInputPrefix,
-	metadataPhysicsList,
-	metadataOutputMode,
-	metadataPhantomCount,
-	metadataSeedsExplicit,
-	metadataRandomSeed1,
-	metadataRandomSeed2,
+	kMetadataSchema = 0,
+	kMetadataAtrisVersion,
+	kMetadataInputPrefix,
+	kMetadataPhysicsList,
+	kMetadataOutputMode,
+	kMetadataPhantomCount,
+	kMetadataSeedsExplicit,
+	kMetadataRandomSeed1,
+	kMetadataRandomSeed2,
 };
 
-const G4int interfaceNtupleId = 1;
+constexpr G4int kInterfaceNtupleId = 1;
 enum InterfaceNtupleColumn : G4int {
-	interfacePdg = 0,
-	interfaceId,
-	interfaceAngleDegrees,
-	interfaceKineticEnergyMeV,
-	interfacePrimaryEnergyMeV,
+	kInterfacePDG = 0,
+	kInterfaceId,
+	kInterfaceAngleDegrees,
+	kInterfaceKineticEnergyMeV,
+	kInterfacePrimaryEnergyMeV,
 };
 
-const G4int stepNtupleId = 2;
+constexpr G4int kStepNtupleId = 2;
 enum StepNtupleColumn : G4int {
-	stepEventId = 0,
-	stepTrackId,
-	stepParentId,
-	stepId,
-	stepPdg,
-	stepDetectorId,
-	stepPreXKm,
-	stepPreYKm,
-	stepPreZKm,
-	stepPostXKm,
-	stepPostYKm,
-	stepPostZKm,
-	stepPreKineticEnergyMeV,
-	stepPostKineticEnergyMeV,
-	stepEnergyDepositMeV,
-	stepNonionizingEnergyDepositMeV,
-	stepLengthM,
-	stepGlobalTimeNs,
-	stepPrimaryEnergyMeV,
-	stepCreatorProcess,
-	stepProcess,
+	kStepEventId = 0,
+	kStepTrackId,
+	kStepParentId,
+	kStepId,
+	kStepPDG,
+	kStepDetectorId,
+	kStepPreXKm,
+	kStepPreYKm,
+	kStepPreZKm,
+	kStepPostXKm,
+	kStepPostYKm,
+	kStepPostZKm,
+	kStepPreKineticEnergyMeV,
+	kStepPostKineticEnergyMeV,
+	kStepEnergyDepositMeV,
+	kStepNonionizingEnergyDepositMeV,
+	kStepLengthM,
+	kStepGlobalTimeNs,
+	kStepPrimaryEnergyMeV,
+	kStepCreatorProcess,
+	kStepProcess,
 };
 
 }  // namespace atris
