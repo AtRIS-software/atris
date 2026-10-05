@@ -62,7 +62,6 @@ void AnnotateHistogram(
 namespace atris {
 
 HistoManager::HistoManager()
-	: fFileName("exgps")
 {
 	Book();
 }

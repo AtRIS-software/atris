@@ -5,14 +5,12 @@
 #include "G4UImessenger.hh"
 
 #include <vector>
-#include <fstream>
 
 #include "G4VHit.hh"
 #include "G4THitsCollection.hh"
 #include "G4Allocator.hh"
 #include "G4ThreeVector.hh"
 #include "tls.hh"
-#include <functional>
 
 class G4Step;
 class G4HCofThisEvent;
@@ -59,7 +57,7 @@ inline void SDHit::operator delete(void *hit)
 class SensitiveDetector : public G4VSensitiveDetector, public G4UImessenger
 {
 public:
-	SensitiveDetector(const G4String& name, G4bool zero_E=false);
+	explicit SensitiveDetector(const G4String& name);
 	virtual ~SensitiveDetector();
 
 	// methods from base class
@@ -70,11 +68,6 @@ private:
 
 	SDHitsCollection* fHitsCollection;
 
-protected:
-	static std::string formatString;
-	G4bool zeroE;
-
-	static std::ofstream outstream;
 };
 
 }  // namespace atris

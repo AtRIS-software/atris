@@ -16,7 +16,6 @@ class HistoManager
 
   private:
     void Book();
-    G4String fFileName;
 };
 
 }  // namespace atris

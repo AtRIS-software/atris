@@ -49,10 +49,9 @@ SDHit::~SDHit() {}
 void SDHit::Print() {}
 
 
-SensitiveDetector::SensitiveDetector(const G4String& name, G4bool zero_E)
+SensitiveDetector::SensitiveDetector(const G4String& name)
 	: G4VSensitiveDetector(name),
-	fHitsCollection(nullptr),
-	zeroE(zero_E)
+	fHitsCollection(nullptr)
 {
 	collectionName.insert(name);
 }
