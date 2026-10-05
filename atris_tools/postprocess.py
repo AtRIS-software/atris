@@ -71,6 +71,7 @@ def _read_macro_configuration(filename):
 
 def _input_output_warnings(simname, histograms):
     warnings = []
+
     def output_name(name):
         if histograms.format == "root":
             return simname + ".root"
@@ -131,6 +132,22 @@ def _input_output_warnings(simname, histograms):
                     output_name(IONIZATION_HISTOGRAM),
                     output_detector_count,
                 )
+            )
+
+    histogram_names = histograms.names()
+    for name, description in (
+        ("h2.dir", "source-direction"),
+        ("h2.pos", "source-position"),
+    ):
+        if name not in histogram_names:
+            continue
+        values = histograms.values(name)
+        flow_entries = values.sum() - values[1:-1, 1:-1].sum()
+        if not np.isclose(flow_entries, 0.0):
+            warnings.append(
+                "%s: %s contains %g entries in the %s histogram's "
+                "underflow or overflow bins"
+                % (simname, output_name(name), flow_entries, description)
             )
 
     phantom_path = Path("phantoms.txt")

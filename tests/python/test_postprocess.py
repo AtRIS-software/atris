@@ -135,6 +135,35 @@ def test_input_output_warnings_accept_matching_energy_and_event_inputs(
     assert postprocess.input_output_warnings("protons") == []
 
 
+def test_input_output_warnings_report_angular_flow_entries(tmp_path, monkeypatch):
+    (tmp_path / "protons_h1_h1.1.csv").write_text(
+        "#axis edges 1 10 100\n"
+        "entries,Sw\n"
+        "0,0\n4,0\n4,0\n0,0\n"
+    )
+    angular_rows = np.zeros((4, 4))
+    angular_rows[0, 1] = 3
+    angular_rows[2, 2] = 5
+    table = "".join("0,%g\n" % value for value in angular_rows.T.ravel())
+    for name in ("dir", "pos"):
+        (tmp_path / ("protons_h2_h2.%s.csv" % name)).write_text(
+            "#axis fixed 2 0 6.283185307179586\n"
+            "#axis fixed 2 -1 1\n"
+            "entries,Sw\n"
+            + table
+        )
+    monkeypatch.chdir(tmp_path)
+
+    warnings = postprocess.input_output_warnings("protons")
+
+    assert warnings == [
+        "protons: protons_h2_h2.dir.csv contains 3 entries in the "
+        "source-direction histogram's underflow or overflow bins",
+        "protons: protons_h2_h2.pos.csv contains 3 entries in the "
+        "source-position histogram's underflow or overflow bins",
+    ]
+
+
 def test_process_psf_and_phantoms_return_numpy_data(tmp_path, monkeypatch):
     geometry, detector_count = postprocess.process_psf(FIXTURE / "simulation.psf")
 
