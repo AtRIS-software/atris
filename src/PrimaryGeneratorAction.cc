@@ -10,15 +10,14 @@
 #include <chrono>
 #include <ctime>
 
-extern G4int t0;
-
 namespace atris {
 
 PrimaryGeneratorAction::PrimaryGeneratorAction()
-	: ParticleGenerator(new G4GeneralParticleSource)
+	: ParticleGenerator(new G4GeneralParticleSource),
+	  fStartTime(static_cast<G4int>(std::time(nullptr))),
+	  speed(1)
 {
 	G4cout << "### AtRIS: Created the particle gun." << G4endl;
-	speed = 1;
 }
 
 PrimaryGeneratorAction::~PrimaryGeneratorAction(){
@@ -32,7 +31,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	G4int current  = anEvent->GetEventID();
 	if (current % 100 == 0){
 		if (current != 0){
-		G4int elapsed = static_cast<G4int>(std::time(nullptr)) - t0;
+		G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;
 		speed = (G4double) current / (G4double) elapsed;
 		G4cout << "Processing event: " << current << ", " <<  elapsed << " secoonds have passed. We are processing " << speed << " primaries per second."  << G4endl;
 		} else {

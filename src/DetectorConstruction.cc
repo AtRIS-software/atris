@@ -14,7 +14,12 @@
 #include "G4ApplicationState.hh"
 
 extern G4int nrofdetectors;
-extern G4bool atrisverbose;
+
+namespace {
+
+const G4bool ATRIS_VERBOSE = false;
+
+}  // namespace
 
 namespace atris {
 
@@ -41,7 +46,7 @@ void DetectorConstruction::ConstructSDandField() {
 	for(G4GDMLAuxMapType::const_iterator iter=auxmap->begin(); iter!=auxmap->end(); iter++) {
 		for (G4GDMLAuxListType::const_iterator vit=(*iter).second.begin(); vit!=(*iter).second.end();vit++) {
 			if ((*vit).type=="SensDet") {
-				if (atrisverbose) G4cout << "SD " << (*vit).value << " to " << ((*iter).first)->GetName() << ", ";
+				if (ATRIS_VERBOSE) G4cout << "SD " << (*vit).value << " to " << ((*iter).first)->GetName() << ", ";
 				G4String detname            = (*vit).value;
 				G4int SDID                  = std::stoi(detname);
 				SensitiveDetector* const detSD = new SensitiveDetector(detname);
@@ -69,7 +74,7 @@ void DetectorConstruction::ConstructSDandField() {
 
 	// Debugging: printout the new vector data:
 	G4cout << "### AtRIS: printing detailed information about all materials" << G4endl;
-	if (atrisverbose) G4cout << *(G4Material::GetMaterialTable()) << G4endl;
+	if (ATRIS_VERBOSE) G4cout << *(G4Material::GetMaterialTable()) << G4endl;
 	G4cout << "### AtRIS: gdml construction complete. In total we have " << nrofdetectors << " sensitive detectors" << G4endl;
 }
 

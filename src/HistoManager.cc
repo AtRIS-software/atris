@@ -29,6 +29,13 @@ extern std::array<G4long, 2> explicitSeeds;
 
 namespace {
 
+const G4int SOURCE_AZIMUTH_BINS = 120;
+const G4int SOURCE_COSINE_BINS = 60;
+const G4double SOURCE_AZIMUTH_MIN = 0.;
+const G4double SOURCE_AZIMUTH_MAX = twopi;
+const G4double SOURCE_COSINE_MIN = -1.;
+const G4double SOURCE_COSINE_MAX = 1.;
+
 template <typename Histogram>
 void AnnotateHistogram(
 	Histogram* const histogram,
@@ -71,7 +78,7 @@ HistoManager::~HistoManager()
 	G4cout << "HistoManager deleted." << G4endl;
 }
 
-void HistoManager::Book()
+void HistoManager::Book() const
 {
 	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 	// This code replaces the HistoManager.cc
@@ -90,14 +97,9 @@ void HistoManager::Book()
 	analysis->SetH1YAxisTitle(id, "Accumulated primary kinetic energy [MeV]");
 	analysis->SetH1Activation(id, true);
 	// This is the direction histogram
-	G4int    dir_nbinx = 120;
-	G4int    dir_nbiny = 60 ;
-	G4double dir_vminx = 0.;
-	G4double dir_vmaxx = twopi;
-	G4double dir_vminy = -1.;
-	G4double dir_vmaxy = 1.;
 	id = analysis->CreateH2("h2.dir", "Primary source direction",
-				dir_nbinx,dir_vminx,dir_vmaxx,dir_nbiny,dir_vminy,dir_vmaxy);
+				SOURCE_AZIMUTH_BINS, SOURCE_AZIMUTH_MIN, SOURCE_AZIMUTH_MAX,
+				SOURCE_COSINE_BINS, SOURCE_COSINE_MIN, SOURCE_COSINE_MAX);
 	AnnotateHistogram(
 		analysis->GetH2(id),
 		"h2.dir",
@@ -109,14 +111,9 @@ void HistoManager::Book()
 	analysis->SetH2ZAxisTitle(id, "Primary count");
 	analysis->SetH2Activation(id,true);
 	// This is the position histogram.
-	G4int    pos_nbinx = 120;
-	G4int    pos_nbiny = 60 ;
-	G4double pos_vminx = 0.;
-	G4double pos_vmaxx = twopi;
-	G4double pos_vminy = -1.;
-	G4double pos_vmaxy = 1.;
 	id = analysis->CreateH2("h2.pos", "Primary source position",
-				pos_nbinx,pos_vminx,pos_vmaxx,pos_nbiny,pos_vminy,pos_vmaxy);
+				SOURCE_AZIMUTH_BINS, SOURCE_AZIMUTH_MIN, SOURCE_AZIMUTH_MAX,
+				SOURCE_COSINE_BINS, SOURCE_COSINE_MIN, SOURCE_COSINE_MAX);
 	AnnotateHistogram(
 		analysis->GetH2(id),
 		"h2.pos",
@@ -269,7 +266,7 @@ void HistoManager::Book()
 
 }
 
-void HistoManager::FillMetadata()
+void HistoManager::FillMetadata() const
 {
 	if (mode != 0 && mode != 1) return;
 	// One worker records the shared run metadata while Geant4 merges all ntuples.

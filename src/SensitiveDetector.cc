@@ -35,7 +35,11 @@ extern std::map<G4int, G4int> heavy;    //
 
 namespace atris {
 
-G4double icrustep = 0.02;
+namespace {
+
+const G4double ICRU_LOG_ENERGY_STEP = 0.02;
+
+}  // namespace
 
 G4Allocator<SDHit>* SDHit::SDHitAllocator = nullptr;
 
@@ -176,7 +180,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		G4int diid                 = detid - (1*upward);
 		G4int    partPDG           = trk->GetParticleDefinition()->GetPDGEncoding();
 		G4int    apartPDG          = std::abs(partPDG);
-		G4int    k = static_cast<G4int>(std::log10(ekin/eV)/icrustep);
+		G4int    k = static_cast<G4int>(std::log10(ekin/eV)/ICRU_LOG_ENERGY_STEP);
 		if (k < 0) k=0;
 		if (apartPDG<2214) {
 			G4int    dpartPDG          = partPDG + 2213;

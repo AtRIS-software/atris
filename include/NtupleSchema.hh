@@ -5,7 +5,7 @@
 
 namespace atris {
 
-constexpr G4int metadataNtupleId = 0;
+const G4int metadataNtupleId = 0;
 enum MetadataNtupleColumn : G4int {
 	metadataSchema = 0,
 	metadataAtrisVersion,
@@ -18,7 +18,7 @@ enum MetadataNtupleColumn : G4int {
 	metadataRandomSeed2,
 };
 
-constexpr G4int interfaceNtupleId = 1;
+const G4int interfaceNtupleId = 1;
 enum InterfaceNtupleColumn : G4int {
 	interfacePdg = 0,
 	interfaceId,
@@ -27,7 +27,7 @@ enum InterfaceNtupleColumn : G4int {
 	interfacePrimaryEnergyMeV,
 };
 
-constexpr G4int stepNtupleId = 2;
+const G4int stepNtupleId = 2;
 enum StepNtupleColumn : G4int {
 	stepEventId = 0,
 	stepTrackId,

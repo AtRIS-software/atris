@@ -12,10 +12,10 @@ class HistoManager
   public:
     HistoManager();
     ~HistoManager();
-    void FillMetadata();
+    void FillMetadata() const;
 
   private:
-    void Book();
+    void Book() const;
 };
 
 }  // namespace atris

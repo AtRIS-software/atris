@@ -39,12 +39,6 @@ std::vector<std::vector<G4double>> rate;
 
 std::vector<G4double> enbins;
 std::vector<G4double> detbins;
-G4int t0 = static_cast<G4int>(std::time(nullptr));
-
-G4bool atrisverbose = false;
-
-
-
 // Functions used by main.
 G4bool Phantoms(G4int howmany);
 void determine_nrofdetectors(G4String fname);
