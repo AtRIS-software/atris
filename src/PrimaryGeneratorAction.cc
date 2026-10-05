@@ -14,8 +14,9 @@ extern G4int t0;
 
 namespace atris {
 
-PrimaryGeneratorAction::PrimaryGeneratorAction(){
-	ParticleGenerator	= new G4GeneralParticleSource;
+PrimaryGeneratorAction::PrimaryGeneratorAction()
+	: ParticleGenerator(new G4GeneralParticleSource)
+{
 	G4cout << "### AtRIS: Created the particle gun." << G4endl;
 	speed = 1;
 }
@@ -25,7 +26,7 @@ PrimaryGeneratorAction::~PrimaryGeneratorAction(){
 }
 
 void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
-	G4AnalysisManager* analysis = G4AnalysisManager::Instance();
+	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 	ParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle 
 
 	G4int current  = anEvent->GetEventID();

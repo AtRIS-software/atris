@@ -31,7 +31,7 @@ namespace {
 
 template <typename Histogram>
 void AnnotateHistogram(
-	Histogram* histogram,
+	Histogram* const histogram,
 	const G4String& name,
 	const G4String& quantity,
 	const G4String& accumulatedWeight
@@ -74,13 +74,13 @@ HistoManager::~HistoManager()
 
 void HistoManager::Book()
 {
-	G4AnalysisManager* analysis = G4AnalysisManager::Instance();
+	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 	// This code replaces the HistoManager.cc
 	G4cout << "### AtRIS: configuring analysis histograms. " << G4endl;
 	analysis->SetVerboseLevel(0);
 	analysis->SetActivation(true);     //enable inactivation of histos, nTuples
 	G4int id = analysis->CreateH1("h1.1", "Primary kinetic energy", enbins, "MeV");
-	auto primaryEnergy = analysis->GetH1(id);
+	auto* const primaryEnergy = analysis->GetH1(id);
 	AnnotateHistogram(
 		primaryEnergy,
 		"h1.1",
@@ -168,7 +168,7 @@ void HistoManager::Book()
 			"h2.dos" + suffix, "Phantom energy response", enbins, detbins,
 			"MeV", "none", "none", "none"
 		);
-		auto dose = analysis->GetH2(id);
+		auto* const dose = analysis->GetH2(id);
 		AnnotateHistogram(
 			dose,
 			"h2.dos" + suffix,
@@ -185,7 +185,7 @@ void HistoManager::Book()
 			"h2.equi" + suffix, "Radiation-weighted phantom energy response",
 			enbins, detbins, "MeV", "none", "none", "none"
 		);
-		auto equivalentDose = analysis->GetH2(id);
+		auto* const equivalentDose = analysis->GetH2(id);
 		AnnotateHistogram(
 			equivalentDose,
 			"h2.equi" + suffix,
@@ -204,7 +204,7 @@ void HistoManager::Book()
 			"h2.rates" + suffix, "Phantom counting response", enbins, detbins,
 			"MeV", "none", "none", "none"
 		);
-		auto countRate = analysis->GetH2(id);
+		auto* const countRate = analysis->GetH2(id);
 		AnnotateHistogram(
 			countRate,
 			"h2.rates" + suffix,
@@ -275,7 +275,7 @@ void HistoManager::FillMetadata()
 	if (mode != 0 && mode != 1) return;
 	// One worker records the shared run metadata while Geant4 merges all ntuples.
 	if (G4Threading::G4GetThreadId() != 0) return;
-	auto analysis = G4AnalysisManager::Instance();
+	auto* const analysis = G4AnalysisManager::Instance();
 	analysis->FillNtupleIColumn(metadataNtupleId, metadataSchema, 1);
 	analysis->FillNtupleSColumn(
 		metadataNtupleId, metadataAtrisVersion, ATRIS_VERSION

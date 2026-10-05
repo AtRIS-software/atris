@@ -34,8 +34,8 @@ void DetectorConstruction::ConstructSDandField() {
 	G4int prec = G4cout.precision(15);
 	G4cout << "### AtRIS: increased precission to " << prec << " printing pi=" << pi << G4endl;
 	G4cout << "### AtRIS: proceeding with Detector contruction. " << G4endl;
-	G4SDManager* SDman = G4SDManager::GetSDMpointer();
-	const G4GDMLAuxMapType* auxmap = fParser.GetAuxMap();
+	G4SDManager* const SDman = G4SDManager::GetSDMpointer();
+	const G4GDMLAuxMapType* const auxmap = fParser.GetAuxMap();
 	// We now generate the sensitive detectors and assign them to the proper volumes
 	// We also count the number of generated sensitive detectors
 	for(G4GDMLAuxMapType::const_iterator iter=auxmap->begin(); iter!=auxmap->end(); iter++) {
@@ -44,15 +44,15 @@ void DetectorConstruction::ConstructSDandField() {
 				if (atrisverbose) G4cout << "SD " << (*vit).value << " to " << ((*iter).first)->GetName() << ", ";
 				G4String detname            = (*vit).value;
 				G4int SDID                  = std::stoi(detname);
-				SensitiveDetector* detSD    = new SensitiveDetector(detname);
+				SensitiveDetector* const detSD = new SensitiveDetector(detname);
 				SDman->AddNewDetector( detSD);
-				G4VSensitiveDetector* mydet = SDman->FindSensitiveDetector((*vit).value);
+				G4VSensitiveDetector* const mydet = SDman->FindSensitiveDetector((*vit).value);
 				if(mydet) {
-					G4LogicalVolume* myvol = (*iter).first;
+					G4LogicalVolume* const myvol = (*iter).first;
 					myvol->SetSensitiveDetector(mydet);
 					// At this point we implement the calculation of volume, mass, surface
 					G4double mass     = myvol->GetMass();
-					G4VSolid* mysol   = myvol->GetSolid();
+					G4VSolid* const mysol = myvol->GetSolid();
 					G4double surface  = mysol->GetSurfaceArea();
 					G4double volume   = mysol->GetCubicVolume();
 					G4double density  = mass / volume;

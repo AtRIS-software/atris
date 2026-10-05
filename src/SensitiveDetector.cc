@@ -69,23 +69,23 @@ void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
 }
 
 G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
-	G4Track *trk      = step->GetTrack();
+	G4Track* const trk = step->GetTrack();
 	G4double edep     = step->GetTotalEnergyDeposit();
-	auto sourcedata   = G4GeneralParticleSourceData::Instance();
-	auto theGun       = sourcedata->GetCurrentSource();
+	auto* const sourcedata = G4GeneralParticleSourceData::Instance();
+	auto* const theGun = sourcedata->GetCurrentSource();
 	G4double einp     = theGun->GetParticleEnergy();
-	G4AnalysisManager* analysis = G4AnalysisManager::Instance();
+	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
 
 	G4int    detid = std::stoi(this->GetName());
 	G4double nioni = step->GetNonIonizingEnergyDeposit();
 	if (mode == 1) {
-		const G4Event* event = G4RunManager::GetRunManager()->GetCurrentEvent();
-		const G4StepPoint* prePoint = step->GetPreStepPoint();
-		const G4StepPoint* postPoint = step->GetPostStepPoint();
+		const G4Event* const event = G4RunManager::GetRunManager()->GetCurrentEvent();
+		const G4StepPoint* const prePoint = step->GetPreStepPoint();
+		const G4StepPoint* const postPoint = step->GetPostStepPoint();
 		const G4ThreeVector& prePosition = prePoint->GetPosition();
 		const G4ThreeVector& postPosition = postPoint->GetPosition();
-		const G4VProcess* creatorProcess = trk->GetCreatorProcess();
-		const G4VProcess* definingProcess = postPoint->GetProcessDefinedStep();
+		const G4VProcess* const creatorProcess = trk->GetCreatorProcess();
+		const G4VProcess* const definingProcess = postPoint->GetProcessDefinedStep();
 		const G4String creatorName = creatorProcess
 			? creatorProcess->GetProcessName()
 			: "primary";
@@ -166,7 +166,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 	//           	 purpose: shower visualization
 
 	//before the step, the particle should have been at the boundary. 
-	G4StepPoint* pre = step->GetPreStepPoint();
+	const G4StepPoint* const pre = step->GetPreStepPoint();
 	if (pre->GetStepStatus() == fGeomBoundary){
 		//Let's check which sdid we have:
 		G4double ekin = pre->GetKineticEnergy();

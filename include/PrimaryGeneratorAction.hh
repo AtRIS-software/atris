@@ -15,7 +15,7 @@ class PrimaryGeneratorAction : public G4VUserPrimaryGeneratorAction
     void GeneratePrimaries(G4Event*) override;
 
   private:
-    G4GeneralParticleSource* ParticleGenerator;
+    G4GeneralParticleSource* const ParticleGenerator;
     G4double speed;
 };
 

@@ -17,19 +17,19 @@ UserActionInitialization::~UserActionInitialization()
 
 void UserActionInitialization::BuildForMaster() const
 {
-  auto* runaction = new RunAction(true);
+  auto* const runaction = new RunAction(true);
   SetUserAction(runaction);
 }
 
 void UserActionInitialization::Build() const
 {
   G4cout << "Starting build of UserActionInitialization for workers" << G4endl;
-  auto* runaction = new RunAction(false);
+  auto* const runaction = new RunAction(false);
   SetUserAction(runaction);
 
  
   G4cout << "Proceeding with build of UserActionInitialization for workers" << G4endl;
-  auto* primary = new PrimaryGeneratorAction();
+  auto* const primary = new PrimaryGeneratorAction();
   SetUserAction(primary);
 }
 

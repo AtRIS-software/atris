@@ -134,9 +134,9 @@ int main(int argc,char** argv){
 
 	// The log files could be necessary for the data analysis.
 	// Therefore, we redirect them to a file. 
-	G4UImanager * UImanager	= G4UImanager::GetUIpointer();
+	G4UImanager* const UImanager = G4UImanager::GetUIpointer();
 	G4Random::setTheEngine(new CLHEP::MTwistEngine); // Choose the Random engine
-	G4MTRunManager *runManager = new G4MTRunManager;   // Instantiate the run manager
+	G4MTRunManager* const runManager = new G4MTRunManager;   // Instantiate the run manager
 	if (simulation.hasSeeds) {
 		G4Random::setTheSeeds(simulation.seeds.data());
 		G4cout << "### AtRIS: using random seeds " << simulation.seeds[0]
@@ -147,13 +147,13 @@ int main(int argc,char** argv){
 	}
 	G4GDMLParser parser;                             //instantiate a GDML parser
 	parser.Read(gdmlname);	 //parse the 
-	atris::DetectorConstruction* detector = new atris::DetectorConstruction(parser);
+	atris::DetectorConstruction* const detector = new atris::DetectorConstruction(parser);
 	runManager->SetUserInitialization(detector);
 	G4String physics = argv[1]; 			 //Setting up the physics list
 	physicsListName = physics;
 	G4PhysListFactory factory;                       // initialize physics list
 	if (factory.IsReferencePhysList(physics) or (factory.IsReferencePhysList(physics.substr(0,physics.size()-4)))) {
-		G4VModularPhysicsList* physlist = factory.GetReferencePhysList(physics);
+		G4VModularPhysicsList* const physlist = factory.GetReferencePhysList(physics);
 		physlist->RegisterPhysics(new G4StepLimiterPhysics());
 		runManager->SetUserInitialization(physlist);
 	} else {
@@ -173,7 +173,7 @@ int main(int argc,char** argv){
 		       << outputFileName << "; output may be very large" << G4endl;
 	}
 
-	atris::UserActionInitialization* useract = new atris::UserActionInitialization();
+	atris::UserActionInitialization* const useract = new atris::UserActionInitialization();
 	runManager->SetUserInitialization(useract);
 
 
