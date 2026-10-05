@@ -14,8 +14,7 @@ namespace atris {
 
 PrimaryGeneratorAction::PrimaryGeneratorAction()
 	: ParticleGenerator(new G4GeneralParticleSource),
-	  fStartTime(static_cast<G4int>(std::time(nullptr))),
-	  speed(1)
+	  fStartTime(static_cast<G4int>(std::time(nullptr)))
 {
 	G4cout << "### AtRIS: Created the particle gun." << G4endl;
 }
@@ -32,7 +31,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	if (current % 100 == 0){
 		if (current != 0){
 		const G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;
-		speed = (G4double) current / (G4double) elapsed;
+		const G4double speed = (G4double) current / (G4double) elapsed;
 		G4cout << "Processing event: " << current << ", " <<  elapsed << " secoonds have passed. We are processing " << speed << " primaries per second."  << G4endl;
 		} else {
 			G4cout << "Starting primary particle generation" << G4endl;

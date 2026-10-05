@@ -22,6 +22,7 @@
 #include "PrimaryGeneratorAction.hh"
 #include "G4GeneralParticleSourceData.hh"
 #include "G4VProcess.hh"
+#include <algorithm>
 #include <cmath>
 #include <map>
 #include <vector>
@@ -67,7 +68,7 @@ void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
 	// Create hits collection
 	fHitsCollection	= new SDHitsCollection(SensitiveDetectorName, collectionName[0]);
 	// Add this collection in hce
-	G4int hcID = G4SDManager::GetSDMpointer()->GetCollectionID(collectionName[0]);
+	const G4int hcID = G4SDManager::GetSDMpointer()->GetCollectionID(collectionName[0]);
 	hce->AddHitsCollection( hcID, fHitsCollection );
 }
 
@@ -180,8 +181,10 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		const G4int diid = detid - (1*upward);
 		const G4int partPDG = trk->GetParticleDefinition()->GetPDGEncoding();
 		const G4int apartPDG = std::abs(partPDG);
-		G4int    k = static_cast<G4int>(std::log10(ekin/eV)/ICRU_LOG_ENERGY_STEP);
-		if (k < 0) k=0;
+		const G4int k = std::max(
+			0,
+			static_cast<G4int>(std::log10(ekin/eV)/ICRU_LOG_ENERGY_STEP)
+		);
 		if (apartPDG<2214) {
 			const G4int dpartPDG = partPDG + 2213;
 			const bool use = ((useornot[dpartPDG]) or (partPDG==22));

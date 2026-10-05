@@ -16,8 +16,6 @@
 #include <fstream>
 #include <algorithm>
 
-extern G4int nrofdetectors;
-extern G4String binedgesFile;
 extern std::vector<G4double> enbins;
 extern std::vector<G4double> detbins;
 extern G4int nrphantoms;

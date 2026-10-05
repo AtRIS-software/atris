@@ -17,7 +17,6 @@ class PrimaryGeneratorAction : public G4VUserPrimaryGeneratorAction
   private:
     G4GeneralParticleSource* const ParticleGenerator;
     const G4int fStartTime;
-    G4double speed;
 };
 
 }  // namespace atris
