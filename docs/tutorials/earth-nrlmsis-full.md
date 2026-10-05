@@ -11,8 +11,8 @@ These preparation steps are independent of execution environment. Continue with
 [chunk planning](../running-atris/plan-chunks.md) once the inputs are ready.
 
 The particle inputs use the `atris-generate-macros` defaults: 121 logarithmically
-spaced energy points, 3000 protons per point, and 1980 alpha particles per
-point. This produces 363,000 proton events and 239,580 alpha events.
+spaced energy points, 5000 protons per point, and 3300 alpha particles per
+point. This produces 605,000 proton events and 399,300 alpha events.
 
 ## Create the run directory
 
@@ -58,7 +58,7 @@ macros reproducible:
 
 ```bash
 atris-generate-macros . \
-  --particles-per-bin 3000 \
+  --particles-per-bin 5000 \
   --alpha-factor 0.66 \
   --random-seed 12345 \
   --energy-min-power 0 \
@@ -68,8 +68,8 @@ atris-generate-macros . \
 
 These are the `atris-generate-macros` defaults except for `--random-seed 12345`;
 omitting that option generates new random seeds. With 121 energy points, AtRIS
-will process 363,000 proton events (`121 x 3000`) and 239,580 alpha events
-(`121 x int(3000 x 0.66)`).
+will process 605,000 proton events (`121 x 5000`) and 399,300 alpha events
+(`121 x int(5000 x 0.66)`).
 
 ## Physics choices and execution
 

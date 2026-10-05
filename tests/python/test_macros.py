@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import atris_tools.psf2gdml as psf2gdml_module
+import atris_tools.atrismacrogen as macrogen_module
 from atris_tools.atrismacrogen import macroGenManager
 from atris_tools.psf2gdml import psf2gdml
 
@@ -17,6 +18,27 @@ FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
 def prepare_run(path):
     shutil.copyfile(FIXTURE / "simulation.psf", path / "simulation.psf")
     shutil.copyfile(FIXTURE / "simulation.gdml", path / "simulation.gdml")
+
+
+@pytest.mark.parametrize("interface", ["python", "cli"])
+def test_macro_defaults_generate_expected_sampling(tmp_path, monkeypatch, interface):
+    prepare_run(tmp_path)
+    if interface == "python":
+        macroGenManager(output_dir=tmp_path)
+    else:
+        monkeypatch.setattr("sys.argv", ["atris-generate-macros", str(tmp_path)])
+        macrogen_module.main()
+
+    proton_bins = np.loadtxt(tmp_path / "protons.bins")
+    np.testing.assert_allclose(proton_bins, np.logspace(0, 6, 121))
+    np.testing.assert_allclose(np.loadtxt(tmp_path / "alphas.bins"), 4 * proton_bins)
+    for species, events in [("protons", 605000), ("alphas", 399300)]:
+        macro = (tmp_path / f"{species}.mac").read_text()
+        assert f"/run/beamOn {events}\n" in macro
+        assert "/gps/pos/radius 1.001 km\n" in macro
+        assert "/gps/ang/type cos\n" in macro
+        assert "/run/setCut 100. m\n" in macro
+    assert not (tmp_path / "phantoms.txt").exists()
 
 
 def test_macro_generation_is_reproducible_and_preserves_requested_counts(tmp_path):

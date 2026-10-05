@@ -87,7 +87,7 @@ atris-generate-macros . \
   --energy-min-power 0 \
   --energy-max-power 6 \
   --energy-points 121 \
-  --particles-per-bin 3000 \
+  --particles-per-bin 5000 \
   --alpha-factor 0.66 \
   --random-seed 12345
 ```

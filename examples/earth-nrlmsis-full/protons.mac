@@ -135,4 +135,4 @@
 /run/setCut 100. m
 /run/particle/dumpCutValues
 /random/setSeeds 436888 768307
-/run/beamOn 363000
+/run/beamOn 605000

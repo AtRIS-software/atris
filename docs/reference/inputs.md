@@ -208,7 +208,7 @@ Here $n$ is `particles_per_bin`, $m$ is `energy_points`, and
 $f_\alpha$ is `alpha_factor`; the floor represents integer truncation for
 nonnegative counts.
 
-The default totals are 363000 protons and 239580 alphas. Actual sampled counts
+The default totals are 605000 protons and 399300 alphas. Actual sampled counts
 in each bin are recorded in the primary histogram and used for normalization.
 
 The current generator does not read `.spec` files or fold a physical primary

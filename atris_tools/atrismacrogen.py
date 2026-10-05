@@ -86,6 +86,8 @@ GENERATED_INPUTS = (
     "alphas.bins",
     "alphas.gdml",
 )
+DEFAULT_PARTICLES_PER_BIN = 5000
+DEFAULT_ALPHA_FACTOR = 0.66
 logger = logging.getLogger(__name__)
 
 
@@ -148,7 +150,7 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
     filehandle.close()
     
 
-def macroGenManager(partspb,alphafactor=1.0,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
+def macroGenManager(partspb=DEFAULT_PARTICLES_PER_BIN,alphafactor=DEFAULT_ALPHA_FACTOR,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
     if energy_points < 2:
         raise ValueError("energy_points must be at least 2")
     output_dir = os.path.abspath(output_dir)
@@ -189,18 +191,18 @@ def main():
     parser.add_argument(
         "--particles-per-bin",
         type=int,
-        default=3000,
+        default=DEFAULT_PARTICLES_PER_BIN,
         metavar="COUNT",
-        help="Number of proton histories per energy point (default: 3000).",
+        help="Number of proton histories per energy point (default: %(default)s).",
     )
     parser.add_argument(
         "--alpha-factor",
         type=float,
-        default=0.66,
+        default=DEFAULT_ALPHA_FACTOR,
         metavar="FACTOR",
         help=(
             "Alpha histories per energy point as a fraction of the proton "
-            "count; the result is truncated to an integer (default: 0.66)."
+            "count; the result is truncated to an integer (default: %(default)s)."
         ),
     )
     parser.add_argument(

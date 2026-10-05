@@ -178,7 +178,7 @@ histograms are tied to this phantom selection.
 
 ```bash
 atris-generate-macros . \
-  --particles-per-bin 3000 \
+  --particles-per-bin 5000 \
   --alpha-factor 0.66 \
   --energy-min-power 0 \
   --energy-max-power 6 \
@@ -199,7 +199,7 @@ Each species needs three files:
 | `.mac` | Commands to Geant4: primary species, source surface, energy sampling, seeds, and number of events. |
 | `.bins` | Primary kinetic-energy bin edges used to organize the histograms. |
 
-This example requests 363,000 proton events and 239,580 alpha events. Its 121
+This example requests 605,000 proton events and 399,300 alpha events. Its 121
 energy edges span 1–1,000,000 MeV for protons and 4–4,000,000 MeV for alphas. Despite the option
 name, the generator multiplies `--particles-per-bin` by the number of **energy
 points**, not intervals; see [the exact convention](../reference/inputs.md#energy-bins-and-macros).
@@ -220,8 +220,8 @@ atris-scatter . --chunks 3000 --random-seed 12345
 | --- | --- | --- |
 | `atris-scatter` | `protons.mac`, `alphas.mac` | `protons.chunk.mac`, `alphas.chunk.mac`, `chunks.txt`, empty `chunks/` |
 
-Ordinary macros remain unchanged. Each species has 3000 chunks: 121 proton
-events per chunk and 80 alpha events per chunk. The chunk macros contain these
+Ordinary macros remain unchanged. Each species has 3000 chunks: 202 proton
+events per chunk and 134 alpha events per chunk. The chunk macros contain these
 per-chunk counts and no embedded seed command; `chunks.txt` supplies independent
 seed pairs. No events have been simulated in this directory yet.
 
