@@ -1,6 +1,7 @@
 import logging
 import sys
 
+from matplotlib.colors import LogNorm
 import numpy as np
 import uproot
 
@@ -44,7 +45,7 @@ def prepare_processed_run(run_directory, phantom_count, gdml_text):
     for suffix in ("dir", "pos"):
         write_histogram(
             run_directory / ("protons_h2_h2." + suffix + ".csv"),
-            ["#axis fixed 2 0 6.28319", "#axis fixed 2 0 1"],
+            ["#axis fixed 2 0 6.28319", "#axis fixed 2 -1 1"],
             16,
             7,
         )
@@ -109,18 +110,19 @@ def test_plot_run_reads_raw_diagnostics_from_root(
     for path in tmp_path.glob("protons_h*.csv"):
         path.unlink()
     energy_edges = np.array([1.0, 2.0, 3.0])
-    angular_edges = np.array([0.0, 0.5, 1.0])
+    azimuth_edges = np.array([0.0, np.pi, 2.0 * np.pi])
+    cosine_edges = np.array([-1.0, 0.0, 1.0])
     with uproot.recreate(tmp_path / "protons.root") as root_file:
         root_file["h1.1"] = (np.ones(2), energy_edges)
         root_file["h2.dir"] = (
             np.ones((2, 2)),
-            angular_edges,
-            angular_edges,
+            azimuth_edges,
+            cosine_edges,
         )
         root_file["h2.pos"] = (
             np.ones((2, 2)),
-            angular_edges,
-            angular_edges,
+            azimuth_edges,
+            cosine_edges,
         )
     monkeypatch.chdir(tmp_path)
 
@@ -128,6 +130,35 @@ def test_plot_run_reads_raw_diagnostics_from_root(
 
     assert filenames == ["protons.png"]
     assert errors == []
+
+
+def test_angular_plot_uses_linear_counts_and_global_angle_labels():
+    figure, axis = plotting.plt.subplots(
+        subplot_kw={"projection": "mollweide"}
+    )
+    histogram = np.pad(np.array([[1.0, 2.0], [3.0, 4.0]]), 1)
+
+    mesh = plotting._add_angular_plot(
+        axis,
+        histogram,
+        [np.array([0.0, np.pi, 2.0 * np.pi]), np.array([-1.0, 0.0, 1.0])],
+        "Source direction",
+        r"Direction azimuth $\phi$",
+        "Direction elevation",
+        cmap="Blues",
+    )
+
+    assert not isinstance(mesh.norm, LogNorm)
+    assert mesh.cmap.name == "Blues"
+    assert axis.get_xlabel() == r"Direction azimuth $\phi$"
+    assert axis.get_ylabel() == "Direction elevation"
+    assert np.allclose(axis.get_xlim(), (-np.pi, np.pi))
+    assert np.allclose(axis.get_ylim(), (-np.pi / 2, np.pi / 2))
+    assert np.array_equal(
+        mesh.get_array(),
+        np.array([[3.0, 1.0], [4.0, 2.0]]),
+    )
+    plotting.plt.close(figure)
 
 
 def test_plot_convergence_writes_png_from_one_comparison(tmp_path, monkeypatch):

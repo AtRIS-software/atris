@@ -9,6 +9,7 @@ from pathlib import Path
 os.environ.setdefault("MPLBACKEND", "Agg")
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
 import numpy as np
 
 from .cli import (
@@ -203,6 +204,7 @@ def _add_response_plot(
     detector_ids,
     layers,
     title,
+    colorbar_axis=None,
 ):
     _, _, plot_edges = shell_coordinates(layers, detector_ids)
     mark_model_regions(axis, model_shell_edges(layers))
@@ -218,23 +220,49 @@ def _add_response_plot(
     axis.set_title(title)
     axis.set_xlabel("Primary kinetic energy [MeV]")
     axis.set_xscale("log")
-    axis.figure.colorbar(mesh, ax=axis, label="Response per primary")
+    axis.figure.colorbar(
+        mesh,
+        ax=None if colorbar_axis is not None else axis,
+        cax=colorbar_axis,
+        label="Response per primary",
+    )
 
 
-def _add_angular_plot(axis, histogram, axes, title):
+def _add_angular_plot(
+    axis,
+    histogram,
+    axes,
+    title,
+    xlabel,
+    ylabel,
+    norm=None,
+    cmap=None,
+):
     values = histogram[1:-1, 1:-1].T
+    azimuth_edges = np.asarray(axes[0])
+    split = np.argmin(np.abs(azimuth_edges - np.pi))
+    longitude_edges = np.concatenate(
+        (
+            azimuth_edges[split:] - azimuth_edges[split] - np.pi,
+            azimuth_edges[1 : split + 1] - azimuth_edges[split] + np.pi,
+        )
+    )
+    latitude_edges = np.arcsin(np.clip(axes[1], -1, 1))
+    values = np.concatenate((values[:, split:], values[:, :split]), axis=1)
     mesh = axis.pcolormesh(
-        axes[0],
-        axes[1],
+        longitude_edges,
+        latitude_edges,
         values,
-        norm=log_norm(values),
+        norm=norm,
+        cmap=cmap,
         shading="flat",
         rasterized=True,
     )
     axis.set_title(title)
-    axis.set_xlabel("Azimuth phi [rad]")
-    axis.set_ylabel("cos(theta)")
-    axis.figure.colorbar(mesh, ax=axis, label="Primaries")
+    axis.set_xlabel(xlabel)
+    axis.set_ylabel(ylabel)
+    axis.grid(color="black", alpha=0.2, linewidth=0.5)
+    return mesh
 
 
 def _save_generic_plot(
@@ -251,10 +279,22 @@ def _save_generic_plot(
     species,
     filename,
 ):
-    figure, axes = plt.subplots(ncols=2, nrows=2, figsize=(12, 10))
+    figure = plt.figure(figsize=(12, 12), layout="constrained")
+    grid = figure.add_gridspec(
+        ncols=3,
+        nrows=4,
+        width_ratios=(1, 1, 0.045),
+        height_ratios=(1.15, 1.15, 0.7, 1),
+    )
+    ionization_axis = figure.add_subplot(grid[:2, :2])
+    energy_axis = figure.add_subplot(grid[2, :2], sharex=ionization_axis)
+    position_axis = figure.add_subplot(grid[3, 0], projection="mollweide")
+    direction_axis = figure.add_subplot(grid[3, 1], projection="mollweide")
+    ionization_colorbar_axis = figure.add_subplot(grid[:2, 2])
+    angular_colorbar_axis = figure.add_subplot(grid[3, 2])
 
     primary_counts = primary_energy[1:-1]
-    axes[0, 0].stairs(
+    energy_axis.stairs(
         primary_counts,
         energy_edges,
         label="Simulated",
@@ -264,40 +304,78 @@ def _save_generic_plot(
         weight_sum = np.sum(configured_weights)
         if weight_sum > 0:
             expected_counts = configured_weights * np.sum(primary_counts) / weight_sum
-            axes[0, 0].stairs(
+            energy_axis.stairs(
                 expected_counts,
                 configured_energy[:, 0],
                 linestyle="--",
                 label="Configured",
             )
-    axes[0, 0].set_title(species + " primary energy")
-    axes[0, 0].set_xlabel("Primary kinetic energy [MeV]")
-    axes[0, 0].set_ylabel("Primaries")
-    axes[0, 0].set_xscale("log")
-    axes[0, 0].legend()
+    energy_axis.set_title(species + " primary energy")
+    energy_axis.set_xlabel("Primary kinetic energy [MeV]")
+    energy_axis.set_ylabel("Primary particles")
+    energy_axis.set_xscale("log")
+    energy_axis.legend()
 
-    _add_angular_plot(
-        axes[0, 1],
-        direction,
-        direction_axes,
-        species + " source direction",
-    )
-    _add_angular_plot(
-        axes[1, 0],
-        position,
-        position_axes,
-        species + " source position",
-    )
     _add_response_plot(
-        axes[1, 1],
+        ionization_axis,
         ionization,
         energy_edges,
         detector_ids,
         layers,
         species + " ionization",
+        ionization_colorbar_axis,
+    )
+    ionization_axis.set_xlabel("")
+    ionization_axis.tick_params(axis="x", labelbottom=False)
+    angular_maximum = max(
+        np.max(position[1:-1, 1:-1]),
+        np.max(direction[1:-1, 1:-1]),
+        1,
+    )
+    angular_norm = Normalize(vmin=0, vmax=angular_maximum)
+    position_mesh = _add_angular_plot(
+        position_axis,
+        position,
+        position_axes,
+        species + " source position",
+        r"Position longitude $\phi$",
+        "Position latitude",
+        norm=angular_norm,
+        cmap="Blues",
+    )
+    _add_angular_plot(
+        direction_axis,
+        direction,
+        direction_axes,
+        species + " source direction",
+        r"Direction azimuth $\phi$",
+        "Direction elevation",
+        norm=angular_norm,
+        cmap="Blues",
+    )
+    figure.colorbar(
+        position_mesh,
+        cax=angular_colorbar_axis,
+        label="Primary particles",
     )
 
-    figure.tight_layout()
+    figure.canvas.draw()
+    figure.set_layout_engine("none")
+    for colorbar_axis, plot_axis in (
+        (ionization_colorbar_axis, ionization_axis),
+        (angular_colorbar_axis, direction_axis),
+    ):
+        colorbar_position = colorbar_axis.get_position()
+        plot_position = plot_axis.get_position()
+        colorbar_axis.set_position(
+            (
+                colorbar_position.x0,
+                plot_position.y0,
+                colorbar_position.width,
+                plot_position.height,
+            )
+        )
+
     figure.savefig(filename)
     plt.close(figure)
 
