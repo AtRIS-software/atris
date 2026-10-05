@@ -6,7 +6,11 @@ from pathlib import Path
 import numpy as np
 
 from .cli import HelpFormatter, add_version_argument
-from .psf import load_psf, read_psf_header
+from .psf import (
+    INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END,
+    DETECTOR_ID, TEMPERATURE, DENSITY, PRESSURE, STATE, FIRST_ELEMENT,
+    load_psf, read_psf_header,
+)
 
 data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
@@ -113,32 +117,28 @@ def parse_header(filename):
 
 def line_processor(filename):
     core,template = parse_header(filename)
-    columnnames   = {"rmin":0,"rmax":1,"phimin":2,"phimax":3,"thetamin":4,
-                     "thetamax":5,"SDID":6,"temperature":7,"density":8,"pressure":9,"state":10}
-    #print "template:", template
-    for mat in template:
-        idx  = template[mat]["colidx"] + 11
-        name = template[mat]["material"]
-        columnnames.update({name:idx})
     # now we generate the gdml material blocks
     data          = load_psf(filename)
     nrsheets      = data.shape[0]
-    assert data.shape[1] == len(columnnames), "data shape and columnnames missmatch: (%ix%i) vs %i"%(data.shape[0],data.shape[1],len(columnnames))
+    expected_columns = FIRST_ELEMENT + len(template)
+    assert data.shape[1] == expected_columns, (
+        "PSF has %i columns; expected %i" % (data.shape[1], expected_columns)
+    )
     
     #We generate the materials and geometry entries
     materials, geometry, struct = [], [], []
     for aLine in data:
-        state_code = aLine[columnnames["state"]]
+        state_code = aLine[STATE]
         state = {1.0: "solid", 2.0: "liquid"}.get(state_code, "gas")
-        sdid = int(aLine[columnnames["SDID"]])
+        sdid = int(aLine[DETECTOR_ID])
         name = "material" + str(sdid)
-        temp = aLine[columnnames["temperature"]]
-        dens = aLine[columnnames["density"]]
-        pres = aLine[columnnames["pressure"]]
+        temp = aLine[TEMPERATURE]
+        dens = aLine[DENSITY]
+        pres = aLine[PRESSURE]
         rowmat = {}
         for mat in template:
             nname = template[mat]["material"]
-            idx = columnnames[mat]
+            idx = FIRST_ELEMENT + template[mat]["colidx"]
             rowmat[nname] = {
                 "mass fraction": aLine[idx],
                 "material": nname,
@@ -151,22 +151,22 @@ def line_processor(filename):
         )
         materials.append(gdml_material(material, name, temp, dens, pres, state))
         #now the geometry  entry
-        solname  = "solid" + str(int(aLine[columnnames["SDID"]]))
-        rmin     = aLine[columnnames["rmin"]]
-        rmax     = aLine[columnnames["rmax"]]
-        phimin   = aLine[columnnames["phimin"]]
-        phimax   = aLine[columnnames["phimax"]]
+        solname  = "solid" + str(int(aLine[DETECTOR_ID]))
+        rmin     = aLine[INNER_RADIUS]
+        rmax     = aLine[OUTER_RADIUS]
+        phimin   = aLine[PHI_START]
+        phimax   = aLine[PHI_END]
         phimax   = phimax - phimin
         if np.abs(phimax -2.0*np.pi) < 0.01: phimax = "TWOPI"
-        thetamin = aLine[columnnames["thetamin"]]
-        thetamax = aLine[columnnames["thetamax"]]
+        thetamin = aLine[THETA_START]
+        thetamax = aLine[THETA_END]
         thetamax = thetamax - thetamin
         if np.abs(thetamax -np.pi) < 0.01: thetamax = "PI"
         if thetamax == 2.0: thetamax = "PI"
         sphere   = '\t<sphere name="%s" rmin="%f" rmax="%f" startphi="%.4f" deltaphi="%s" starttheta="%.4f" deltatheta="%s" lunit="km" aunit="rad"/>\n'%(solname,rmin,rmax,phimin,str(phimax),thetamin,str(thetamax))
         geometry.append(sphere)
         struct.append(['volume'+str(sdid),name,solname,sdid])
-    wrld = data[-1,1]
+    wrld = data[-1, OUTER_RADIUS]
     return materials, geometry, struct, wrld
 
 def gdml_compile(materials, world, geometry, structure, filename):

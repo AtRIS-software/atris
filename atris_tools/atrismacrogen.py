@@ -75,7 +75,7 @@ from .cli import (
     add_version_argument,
     configure_logging,
 )
-from .psf import load_psf
+from .psf import OUTER_RADIUS, load_psf
 
 
 GENERATED_INPUTS = (
@@ -133,7 +133,7 @@ def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bin
         base_bins = 10**np.linspace(0,6,121)
     if rng is None:
         rng = random
-    radius  = load_psf(os.path.join(output_dir, 'simulation.psf'))[-2,1] + 0.001 # we add 1 meter to the radius to aviod overlap.
+    radius  = load_psf(os.path.join(output_dir, 'simulation.psf'))[-2, OUTER_RADIUS] + 0.001 # we add 1 meter to the radius to aviod overlap.
     bins    = base_bins
     N       = bins.shape[0]*partspb # At 20 bins per decade, 2500 particles per bin is good. Even better would be 5k or 10k.
     # We are taking two random seeds. Control this for the ability to reproduce.

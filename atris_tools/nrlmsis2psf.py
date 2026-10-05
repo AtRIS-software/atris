@@ -14,7 +14,10 @@ from .cli import (
     add_version_argument,
     configure_logging,
 )
-from .psf import load_psf
+from .psf import (
+    INNER_RADIUS, OUTER_RADIUS, PHI_END, THETA_END, DETECTOR_ID,
+    TEMPERATURE, DENSITY, PRESSURE, STATE, FIRST_ELEMENT, load_psf,
+)
 
 
 HEADER_MARKER = "Year Mon Day"
@@ -131,36 +134,37 @@ def _write_psf(data, filename="simulation.psf"):
     ) * atomic_mass_unit
     mass_fractions = masses / masses.sum(axis=1, keepdims=True)
 
-    atmosphere = np.zeros((len(data), 16))
-    atmosphere[:, 0] = bottom_radius
-    atmosphere[:, 1] = top_radius
-    atmosphere[:, 3] = 2 * np.pi
-    atmosphere[:, 5] = np.pi
-    atmosphere[:, 6] = np.arange(2, len(data) + 2)
-    atmosphere[:, 7] = temperature
-    atmosphere[:, 8] = density
-    atmosphere[:, 9] = total_pressure
-    atmosphere[:, 11:] = mass_fractions
+    atmosphere = np.zeros((len(data), FIRST_ELEMENT + mass_fractions.shape[1]))
+    atmosphere[:, INNER_RADIUS] = bottom_radius
+    atmosphere[:, OUTER_RADIUS] = top_radius
+    atmosphere[:, PHI_END] = 2 * np.pi
+    atmosphere[:, THETA_END] = np.pi
+    atmosphere[:, DETECTOR_ID] = np.arange(2, len(data) + 2)
+    atmosphere[:, TEMPERATURE] = temperature
+    atmosphere[:, DENSITY] = density
+    atmosphere[:, PRESSURE] = total_pressure
+    atmosphere[:, FIRST_ELEMENT:] = mass_fractions
 
     crust_thickness = 0.02
     upper_boundary = top_radius[-1] + 0.001
-    solids = np.zeros((3, 16))
-    solids[:, 0] = (0, 6371.0 - crust_thickness, upper_boundary)
-    solids[:, 1] = (
+    solids = np.zeros((3, atmosphere.shape[1]))
+    solids[:, INNER_RADIUS] = (0, 6371.0 - crust_thickness, upper_boundary)
+    solids[:, OUTER_RADIUS] = (
         6371.0 - crust_thickness,
         6371.0,
         upper_boundary + crust_thickness,
     )
-    solids[:, 3] = 2 * np.pi
-    solids[:, 5] = np.pi
-    solids[:, 6] = (0, 1, len(data) + 2)
-    solids[:, 7] = 293.15
-    solids[:, 8] = 2.7
-    solids[:, 9] = 101325
-    solids[:, 10] = 1
+    solids[:, PHI_END] = 2 * np.pi
+    solids[:, THETA_END] = np.pi
+    solids[:, DETECTOR_ID] = (0, 1, len(data) + 2)
+    solids[:, TEMPERATURE] = 293.15
+    solids[:, DENSITY] = 2.7
+    solids[:, PRESSURE] = 101325
+    solids[:, STATE] = 1
 
     output = np.vstack((solids[:2], atmosphere, solids[2:]))
-    number_format = "%e %e %e %e %e %e %i %e %e %e %e %e %e %e %e %e"
+    number_format = ["%e"] * output.shape[1]
+    number_format[DETECTOR_ID] = "%i"
     np.savetxt(
         filename,
         output,
@@ -352,13 +356,17 @@ def merge_nrlmsis(input_paths):
 def _validate_psf(path, atmosphere_rows):
     output = load_psf(path)
     expected_rows = atmosphere_rows + 3
-    if output.shape != (expected_rows, 16):
+    expected_columns = FIRST_ELEMENT + 5  # N, O, Ar, He, H
+    if output.shape != (expected_rows, expected_columns):
         raise RuntimeError(
-            "%s has shape %s; expected (%i, 16)"
-            % (path, output.shape, expected_rows)
+            "%s has shape %s; expected (%i, %i)"
+            % (path, output.shape, expected_rows, expected_columns)
         )
     atmosphere = output[2:-1]
-    physical = atmosphere[:, [7, 8, 9, 11, 12, 13, 14, 15]]
+    physical = np.column_stack((
+        atmosphere[:, [TEMPERATURE, DENSITY, PRESSURE]],
+        atmosphere[:, FIRST_ELEMENT:],
+    ))
     if not np.all(np.isfinite(physical)) or np.any(physical <= 0):
         raise RuntimeError(
             "%s contains non-finite, zero, or negative atmospheric values"

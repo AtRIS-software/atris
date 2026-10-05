@@ -15,7 +15,10 @@ from .cli import (
     configure_logging,
 )
 from .phantoms import read_phantoms
-from .psf import load_psf
+from .psf import (
+    INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END, DETECTOR_ID,
+    load_psf,
+)
 from .response_histograms import (
     IONIZATION_HISTOGRAM,
     PRIMARY_HISTOGRAM,
@@ -31,10 +34,10 @@ logger = logging.getLogger(__name__)
 
 def process_psf(filename="simulation.psf"):
     data = load_psf(filename)
-    rmin = data[:, 0] * 100000.0
-    rmax = data[:, 1] * 100000.0
-    delta_phi = data[:, 3] - data[:, 2]
-    theta_factor = np.cos(data[:, 4]) - np.cos(data[:, 5])
+    rmin = data[:, INNER_RADIUS] * 100000.0
+    rmax = data[:, OUTER_RADIUS] * 100000.0
+    delta_phi = data[:, PHI_END] - data[:, PHI_START]
+    theta_factor = np.cos(data[:, THETA_START]) - np.cos(data[:, THETA_END])
     inner_surface = delta_phi * rmin**2 * theta_factor
     outer_surface = delta_phi * rmax**2 * theta_factor
     volume = delta_phi * theta_factor * (rmax**3 - rmin**3) / 3.0
@@ -44,7 +47,7 @@ def process_psf(filename="simulation.psf"):
 
     order = np.argsort(inner_surface, kind="stable")
     geometry = {
-        "sdid": data[:, 6].astype(int)[order],
+        "sdid": data[:, DETECTOR_ID].astype(int)[order],
         "volume/cm3": volume[order],
         "inn_surface/cm2": inner_surface[order],
     }

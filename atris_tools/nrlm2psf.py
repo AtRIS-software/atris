@@ -3,6 +3,11 @@ import sys
 
 import numpy as np
 
+from atris_tools.psf import (
+    INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END,
+    DETECTOR_ID, TEMPERATURE, DENSITY, PRESSURE, STATE, FIRST_ELEMENT,
+)
+
 # I like colored printing:
 STA = "\x1B["
 STO = STA + "0m"
@@ -60,7 +65,7 @@ def nrml2psf(datapath):
 
     #Prepare output array
     nrSheets    = data.shape[0]           #one line per sheet
-    output      = np.zeros((nrSheets,16)) #Array of zeros
+    output      = np.zeros((nrSheets, FIRST_ELEMENT + 5)) #Array of zeros
     earthRadius = 6371000               #in meters
     thickness   = (data[1:,0]-data[:-1,0]) #uniform sheet thickness
     thickness  *= 1000                  #convert to meters
@@ -99,26 +104,23 @@ def nrml2psf(datapath):
     #for l in range(nrSheets):
 
     # we now fill out the output file
-    output[::,0]  = botAltitudes / 1000.
-    output[::,1]  = topAltitudes / 1000.
-    output[::,2]  = 0 #dummy
-    output[::,3] += 2*np.pi #unit is pi!
-    output[::,4]  = 0 #dummy
-    output[::,5] += 1*np.pi #unit is pi!
-    output[::,6]  = np.arange(2,nrSheets+2)
-    output[::,7]  = temp
-    output[::,8]  = rho
-    output[::,9]  = pTotal
-    output[::,10]  = 0 #dummy
-    output[::,11] = mfN2
-    output[::,12] = mfO2
-    output[::,13] = mfAr
-    output[::,14] = mfHe
-    output[::,15] = mfH
+    output[:, INNER_RADIUS]  = botAltitudes / 1000.
+    output[:, OUTER_RADIUS]  = topAltitudes / 1000.
+    output[:, PHI_START]  = 0 #dummy
+    output[:, PHI_END] += 2*np.pi #unit is pi!
+    output[:, THETA_START]  = 0 #dummy
+    output[:, THETA_END] += 1*np.pi #unit is pi!
+    output[:, DETECTOR_ID]  = np.arange(2,nrSheets+2)
+    output[:, TEMPERATURE]  = temp
+    output[:, DENSITY]  = rho
+    output[:, PRESSURE]  = pTotal
+    output[:, STATE]  = 0 #dummy
+    output[:, FIRST_ELEMENT:] = np.column_stack((mfN2, mfO2, mfAr, mfHe, mfH))
     
     print("\tCOMPLETE: writing out the gdml lines.")
-    formatstring = "%e %e %e %e %e %e %i %e %e %e %e %e %e %e %e %e"
-    #formatstring = "%i %i %.2f %.2f %.2f %.2f %i %.1f %e %e %.5f %.5f %.5f %.5f %.5f %.5f"
+    formats = ["%e"] * output.shape[1]
+    formats[DETECTOR_ID] = "%i"
+    formatstring = " ".join(formats)
     np.savetxt(arg1+".psf",output,fmt=formatstring)
     # we now read the saved file an add the header, the core, crust and loss
     # volumes. 
@@ -132,14 +134,23 @@ def nrml2psf(datapath):
     t  = 293.15 #temperature in Kelvins
     p  = 101325 #pressure in Pascals
     d  = 2.7    #density in g/cm3
+    def solid_row(inner, outer, detector_id):
+        row = np.zeros(output.shape[1])
+        row[INNER_RADIUS], row[OUTER_RADIUS] = inner, outer
+        row[PHI_END], row[THETA_END] = 2*np.pi, np.pi
+        row[DETECTOR_ID] = detector_id
+        row[TEMPERATURE], row[DENSITY], row[PRESSURE] = t, d, p
+        row[STATE] = 1
+        return formatstring % tuple(row)
+
     f  = open(arg1+".psf","w")
     f.write("#O478Si284Al84Fe52Ca37Na28Mg15 N O Ar He H\n") # Adding the header file
-    f.write(formatstring%(0,er-cr,0,2*np.pi,0,1*np.pi,0,t,d,p,1.0,0,0,0,0,0))
+    f.write(solid_row(0, er-cr, 0))
     f.write("\n")
-    f.write(formatstring%(er-cr,er,0,2*np.pi,0,1*np.pi,1,t,d,p,1.0,0,0,0,0,0))
+    f.write(solid_row(er-cr, er, 1))
     f.write("\n")
     for k in ff: f.write(k)
-    f.write(formatstring%(top,top+cr,0,2*np.pi,0,1*np.pi,nrSheets+2,t,d,p,1.0,0,0,0,0,0))
+    f.write(solid_row(top, top+cr, nrSheets+2))
     f.write("\n")
     f.close()
 
