@@ -1,8 +1,7 @@
 # Reference
 
-This reference describes the implementation in this version: CSV and ROOT
-histograms, ROOT particle ntuples, and the accompanying Python tools. File
-formats and command options can differ between AtRIS revisions.
+Use this section to look up command options, input and output formats, units,
+and normalization formulas. It describes the current AtRIS implementation.
 
 ```{toctree}
 :maxdepth: 2

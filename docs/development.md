@@ -33,31 +33,11 @@ The remaining goals are:
 
 ## Phantom data
 
-The repository now has one `phantoms/` library. Its named response and counting
-tables are source data. Run preparation selects entries from that library and
-stages them under the numbered filenames required by the AtRIS executable; the
-run's `phantoms.txt` records the mapping back to the source names.
-
-The same directory still contains old response tables, variance tables, plots,
-and other historical data. Their provenance and continuing role should be
-established before removing them. The development notebook and historical
-library notes are now in the [phantom library reference](reference/phantom-library.md).
-
-## Companion Python package
-
-The repository now contains an initial `atris_tools` package. It provides
-command-line entry points for atmosphere conversion, PSF-to-GDML conversion,
-macro generation, chunk scattering and gathering, post-processing, and
-plotting. These commands are also importable as Python modules.
-
-The package uses `atris-*` command names for these operations. Existing
-standalone command names remain available for compatibility and to preserve the
-current user documentation. New commands should use the `atris-` prefix.
-
-The package now separates atmosphere preparation, PSF-to-GDML conversion,
-macro generation, chunk management, numerical post-processing, and plotting.
-The C++ executable remains the scientific simulation core; the Python package
-prepares its inputs and manages the surrounding workflow.
+The `phantoms/` library still contains historical response tables, variance
+tables, plots, and other data whose provenance and continuing role need to be
+established before removal. Preserve the source data while resolving that
+history. The [phantom library reference](reference/phantom-library.md) contains
+the available examples, historical notes, and original exploration notebook.
 
 ## Simulation preparation interface
 
@@ -228,6 +208,6 @@ regression baselines for scientific output.
 See [Minimal test fixture](reference/minimal-test-fixture.md) for the fixture
 layout and the limits of its validation.
 
-The [workflow tutorial](tutorials/files-through-workflow.md) exercises preparation,
-execution, and processing using a few chunks of the Earth example. It checks
-the workflow, not scientific convergence.
+The [Earth tutorials](tutorials/earth-nrlmsis-full.md) exercise preparation,
+execution, and processing with a few chunks. They provide a worked workflow;
+numerical regression tests remain separate work.

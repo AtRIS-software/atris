@@ -2,14 +2,13 @@
 
 **Next step:** [Plan chunks and restarts](plan-chunks.md).
 
-Prepare the planetary model, optional phantom responses, and particle sampling
-before setting up the job. The same inputs can then run locally, on a server,
-or on an HPC system. AtRIS and its Python tools must already be
-[installed](installation.md).
+Prepare a model of the planet's atmosphere and surface, any detector or dose
+calculations, and the particle types and energies to simulate. The resulting
+inputs can be used on your computer, a server, or a computing cluster. Start
+with AtRIS and its Python tools [installed](installation.md).
 
-For a worked example with every intermediate file explained, use
-[Follow the files through an AtRIS run](../tutorials/files-through-workflow.md).
-This guide describes the choices and commands for preparing your own simulation.
+For a worked example with intermediate files explained, use
+[Prepare an Earth atmosphere simulation](../tutorials/earth-nrlmsis-full.md).
 
 ```{toctree}
 :hidden:
@@ -53,8 +52,11 @@ Geant4. Keep the PSF: post-processing also uses its layer geometry.
 
 ## Optionally select phantoms
 
-Skip this step if you only need atmospheric transport and ionizing energy
-deposition. For phantom responses, create `phantoms.txt` in the run directory,
+Phantom tables describe how a detector or material responds to radiation.
+Use them to calculate dose or detector counts; skip this step if you only need
+particle transport and energy deposition in the atmosphere.
+
+Create `phantoms.txt` in the run directory,
 listing the selected table stems and their masses and areas. Choose the
 material, detector, and shielding appropriate to your observable from the
 [phantom library](../reference/phantom-library.md). The
@@ -67,25 +69,16 @@ Once that file is ready, stage its tables:
 atris-stage-phantoms . --copy
 ```
 
-This copies the selected named tables into the run directory and creates the
-numbered links expected by AtRIS. Keeping the targets local lets you transfer
-the whole directory to another machine. The runner reads the selection from
-`phantoms.txt`.
-
-The phantom tables define the response accumulated during particle transport.
-Changing them later does not change the response already recorded in the
-histograms, so select them as part of the physical setup before preparing the
-particle sampling.
-A modest phantom selection is normally a comparatively small addition because
-all phantoms share the same transported particle shower. See
-[the cost of phantom responses](../background/what-determines-runtime.md#phantom-responses)
-when assessing the resources needed for a larger selection.
+`--copy` keeps the response tables local for transferring the run directory.
+Select phantoms before generating particle inputs: their responses are scored
+during transport. See [phantom scoring](../background/radiation-quantities.md#phantom-responses)
+and its [runtime cost](../background/what-determines-runtime.md#phantom-responses).
 
 ## Prepare particle inputs
 
-The standard macro generator prepares separate proton and alpha simulations.
-Choose the energy range, number of energy points, and event counts for your
-calculation. For example, the following explicitly sets the generator's
+`atris-generate-macros` prepares separate proton and alpha simulations.
+Choose the energy range, number of energy points, and number of particles to
+simulate. For example, the following explicitly sets the generator's
 standard sampling values and fixes the seed used to generate macros:
 
 ```bash
@@ -111,12 +104,9 @@ your study requires a different source position or angular distribution; the
 [macro-generator reference](../reference/commands/atris-generate-macros.md)
 describes the supported options.
 
-Additional macro batches can sample more particles for the same physical setup.
-For example, batches with different event counts and independent random seeds
-can contribute to the same result when their geometry, physics, phantom
-responses, source distribution, and histogram bins agree. Combine their raw
-histograms and [normalize by the combined primary counts](../background/normalization-and-uncertainty.md#gather-raw-sums-before-normalization).
-For more sampling with the existing macros, use [chunk extension](plan-chunks.md#extend-a-run).
+For more sampling with the same inputs, [extend the chunk plan](plan-chunks.md#extend-a-run).
+For combining separately prepared batches, see
+[combining compatible batches](../background/normalization-and-uncertainty.md#gather-raw-sums-before-normalization).
 
 ## Record physics and output choices
 
@@ -135,16 +125,7 @@ atris-plot .
 ```
 
 Review the species input plots and, if selected, the phantom input plots.
-Keep the following files together:
-
-| Input | Purpose |
-| --- | --- |
-| `simulation.psf` and `simulation.gdml` | Planetary model and converted geometry |
-| Species `.gdml`, `.mac`, and `.bins` | Geometry, source sampling, total events, and energy axes |
-| Optional `phantoms.txt` and staged tables | Phantom selection, response coefficients, and normalization metadata |
-
-The physical inputs are ready. Chunk planning divides the requested events
-into restartable batches without changing this model. Run a few of those batches,
-gather and inspect their results, and decide whether to continue the full plan.
+The [input reference](../reference/inputs.md#run-directory-filenames) lists the
+files that define the prepared simulation.
 
 **Next step:** [Plan chunks and restarts](plan-chunks.md).

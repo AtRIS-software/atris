@@ -3,8 +3,8 @@
 AtRIS follows energetic particles through a planetary atmosphere and surface.
 It was originally developed by Saša Banjac; see
 [Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
-The calculation combines a prescribed planetary model and incident particle
-source with the particle-transport machinery of Geant4.
+You supply the planetary model and particle source. Geant4 follows the
+particles through that model, and AtRIS records the results.
 
 ## What Geant4 and AtRIS each provide
 
@@ -14,8 +14,8 @@ interactions, decays, and the secondary particles produced along the way.
 The chosen [physics list](physics-lists.md) supplies the processes and models
 used in that transport.
 
-AtRIS defines the planetary application: its geometry and materials, incident
-particles, and the measurements to record at each atmospheric layer. The
+AtRIS defines the planet's geometry and materials, the incoming radiation,
+and what to record at each atmospheric layer. The
 compiled `AtRIS` program uses Geant4 as a library. The accompanying Python
 tools prepare its inputs and process its outputs. The
 [Geant4 introduction](https://geant4.web.cern.ch/documentation/pipelines/master/intro_html/IntroductionToGeant4/IntroductionToG4.html)
@@ -58,21 +58,16 @@ so crossing counts should not be interpreted as counts of independent events.
 
 ## Source sampling and the physical environment
 
-The generated proton and alpha inputs are separate simulations. Their energy
-axes use total kinetic energy per particle; the default generator assigns alpha
-energies four times the corresponding proton energies. Keep this distinction
-when working with a spectrum expressed per nucleon.
-
-Simulated event counts are numerical samples, not a physical irradiation time.
-Increasing them improves the response estimate without increasing the physical
-source intensity. Applying an incident spectrum and intensity is a separate
-part of [normalization and uncertainty](normalization-and-uncertainty.md).
+The source samples primary histories to estimate a response. Applying a physical
+incident spectrum is a separate [normalization step](normalization-and-uncertainty.md).
+The [source-input reference](../reference/inputs.md#energy-bins-and-macros)
+defines the proton and alpha sampling conventions.
 
 The planetary material configuration remains fixed during transport. AtRIS
 does not update atmospheric temperature, chemistry, or circulation in response
 to deposited energy. Its radiation results can supply a separate atmospheric
 calculation. See [Atmosphere and regolith](planetary-geometry.md) for the material
-model and [the workflow tutorial](../tutorials/files-through-workflow.md) for
+model and [the Earth tutorials](../tutorials/earth-nrlmsis-full.md) for
 how that model becomes executable inputs and results.
 
 ## Implementation

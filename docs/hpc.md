@@ -4,14 +4,14 @@
 
 **Next step:** [Process the completed results](running-atris/process-results.md).
 
-Start with a [prepared simulation](running-atris/prepare-simulation.md) and a
-[chunk plan](running-atris/plan-chunks.md). Preserve the physics list and output mode
-chosen during preparation when configuring the scheduler script. The supplied
-script defaults to `FTFP_BERT_HP` and response output.
+On a computing cluster, a job scheduler reserves processors, memory, and time
+for your calculation. This guide uses Slurm and the scripts supplied in
+`examples/slurm/`.
 
-This guide runs any prepared AtRIS simulation through a scheduler. The Slurm
-templates in `examples/slurm/` specify resources and worker launches; they do
-not select a planet, atmosphere, particle spectrum, or phantom configuration.
+Start with a [prepared simulation](running-atris/prepare-simulation.md) and a
+[chunk plan](running-atris/plan-chunks.md). Set the script's physics list and
+output mode to match your preparation; its defaults are `FTFP_BERT_HP` and
+response output.
 
 ## Run a few chunks first
 
@@ -54,15 +54,8 @@ Run these commands in order after the selected chunks finish. Once processing
 has finished, leave the allocated shell with `exit` to release the resources.
 Inspect the resulting PNGs and logs and
 [decide whether to continue](running-atris/process-results.md#decide-whether-to-continue).
-The unfinished plan is expected at this stage; do not require a whole-plan
-completion check before this inspection.
 
 ## Submit a prepared simulation with Slurm
-
-After deciding to continue, use the worker-pool script below to run the remaining
-plan. It retains and skips the chunks already completed. If you revise the
-setup first, [check which existing outputs still apply](running-atris/process-results.md#decide-whether-to-continue)
-before submitting.
 
 Work on the login node in the prepared run directory, with the AtRIS and
 Geant4 environment loaded. Copy the submission template:
@@ -127,29 +120,24 @@ receives lines 1, 21, 41, and so on from `chunks.txt`; worker 1 receives lines
 2, 22, 42, and so on. Their assignments do not overlap. Each chunk starts a new
 AtRIS process; `srun` remains active until the workers exit.
 
-The script uses the runner defaults, `FTFP_BERT_HP` and response output. If your
-prepared simulation requires different settings, add `--physics-list` and
-`--mode` to the `atris-run` command inside `bash -c`.
+For physics or output settings other than the defaults stated above, add
+`--physics-list` and `--mode` inside the `bash -c` command.
 
 ### Wall time and completion
 
 `ATRIS_STOP_BEFORE_END` defaults to 1,800 seconds, or 30 minutes. During that
 final interval, workers finish their active chunks but start no new ones.
 Set this interval longer than a measured slow chunk plus time to write its
-outputs. Initialization and final writing include serial work: short chunks
-repeat that overhead frequently, while long chunks leave more work to repeat
-after an interruption. See [chunk planning](running-atris/plan-chunks.md#choose-a-practical-chunk-size).
+outputs. See [chunk planning](running-atris/plan-chunks.md#choose-a-practical-chunk-size)
+for the tradeoff between overhead and work lost to interruptions.
 
-`--kill-on-bad-exit=0` lets the other workers finish if one fails. The job still
-reports the failure. If the workers exit successfully, the final
-`atris-run --check-complete` checks whether the whole plan is finished. It
-returns failure if chunks remain, including after a planned safety stop. This
-allows a dependent final-processing job to distinguish completion from a run
-that needs another allocation.
+`--kill-on-bad-exit=0` lets other workers finish if one fails. After successful
+worker exits, `atris-run --check-complete` makes the script return failure if
+chunks remain, including after a planned safety stop. The
+[recovery table](#failure-and-recovery-reference) describes what to do next.
 
 For this Slurm layout, choose a chunk count per species divisible by the node
 count. This convention applies to this layout, not to AtRIS runs in general.
-Keep the existing plan when resubmitting: completed chunks will be skipped.
 
 ### Submit and monitor
 
@@ -183,25 +171,14 @@ After the allocation exits, verify completion:
 atris-run --check-complete
 ```
 
-If entries remain, inspect the logs and resubmit the same script after the
-previous allocation has exited. Completed chunks are skipped. Do not overlap
-two allocations for the same plan. The script returns failure while entries
-remain, including when its safety window stopped further work.
-
-You can [process and inspect completed chunks](running-atris/process-results.md)
-while the allocation continues; the completion check is only needed to confirm
-that the entire plan has finished. The section below shows how to
-[process results in a Slurm job](#process-results-in-a-slurm-job).
+For unfinished or failed runs, use the [recovery table](#failure-and-recovery-reference).
+You can [inspect completed chunks](running-atris/process-results.md) while the
+allocation continues, including through a separate processing job below.
 
 ## Process results in a Slurm job
 
-The [gathering, normalization, and plotting commands](running-atris/process-results.md)
-can run in a separate Slurm allocation. The supplied template checks that the entire plan has
-finished before processing, so it is intended for final results. For an interim
-inspection, run those commands on completed chunks using an interactive
-allocation or a separate job without that completion check.
-
-To use the final-results template, copy it into the run directory:
+To process results in a separate Slurm allocation, copy the template into
+the run directory:
 
 ```bash
 cp "$ATRIS_ROOT/examples/slurm/gather-atris.slurm.sh" .
@@ -228,8 +205,8 @@ After entering the submission directory, the script runs four commands in order:
 3. `atris-postprocess` normalizes the gathered results into response tables.
 4. `MPLBACKEND=Agg atris-plot` creates plots without requiring a graphical display.
 
-Because the script uses `set -e`, a failed command stops the job before the
-next step. Its `#SBATCH` log paths use `%j` to include the processing job ID.
+`set -e` stops the job on failure. Logs go to `chunks/gather-<job-id>.out`
+and `.err`.
 
 Submit from the run directory:
 
@@ -239,11 +216,6 @@ gather_job=${gather_submission%%;*}
 echo "$gather_job"
 ```
 
-The template checks completeness, then runs `atris-gather`, `atris-postprocess`,
-and `atris-plot` as one task. Logs are written to `chunks/gather-<job-id>.out`
-and `.err`. Wait for the job to finish successfully before inspecting results
-or extending the simulation.
-
 When the active simulation allocation is expected to finish the entire plan,
 you can queue processing after its success instead:
 
@@ -252,20 +224,16 @@ gather_submission=$(sbatch --parsable \
   --dependency="afterok:${simulation_job}" gather-atris.slurm.sh)
 ```
 
-Here `simulation_job` is the job ID saved at submission. The simulation script
-returns failure if chunks remain, so the dependent job cannot process partial
-results. If the simulation needs resubmission, submit processing after the
-final successful allocation instead.
+`simulation_job` is the ID saved at submission. The `afterok` dependency requires
+a successful simulation job, including its whole-plan completion check. If
+another allocation is needed, attach processing to that new job ID.
 
 ## Extend an unconverged run
 
 [Extend the chunk plan](running-atris/plan-chunks.md#extend-a-run) to add more
-samples. This can be done while the current allocation runs; its workers finish
-their existing assignments. After that allocation exits, submit the same
-simulation script again to pick up the added chunks and any other unfinished
-entries. Choose the extension count with this page's node-count convention in
-mind. If final processing was submitted with a dependency, attach it to the new
-simulation job ID.
+samples. After the current allocation exits, resubmit the simulation script to run
+the added entries. Apply this page's node-count convention to the extension,
+and update any processing-job dependency.
 
 ## Failure and recovery reference
 
@@ -277,10 +245,11 @@ simulation job ID.
 | Hard wall-time kill | All `COMPLETE` chunks | Resubmit; active chunks restart |
 | All markers exist | The complete simulation | Run final gather |
 
-Partial output files from failed chunks are ignored because they have no
-`COMPLETE` marker. A later attempt replaces them. If a site-specific wrapper
-uses node-local scratch, copy every output and log back before creating the
-marker.
+Resubmit the same plan only after the previous allocation has exited;
+completed entries are skipped and unmarked chunks restart. Avoid overlapping
+allocations for the same worker assignments. If a site-specific wrapper uses
+node-local scratch, copy its outputs and logs back before creating the
+completion marker.
 
 ## Other schedulers
 
@@ -314,9 +283,6 @@ chosen with storage capacity in mind.
 If metadata or write load becomes significant, use larger chunks, run fewer
 workers per node, or stage through unique node-local directories. Keep final
 chunk outputs and `COMPLETE` markers on storage visible to gather.
-
-After execution, use [the shared results-processing guide](running-atris/process-results.md).
-
 
 **Previous step:** [Prepare the chunk plan](running-atris/plan-chunks.md).
 

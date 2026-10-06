@@ -30,6 +30,49 @@ layer $i$. Density in g cm$^{-3}$ and distance in cm give $X$ in g cm$^{-2}$.
 Equal geometric altitude does not imply equal overlying material on different
 planets; composition also affects which interactions occur.
 
+## Estimate the primary stopping altitude
+
+The thin dashed curve in the [Earth chunk comparison](../tutorials/run-earth-simulation.md#decide-whether-to-continue)
+estimates where a vertically incoming proton stops. It uses the
+**continuous slowing-down approximation (CSDA)**: replace individual energy-loss
+events by their average rate. The mass stopping power is
+
+$$
+S(E)=-\frac{\mathrm dE}{\mathrm dX},
+\qquad
+R(E_0)=\int_0^{E_0}\frac{\mathrm dE}{S(E)}.
+$$
+
+Here $E_0$ is the incoming proton energy, $E$ its remaining energy, and
+$R(E_0)$ the mass thickness traversed before stopping. With $S$ in
+$\mathrm{MeV\,cm^2\,g^{-1}}$, the range $R$ is in $\mathrm{g\,cm^{-2}}$.
+[NIST PSTAR](https://physics.nist.gov/PhysRefData/Star/Text/PSTAR.html)
+tabulates this range for protons in dry air; the figure uses these
+{download}`tabulated values <../data/pstar-air.csv>`.
+
+For the PSF atmosphere, the vertical column mass above altitude $h$ is
+
+$$
+X(h)=\int_h^{h_{\mathrm{top}}}\rho(z)\,\mathrm dz,
+\qquad
+X(h_{\mathrm{stop}})=R(E_0).
+$$
+
+Compute $X$ by summing density times layer thickness from the top down, then
+interpolate within the layer where the accumulated mass reaches $R(E_0)$.
+The plotted curve uses log–log interpolation of the PSTAR energy–range table
+and the constant density within each PSF layer. Dry-air stopping powers are
+used throughout. For this atmosphere, the estimated stopping altitudes are
+about 86 km at 1 MeV, 63 km at 10 MeV, and 33 km at 100 MeV.
+
+The close agreement with the sharp low-energy edge identifies primary stopping
+as its main cause. This estimate assumes a straight vertical path; oblique
+incidence, scattering, and energy-loss fluctuations change individual stopping
+altitudes. It also omits secondary production and transport. Deposition below
+the curve can come from descendants of the incoming proton, whose contributions
+remain in the original proton's energy column. The curve therefore marks a
+primary stopping estimate, not a boundary beyond which deposition is forbidden.
+
 ## Why the atmospheric profile matters
 
 [Winant, Pierrard, Botek, and Herbst (2023)](https://doi.org/10.3390/universe9120502)

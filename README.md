@@ -25,23 +25,13 @@ analyzing simulations, phantom response tables, and worked examples.
 ## Getting started
 
 Follow the [installation guide](INSTALL.md) to build AtRIS and install the
-Python tools. To try the complete workflow,
-[run a few chunks of the Earth example](docs/tutorials/files-through-workflow.md)
-and inspect their results before continuing the run.
+Python tools. Then [prepare the Earth example](docs/tutorials/earth-nrlmsis-full.md)
+and [run and inspect a few chunks](docs/tutorials/run-earth-simulation.md).
+The tutorials explain the input and output files at each step.
 
-For a scientific model, begin with
-[Prepare an Earth atmosphere simulation](docs/tutorials/earth-nrlmsis-full.md),
-or use the [exoplanet notebook](docs/tutorials/exoplanet-psf.ipynb) to create a
-planet specification file from scratch. The
-[workflow tutorial](docs/tutorials/files-through-workflow.md) follows the input
-and output files from preparation through analysis.
-
-Simulations run in independent, restartable chunks on a local computer, a
-server, or an HPC system. Start with a few chunks, gather and inspect their
-plots, then decide whether to continue the remaining plan or revise the setup.
-Completed chunks are retained when you continue. See
-[Running AtRIS](docs/running-atris/index.md) for planning, execution, and result
-processing.
+To create your own atmosphere, use the [exoplanet notebook](docs/tutorials/exoplanet-psf.ipynb).
+For running your model locally, on a server, or on an HPC system, see
+[Running AtRIS](docs/running-atris/index.md).
 
 ## Documentation
 

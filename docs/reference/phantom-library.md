@@ -22,33 +22,10 @@ the ICRU pairs use `0.000MeV`. Other variants and historical files are also
 present in the archive. Establish their geometry and normalization before
 substituting them for the documented examples.
 
-## Select and stage tables
-
-The example selection file records the table stems and the mass and area used
-for normalization:
-
-```{literalinclude} ../../examples/earth-nrlmsis-full/phantoms.txt
-:language: text
-:caption: examples/earth-nrlmsis-full/phantoms.txt
-```
-
-To use this selection, work inside a prepared run directory:
-
-```bash
-cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/phantoms.txt" .
-atris-stage-phantoms . --copy
-```
-
-For your own selection, edit `phantoms.txt` before staging. Each stem identifies
-`<stem>_response.txt` and `<stem>_counting.txt`. The staging command creates the
-numbered radiation and counting links required by AtRIS. See
-[phantom selection](inputs.md#phantom-selection) for IDs and metadata,
-[response-matrix format](inputs.md#phantom-response-matrices) for the table
-layout and fixed energy grid, and [atris-stage-phantoms](commands/atris-stage-phantoms.md)
-for archive paths and staging options.
-
-Phantoms are optional. A run without them still records atmospheric ionizing
-energy deposition.
+To use these tables, follow [phantom selection and staging](../running-atris/prepare-simulation.md#optionally-select-phantoms).
+The [Earth preparation tutorial](../tutorials/earth-nrlmsis-full.md#prepare-the-phantom-inputs)
+shows the two-phantom example. See the [selection-file format](inputs.md#phantom-selection)
+and [response-matrix format](inputs.md#phantom-response-matrices) for the data definitions.
 
 ## Historical update: autumn 2021
 

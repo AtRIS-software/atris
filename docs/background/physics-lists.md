@@ -20,10 +20,9 @@ This can matter even for a high-energy primary source, because transport can
 produce low-energy secondary neutrons. The [Geant4 description of FTFP_BERT](https://geant4.web.cern.ch/documentation/pipelines/master/plg_html/PhysicsListGuide/reference_PL/FTFP_BERT.html)
 details the components and variants.
 
-The default is a starting configuration, not proof of suitability for every
-planet or observable. Check the species and energies of both primaries and
-secondaries relevant to the calculation, the target materials, and the
-processes that dominate the requested response.
+Choose a physics list that covers the particle species, energies, and materials
+in your calculation, including the secondary particles. The processes that
+matter most depend on the quantity you want to calculate.
 
 ## Production thresholds and tracking
 
@@ -45,9 +44,8 @@ the difference. Do not gather chunks produced with different physics settings
 into a single response table.
 
 Record the AtRIS and Geant4 versions, physics-list name, installed data-library
-versions, and any macro settings that modify cuts or processes. Changing only
-the list's name in a note does not update existing results; the simulation must
-be rerun with the intended configuration.
+versions, and any macro settings that modify cuts or processes, so the
+comparison can be reproduced.
 
 ## Implementation
 

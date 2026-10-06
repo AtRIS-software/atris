@@ -1,45 +1,45 @@
 # Prepare an Earth atmosphere simulation
 
-**Next step:** [Plan chunks for the prepared simulation](../running-atris/plan-chunks.md).
+**Next step:** [Run and inspect the Earth simulation](run-earth-simulation.md).
 
-This example prepares an Earth simulation from the supplied `simulation.psf`.
-Its atmosphere has 101 layers, each 1 km thick, extending from the surface to
-101 km altitude. The PSF also includes the solid interior, crust, and outer
-stopping shell.
+This example prepares an Earth atmosphere with 101 layers, each 1 km thick,
+from the surface to 101 km. The supplied `simulation.psf` also includes the
+solid interior, crust, and outer stopping shell. Each step below shows which
+files it reads and creates.
 
-These preparation steps are independent of execution environment. Continue with
-[chunk planning](../running-atris/plan-chunks.md) once the inputs are ready.
-
-The particle inputs use the `atris-generate-macros` defaults: 121 logarithmically
-spaced energy points, 5000 protons per point, and 3300 alpha particles per
-point. This produces 605,000 proton events and 399,300 alpha events.
+AtRIS and the Python tools should already be [installed](../running-atris/installation.md),
+with `ATRIS_ROOT` pointing to the AtRIS directory. All commands run inside the
+new simulation directory.
 
 ## Create the run directory
 
-From `runs/`, create and enter the run directory:
+From `runs/`, create and enter the run directory, then copy the model:
 
 ```bash
 mkdir earth-nrlmsis-full
 cd earth-nrlmsis-full
-```
-
-## Prepare the atmosphere
-
-Copy the example's PSF into the run directory:
-
-```bash
 cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/simulation.psf" .
 ```
 
-To use a different time or location, follow
-[Download an atmosphere from NASA](../running-atris/download-nasa-atmosphere.md)
-to obtain and convert a new profile instead.
-
-Convert the PSF to the Geant4 geometry `simulation.gdml`:
+## Inspect and convert the atmosphere
 
 ```bash
+head -n 5 simulation.psf
 atris-psf-to-gdml simulation.psf
 ```
+
+The first PSF line defines the materials; the numeric rows describe the shells.
+The [PSF reference](../reference/inputs.md#planet-specification-format-psf)
+defines their columns and units. To use another time or location, obtain a
+profile with the [NASA atmosphere guide](../running-atris/download-nasa-atmosphere.md).
+
+| Reads | Creates |
+| --- | --- |
+| `simulation.psf`, packaged material definitions | `simulation.gdml` |
+
+`simulation.gdml` describes the geometry and materials in Geant4's format. It
+also identifies the layers where AtRIS records results. The later preparation
+and analysis steps use `simulation.psf` as well.
 
 ```{figure} ../images/earth-example/simulation.psf.png
 :name: earth-atmosphere-plot
@@ -54,75 +54,64 @@ The example's atmosphere, plotted from `simulation.psf`. The steps follow the
 
 ## Prepare the phantom inputs
 
-Copy and stage the example's two-phantom selection:
+Phantom tables let us estimate detector counts and dose from the particles
+crossing each atmospheric layer. This example uses a RAMONA detector and an
+ICRU water sphere. Skip this step if you only need energy deposition in the
+atmosphere.
+
+Copy the selection file and prepare its tables:
 
 ```bash
 cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/phantoms.txt" .
-atris-stage-phantoms .
+atris-stage-phantoms . --copy
 ```
+
+| Reads | Creates |
+| --- | --- |
+| `phantoms.txt`, selected tables in `$ATRIS_ROOT/phantoms` | Local named response/counting tables and four numbered symlinks |
+
+`phantoms.txt` selects the tables and records each phantom's mass and area.
+Staging connects their descriptive filenames to the numbered names read by AtRIS:
+
+```text
+radiation_phantom0.txt -> ramona_zero_0.060MeV_detA_response.txt
+counting_phantom0.txt  -> ramona_zero_0.060MeV_detA_counting.txt
+radiation_phantom1.txt -> icru_zero_0.000MeV_detAB_response.txt
+counting_phantom1.txt  -> icru_zero_0.000MeV_detAB_counting.txt
+```
+
+`--copy` keeps the link targets inside the run directory, so the directory can
+be transferred as a whole. Inspect them with
+`ls -l radiation_phantom*.txt counting_phantom*.txt`.
+The tables score [phantom responses](../background/radiation-quantities.md#phantom-responses)
+during transport; they do not add detector volumes to the geometry.
 
 ## Prepare the particle inputs
 
-Generate inputs with the default energy grid and particle counts. The values
-are written out explicitly below, and the fixed random seed makes the generated
-macros reproducible:
+Use the default sampling values and a fixed seed for reproducible input generation:
 
 ```bash
 atris-generate-macros . \
   --particles-per-bin 5000 \
   --alpha-factor 0.66 \
-  --random-seed 12345 \
   --energy-min-power 0 \
   --energy-max-power 6 \
-  --energy-points 121
+  --energy-points 121 \
+  --random-seed 12345
 ```
 
-These are the `atris-generate-macros` defaults except for `--random-seed 12345`;
-omitting that option generates new random seeds. With 121 energy points, AtRIS
-will process 605,000 proton events (`121 x 5000`) and 399,300 alpha events
-(`121 x int(5000 x 0.66)`).
+| Reads | Creates |
+| --- | --- |
+| `simulation.psf`, `simulation.gdml` | `protons.gdml`, `protons.mac`, `protons.bins` |
+| The same model | `alphas.gdml`, `alphas.mac`, `alphas.bins` |
 
-## Physics choices and execution
+Each species has a geometry copy (`.gdml`), source and event commands (`.mac`),
+and histogram energy edges (`.bins`). The 121 energy edges span 1–1,000,000 MeV
+for protons and 4–4,000,000 MeV for alphas, with 605,000 and 399,300 requested
+events respectively. See the [energy-grid convention](../reference/inputs.md#energy-bins-and-macros)
+for how these counts are calculated.
 
-Use `FTFP_BERT_HP` and `response` output for
-this example. It includes two phantoms. The prepared files now define the
-simulation; no events have run yet.
+The example uses `FTFP_BERT_HP` physics and `response` output when launched.
+The model and particle inputs are ready; simulation begins in the next tutorial.
 
-Choose [local](../running-atris/run-locally.md),
-[server/workstation](../running-atris/run-on-server.md), or
-[HPC](../hpc.md) execution. First [prepare a chunk plan](../running-atris/plan-chunks.md);
-the runner reads the phantom count from `phantoms.txt`.
-
-Start with [a few chunks](files-through-workflow.md#6-plan-and-run-chunks),
-[gather and inspect their results](../running-atris/process-results.md), and
-[decide whether to continue](../running-atris/process-results.md#decide-whether-to-continue). This keeps the same
-atmosphere, energy range, and particle inputs.
-
-After a chunk completes, [gather, post-process, and plot](../running-atris/process-results.md).
-
-Once you have processed responses, continue with the Jupyter notebook
-[Fold the Earth responses with a cosmic-ray spectrum](earth-spectrum-folding.ipynb)
-to calculate the proton contribution to ionization and water-phantom dose. The notebook is at
-`docs/tutorials/earth-spectrum-folding.ipynb`.
-[View notebook](earth-spectrum-folding.ipynb) or download
-{download}`earth-spectrum-folding.ipynb <earth-spectrum-folding.ipynb>`.
-
-## Prepared reference files
-
-The example contains the PSF and the geometry and particle inputs generated
-from it. Simulation outputs, plots, logs, and staged phantom links
-are not included.
-
-As an alternative to generating the inputs above, copy the prepared example
-into a fresh run directory. Do not repeat this in a directory already used for
-a simulation:
-
-```bash
-mkdir earth-nrlmsis-full
-cd earth-nrlmsis-full
-cp -R "$ATRIS_ROOT/examples/earth-nrlmsis-full/." .
-atris-stage-phantoms .
-```
-
-
-**Next step:** [Plan chunks for the prepared simulation](../running-atris/plan-chunks.md).
+**Next step:** [Run and inspect the Earth simulation](run-earth-simulation.md).

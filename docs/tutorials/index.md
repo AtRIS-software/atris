@@ -1,50 +1,36 @@
 # Tutorials
 
-The preparation tutorials below offer two ways to build simulation inputs.
-They are alternatives, not consecutive steps. The complete workflow tutorial
-then follows prepared inputs through execution and results processing.
+Follow the Earth example from an atmosphere model to ionization and dose
+rates, or build your own atmosphere with the exoplanet notebook.
 
 ```{toctree}
 :hidden:
 
 earth-nrlmsis-full
-exoplanet-psf
-files-through-workflow
+run-earth-simulation
 earth-spectrum-folding
+exoplanet-psf
 ```
 
-## Prepare model inputs
+## Earth simulation
 
-[Prepare an Earth atmosphere simulation](earth-nrlmsis-full.md) uses a supplied
-Earth PSF and prepares the geometry, optional phantom responses,
-and particle inputs. The workflow tutorial below runs a few chunks of this model.
+1. [Prepare an Earth atmosphere simulation](earth-nrlmsis-full.md): turn the
+   supplied atmosphere model into simulation inputs, including optional
+   detector and dose calculations.
+2. [Run and inspect the Earth simulation](run-earth-simulation.md): run the
+   first part of the calculation, combine its results, and inspect the plots.
+3. [Apply a cosmic-ray spectrum](earth-spectrum-folding.ipynb): use the
+   simulated proton responses to calculate ionization and dose rates.
 
-[Create an exoplanet PSF](exoplanet-psf.ipynb) builds a simple atmosphere with
-NumPy, plots its profiles, and writes the primary model input. This is a Jupyter
-notebook at `docs/tutorials/exoplanet-psf.ipynb` in the project.
-[View notebook](exoplanet-psf.ipynb) or download
-{download}`exoplanet-psf.ipynb <exoplanet-psf.ipynb>` to run it locally.
-
-## Follow the complete workflow
-
-[Follow the files through an AtRIS run](files-through-workflow.md) starts from
-a supplied PSF and covers preparation, execution, and results, showing which
-files each step reads and writes. It runs one proton chunk and one alpha chunk
-before gathering results. Inspect the plots and decide whether to continue the
-remaining plan or revise the setup. You can start
-here directly if you already have a model or want an overview of the whole run.
-
-The reusable guides follow the same sequence:
-[prepare the simulation](../running-atris/prepare-simulation.md),
-[plan chunks](../running-atris/plan-chunks.md), [run it](../running-atris/run-simulation.md), and
-[process the results](../running-atris/process-results.md).
-
-## Apply an incident spectrum
-
-[Fold the Earth responses with a cosmic-ray spectrum](earth-spectrum-folding.ipynb)
-continues from the processed Earth results. It uses protons to calculate
-atmospheric ionization and absorbed dose in the water phantom, then compares
-two incident spectra using the same simulation. This Jupyter notebook is at
+The third tutorial is a Jupyter notebook at
 `docs/tutorials/earth-spectrum-folding.ipynb`.
 [View notebook](earth-spectrum-folding.ipynb) or download
 {download}`earth-spectrum-folding.ipynb <earth-spectrum-folding.ipynb>`.
+
+## Create your own atmosphere
+
+[Make a PSF for a simple exoplanet](exoplanet-psf.ipynb) builds a mixed-gas
+atmosphere with NumPy, plots its profiles, and writes `simulation.psf`.
+This Jupyter notebook is at `docs/tutorials/exoplanet-psf.ipynb`.
+[View notebook](exoplanet-psf.ipynb) or download
+{download}`exoplanet-psf.ipynb <exoplanet-psf.ipynb>`.

@@ -91,9 +91,8 @@ saved outputs: regenerating them needs an existing Earth run and the published
 spectrum table. Run it locally with your Earth results and save the notebook
 to update those plots.
 
-Local execution of the exoplanet notebook writes its model files in
-`exoplanet-inputs/` beneath the kernel's working directory. Read the cells before
-changing that output destination or rerunning exports.
+Run the exoplanet notebook in your simulation directory. It writes
+`simulation.psf` there; rerunning the writing cell replaces that file.
 
 ## Read the Docs
 

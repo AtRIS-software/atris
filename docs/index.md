@@ -2,14 +2,16 @@
 
 AtRIS (Atmospheric Radiation Interaction Simulator) is a particle-transport
 code for studying radiation in planetary and exoplanetary atmospheres.
-AtRIS was originally developed by Saša Banjac; see
+AtRIS was first described in
 [Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
 
-The atmosphere and regolith models in AtRIS allow researchers to
-investigate how a planet's composition and structure affect the radiation
-reaching different altitudes and the surface. By following incoming particles
-and the secondary particles they produce, AtRIS supports studies of
-atmospheric ionization, chemistry, and habitability.
+The original AtRIS paper has been cited by
+[over 40 peer-reviewed publications](https://ui.adsabs.harvard.edu/search/q=citations%282019JGRA..124...50B%29%20property%3Arefereed).
+AtRIS has been used to study
+[atmospheric ionization on Earth](https://doi.org/10.3390/universe9120502),
+[radiation exposure and subsurface shielding on Mars](https://doi.org/10.1029/2019JE006246),
+[radiation doses in Venus's clouds](https://doi.org/10.1051/0004-6361/201936968),
+and [cosmic-ray effects on atmospheric chemistry and exoplanet biosignatures](https://doi.org/10.1051/0004-6361/201935888).
 
 The transport calculation uses [Geant4](https://geant4.web.cern.ch/), a toolkit for simulating the passage of
 particles through matter. Geant4 provides the models of physical interactions;
@@ -19,23 +21,23 @@ crossings with precomputed phantom response tables.
 
 ## Working with AtRIS
 
-This manual follows a simulation from its physical setup to its results.
-Preparation and post-processing are shared across local, server/workstation,
-and HPC runs; the execution guides cover the job setup for each environment.
+An AtRIS calculation starts with a model of the planet's atmosphere and
+surface. You then prepare and run particle simulations to find out how
+radiation interacts with that environment.
 
-1. [Prepare the simulation](running-atris/prepare-simulation.md): define the planet,
-   select any phantoms, and prepare the particle sampling and physics choices.
-2. [Plan and run a few chunks](running-atris/run-simulation.md): create a chunk
-   plan and execute a small part of it on your computer, a server, or an HPC system.
-3. [Gather and inspect](running-atris/process-results.md): process the completed
-   chunks and check the input plots, initial responses, and runtime.
-4. [Decide whether to continue](running-atris/process-results.md#decide-whether-to-continue):
-   keep running if the setup looks right, or revise it based on the first results.
-   Completed chunks remain part of a continued run with the same setup.
+1. [Prepare the simulation](running-atris/prepare-simulation.md): build the
+   planet model and set up the particle types and energies to simulate.
+2. [Start running](running-atris/run-simulation.md): run part of the calculation
+   on your computer, a server, or a computing cluster.
+3. [Inspect the results](running-atris/process-results.md): examine the plots
+   and assess how much computing time the full calculation will need.
+4. [Continue as needed](running-atris/process-results.md#decide-whether-to-continue):
+   build on the completed work until you have enough simulated particles to
+   answer your question reliably.
 
-The [tutorials](tutorials/index.md) provide worked examples of model preparation
-and a complete simulation workflow. The [reference](reference/index.md)
-describes commands, input formats, and output quantities.
+The [tutorials](tutorials/index.md) walk through this process using worked
+examples. The [reference](reference/index.md) explains the commands, file
+formats, and calculated quantities.
 
 For installation, see [Installing AtRIS](running-atris/installation.md) or the
 [UiO setup guide](running-atris/use-atris-on-uio.md).

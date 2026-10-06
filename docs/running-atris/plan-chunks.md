@@ -4,15 +4,12 @@
 
 **Next step:** [Run the chunk plan](run-simulation.md).
 
-A chunk is an independently seeded batch of primary histories using the same
-planet, source, phantoms, and physics as the rest of the run. Chunking lets you
-retain completed work after an interruption and inspect results while the
-calculation continues. It divides histories, not the planet into spatial regions.
+A **chunk** is a batch of simulated particles with its own random seeds. Each
+incoming particle and the secondaries it produces form one event. All chunks
+use the same planet model, particle source, phantom tables, and physics.
 
-Start with the species inputs from [simulation preparation](prepare-simulation.md).
-The total event count is already specified; this step partitions the work for
-local, server, or HPC execution. Each worker runs one chunk at a time, and each
-AtRIS process can use several Geant4 threads.
+Each running copy of `atris-run`, called a worker, handles one chunk at a time.
+The AtRIS process it starts can use several CPU threads.
 
 ## Create a chunk plan
 
@@ -24,93 +21,53 @@ atris-scatter . --chunks 3000 --random-seed 12345
 
 This divides the requested events into 3000 chunks per species. `chunks.txt`
 lists the chunks and their random seeds, the species `.chunk.mac` files set
-the events per chunk, and `chunks/` holds their outputs.
-
-For the costs of transport, layers, phantoms, and output, see
-[What determines runtime?](../background/what-determines-runtime.md).
+the events per chunk, and `chunks/` holds their outputs. See the
+[chunk reference](../reference/chunks.md) for rounding and file formats.
 
 ## Choose a practical chunk size
 
-There is no checkpoint inside an AtRIS chunk. If a worker is killed during a
-chunk, that chunk restarts from the beginning. Previously completed chunks stay
-safe.
+Every chunk initializes a new AtRIS process and writes its results at the end.
+Parts of initialization and writing use a single processor, so adding threads
+does not shorten them. Small chunks repeat this work more often. Larger chunks
+spend a greater share of their time simulating particles, but take longer to
+repeat if interrupted. Completed chunks are retained; only unfinished chunks
+restart from the beginning.
 
-Chunk size is a compromise between repeated startup/output overhead and the
-amount of work at risk. Every chunk starts a new AtRIS process, initializes the
-geometry and physics, and writes its results before it can be marked complete.
-Initialization and final output include serial, single-processor work; adding
-Geant4 transport threads does not speed up those parts. Very small chunks
-repeat this overhead frequently and can leave most allocated cores idle during
-startup and writing.
+Measure a few complete chunk cycles, including startup and writing, to find a
+useful balance between overhead and recovery time. On Slurm, allow a
+[safety window](../hpc.md#wall-time-and-completion) long enough for a slow chunk
+to finish. The [runtime discussion](../background/what-determines-runtime.md)
+explains how layers, particle cascades, phantoms, and threads affect these costs.
 
-Larger chunks spend a greater fraction of their time transporting particles,
-but an interruption can discard more computation: the active chunk must be
-rerun, even if some output files have already appeared. Smaller chunks make
-completed results durable more often and reduce that exposure, at the cost of
-more frequent process restarts and writes. Completed chunks remain reusable;
-there is no recovery partway through an unfinished chunk.
+Compare throughput at several thread counts using `G4FORCENUMBEROFTHREADS`.
+Several smaller concurrent workers may complete more work per hour than one
+process using every core.
 
-Measure the full cycle on the target machine, including initialization and
-final writing, rather than timing only event transport. Compare a few event
-counts and choose a chunk size that keeps this overhead modest while limiting
-lost work to an acceptable interval. With several workers, one active chunk
-per worker is at risk if the entire allocation stops.
-
-Use a short pilot to measure typical and slow-tail chunk times. Then choose:
-
-- a chunk runtime much shorter than the available run time, so every worker
-  normally completes many chunks;
-- for Slurm, `ATRIS_STOP_BEFORE_END` longer than a slow chunk plus output-flush margin;
-- enough events per chunk to amortize AtRIS startup and fixed histogram I/O.
-
-Benchmark several thread counts using `G4FORCENUMBEROFTHREADS` (or the matching
-`--cpus-per-task` allocation on Slurm). Compare throughput across the available
-machine, not just the duration of one chunk. Several smaller concurrent workers
-may produce more results per hour than one process using every core.
-
-All entries of a species share one chunk macro. Editing it changes future
-execution, while completed chunks retain their original event counts and
-settings. Completed entries are skipped when the runner resumes.
-
+All entries of a species share one chunk macro. Editing it affects future
+execution; completed chunks retain their original event counts and settings.
 
 ## Launch and resume
 
-Continue with [Run the simulation](run-simulation.md) and the instructions for
-your execution environment. First run a few selected entries, gather and inspect
-them, and decide whether to continue the remaining plan. Each method uses the
-plan prepared here, so those first chunks are retained if you continue.
-Completed chunks have `.COMPLETE` markers; rerunning skips these and repeats
-unfinished chunks. Never launch overlapping workers for the same entries.
-
-As soon as a chunk finishes, you can [gather and inspect its results](process-results.md)
-while the remaining chunks continue running. Gather the raw histograms before
-normalizing them. ROOT interface and step ntuples remain per chunk and are not
-merged by gathering.
-
-Preserve the inputs, plan, and software versions with the results. Unique seed
-pairs distinguish the chunks, but identical seeds alone do not reproduce a run
-across changed software, physics, or execution settings.
+Use the [execution guide](run-simulation.md) for your machine to launch selected
+entries or resume the plan.
 
 ## Extend a run
 
-To add more samples, append another batch of chunks:
+To add more samples:
 
 ```bash
 atris-scatter . --extend 3000
 ```
 
-This adds 3000 chunks per species at the existing per-chunk event count. Existing
-seeds, macros, outputs, and completion markers are retained; the new entries receive
-unique seed pairs. You can append them while runners are active. Each runner
-uses the plan it read at startup, so it finishes its existing assignment;
-the next invocation reads the extended plan and picks up the added chunks.
+This appends 3000 chunks per species at the existing per-chunk event count,
+with new seed pairs. Existing macros and results remain. You can extend the
+plan while runners are active: they finish the assignment read at startup,
+and their next invocation sees the added entries.
 
-Gather and inspect the additional completed chunks to reassess convergence.
-Extension reuses the existing chunk macros. If you have revised the setup,
-[account for earlier outputs](process-results.md#decide-whether-to-continue)
-before combining them with new chunks. See the
-[plan format and extension rules](../reference/chunks.md#creation-and-extension)
-for exact file behavior.
+Extension adds sampling to the existing setup. If you have revised the physical
+inputs, [account for earlier outputs](process-results.md#decide-whether-to-continue)
+before combining results. See [extension rules](../reference/chunks.md#creation-and-extension)
+for exact file behaviour.
 
 **Previous step:** [Prepare the simulation](prepare-simulation.md).
 

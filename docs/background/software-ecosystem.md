@@ -1,10 +1,9 @@
 # Software ecosystem
 
-An AtRIS calculation brings together a planetary model, particle transport,
-and analysis of the resulting radiation field. Several tools in the wider
-simulation community address different parts of that work. Geant4 supplies the
-transport used by AtRIS; pyg4ometry, ROOT, and HDF5 offer ways to work with
-geometry and scientific data around a simulation.
+AtRIS uses Geant4 to simulate particle transport and Python tools to prepare
+models and analyze results. Other useful tools include pyg4ometry for viewing
+geometry, ROOT for particle and histogram data, and HDF5 for storing analysis
+arrays and metadata.
 
 The Python analysis work is based on [NumPy](https://numpy.org/doc/stable/) for
 numerical arrays and [Matplotlib](https://matplotlib.org/stable/) for plotting,
@@ -49,10 +48,9 @@ For AtRIS, a geometry viewer can help inspect the arrangement of volumes in
 the generated `simulation.gdml` before running transport. pyg4ometry is an
 optional tool for this work.
 
-If you modify the GDML outside the PSF workflow, account for AtRIS's sensitive
-layer IDs and the PSF geometry used during post-processing. A geometry that can
-be displayed is not by itself a complete AtRIS model. See the
-[geometry input reference](../reference/inputs.md#gdml) for those conventions.
+When editing GDML directly, keep its layer IDs and dimensions consistent with
+the PSF used in post-processing. The
+[geometry input reference](../reference/inputs.md#gdml) explains these conventions.
 
 ## ROOT: analysis and ROOT files
 

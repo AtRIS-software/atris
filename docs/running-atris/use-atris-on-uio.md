@@ -1,24 +1,13 @@
 # Install and use AtRIS on UiO Geosciences servers
 
-This guide takes a new terminal user through a personal AtRIS installation on
-University of Oslo Geosciences computers. Ivan is the concrete example. You
-will log in, connect Ivan to GitHub, create a work area, build AtRIS against
-the department's shared Geant4 installation, install the Python tools, and run
-a small test.
+This guide installs AtRIS on Ivan using the University of Oslo Geosciences
+shared Geant4 installation. It explains the terminal commands as you go:
+log in, connect to GitHub, build AtRIS, and install the Python tools.
+For other computers, use [Installing AtRIS](installation.md).
 
-This page supplements, but does not replace,
-[Installing AtRIS](installation.md).
-The main installation guide explains AtRIS's requirements and the general
-build process. This page supplies the UiO-specific paths, modules, resource
-guidance, and extra explanation needed by somebody who is new to the terminal.
-It reuses the shared Geant4 installation instead of building Geant4 again.
-
-This guide stops when AtRIS is installed and ready to run. The
-[workflow tutorial](../tutorials/files-through-workflow.md) runs a few chunks of
-the Earth example to check the installation. For your own simulation, prepare
-a physical model, then use
-[chunk planning](plan-chunks.md) for a longer run and the appropriate
-[execution guide](run-simulation.md).
+Once installed, follow the [Earth tutorials](../tutorials/earth-nrlmsis-full.md)
+to prepare a simulation and inspect its first results, or
+[prepare your own model](prepare-simulation.md).
 
 ## What to do when
 
@@ -30,7 +19,7 @@ they are needed:
 | Before starting | Read [Background](#background-read-as-needed) if the terminal, paths, or Git are unfamiliar. |
 | First installation only | Complete [One-time installation](#one-time-installation): connect GitHub, create the workspace, clone AtRIS, link Geant4, build, and install the Python tools. |
 | After every login used for AtRIS work | Complete [Prepare the shell](#after-every-login-prepare-the-shell): load the runtime modules and source `setup_atris.sh`. |
-| After installation | Stop following this installation guide and continue with [an AtRIS example](#after-installation-prepare-and-run-a-simulation). |
+| After installation | Continue with [a simulation](#after-installation-prepare-and-run-a-simulation). |
 
 ## Background (read as needed)
 
@@ -39,24 +28,10 @@ of installation commands to repeat.
 
 ### Expected background
 
-This guide assumes basic familiarity with files and directories and an ability
-to follow commands in a terminal. If `pwd`, `ls`, `cd`, absolute paths, and
-relative paths are entirely new, work through a terminal introduction first or
-follow this guide with somebody who can explain the results as they appear.
-Previous experience with Git, CMake, Python, or UiO environment modules is not
-required: the commands needed for this installation are introduced below.
-
-Using prepared AtRIS examples does not require writing Python or C++. However,
-working independently benefits greatly from familiarity with:
-
-- the Unix shell, including paths, files, processes, redirection, and
-  environment variables;
-- Git, especially `clone`, `status`, `pull`, commits, and branches;
-- Python, including packages, tracebacks, arrays, and plotting;
-- CMake and the distinction between configuring, compiling, and running a C++
-  program; and
-- threads, processes, memory use, and job schedulers when moving from an
-  interactive server to an HPC system.
+The commands below explain the shell, Git, CMake, Python installation, and
+UiO environment modules as they are needed. You can run the prepared examples
+without writing Python or C++. For more practice with the terminal or Python,
+use the resources below.
 
 UiO's archived [introductory informatics day-one
 exercises](https://www.uio.no/studier/emner/matnat/ifi/INF0010/h23/dag-1-.pdf)
@@ -354,8 +329,7 @@ atris-run --version
 ```
 
 The command should report both the AtRIS executable version and the Python-tool
-version. The installation is now in the ready-to-run state used by the ordinary
-AtRIS documentation.
+version. You are ready to prepare a simulation.
 
 ## After every login: prepare the shell
 
@@ -433,9 +407,8 @@ Apply the UiO resource limits above when choosing the thread count.
 
 ## Use Mimi or Victor
 
-The same concepts apply on Mimi and Victor, but do not blindly reuse Ivan's
-paths and module versions. Confirm that the selected machine can see the
-shared Geant4 directory and offers a compatible compiler environment. Then:
+On Mimi or Victor, first check that the shared Geant4 directory is accessible
+and which compiler modules match it. Then:
 
 1. Log in to that machine and use its designated scratch or project storage.
 2. Clone a personal AtRIS checkout there.

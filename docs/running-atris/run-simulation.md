@@ -4,53 +4,40 @@
 
 **Next step:** [Process and inspect results](process-results.md).
 
-Start with a [prepared simulation](prepare-simulation.md). Its planetary model,
-particles, sampling, optional phantoms, physics list, and output choices are
-shared by every execution method below. Moving to a different machine does not
-require choosing the physics again.
+Start in the prepared run directory with `chunks.txt` and the species
+`.chunk.mac` files. Use the physics list and output mode selected during
+[preparation](prepare-simulation.md).
 
 | Execution environment | Job setup |
 | --- | --- |
 | [Local computer](run-locally.md) | Choose threads and run in a terminal |
-| [Server or workstation](run-on-server.md) | Connect over SSH, share resources, run in the background, monitor and resume |
-| [HPC cluster](../hpc.md) | Request nodes and cores through a scheduler, launch workers, handle wall-time limits |
-
-Start with an existing `chunks.txt` and species `.chunk.mac` files. If they
-are not ready, [create the chunk plan](plan-chunks.md) before launching workers.
-Keep that plan when resuming after an interruption.
+| [Server or workstation](run-on-server.md) | Run over SSH, set priority, and survive logout |
+| [HPC cluster](../hpc.md) | Request resources, launch workers, and handle wall-time limits |
 
 ## Run a few chunks first
 
-Follow the guide for your environment to run selected entries with `--entry`.
-Start with a small subset, including each particle species you intend to use.
-Each command stops after its selected chunk, leaving the remaining plan pending.
-The [workflow tutorial](../tutorials/files-through-workflow.md#6-plan-and-run-chunks)
-shows one proton chunk and one alpha chunk of the Earth example.
-
-Next, [gather, process, and inspect](process-results.md) the completed chunks.
-Check the input plots and initial responses, and measure the time and output
-size per chunk. Decide whether the setup is worth continuing before launching
-all remaining work. A few chunks check the setup and execution; they do not
-establish statistical convergence.
+Use your environment's launch command with `--entry N` to run one selected line
+of `chunks.txt`, numbered from one. Include each particle species in the initial
+sample. Then [process and inspect the results](process-results.md).
+The [Earth tutorial](../tutorials/run-earth-simulation.md#1-plan-and-run-chunks)
+provides a concrete example.
 
 ## Continue the run
 
-After [reviewing the first results](process-results.md#decide-whether-to-continue),
-use your environment's instructions to launch the remaining plan:
-[locally](run-locally.md#continue-and-monitor),
-[on a server](run-on-server.md#keep-a-chunked-run-running-after-logout), or
-[through Slurm](../hpc.md#submit-a-prepared-simulation-with-slurm).
-Keep the same inputs, plan, physics list, and output mode. Completed chunks
-are skipped and remain available for the next gather.
+After inspection, use the full-plan launch command from your environment's
+guide. The runner skips chunks with `.COMPLETE` markers and starts unfinished
+chunks from the beginning. This also resumes an interrupted run; wait for the
+previous runner and its AtRIS child to exit before restarting it. Concurrent
+workers must have non-overlapping assignments.
 
-If the first results suggest changes, revise the setup before continuing.
-[Review which existing outputs still apply](process-results.md#decide-whether-to-continue)
-when reusing the run directory.
+To check whether the entire plan has finished:
 
-Continue gathering and inspecting while more chunks run. Once you intend the
-whole plan to be finished, use `atris-run . --check-complete` to verify it.
-That check is not required for intermediate inspection, and finishing the
-plan does not by itself establish sufficient statistics.
+```bash
+atris-run . --check-complete
+```
+
+This checks completion markers, not statistical convergence. You can
+[inspect completed chunks](process-results.md) while the remaining work runs.
 
 ```{toctree}
 :hidden:
@@ -59,7 +46,6 @@ run-locally
 run-on-server
 ../hpc
 ```
-
 
 **Previous step:** [Plan chunks and restarts](plan-chunks.md).
 

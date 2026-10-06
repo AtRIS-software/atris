@@ -1,8 +1,11 @@
 # Ionization, dose, and detector response
 
-AtRIS produces several kinds of response. They describe different physical
-quantities and require different normalization. A filename alone does not mean
-that a result is already a physical dose or a rate per second.
+AtRIS records energy deposition and phantom responses. Post-processed tables
+are normalized per simulated primary and resolved by primary energy. To obtain
+physical rates, [apply an incident spectrum and intensity](normalization-and-uncertainty.md#apply-a-physical-source-separately).
+The sections below explain what each quantity measures; the
+[output reference](../reference/outputs.md#processed-response-tables) gives exact
+units and normalization formulas.
 
 ## Ionizing energy deposition
 
@@ -18,9 +21,8 @@ $$
 N_{\mathrm{pairs}}=\frac{E_{\mathrm{ion}}}{W}.
 $$
 
-Use consistent energy units. The choice of $W$ depends on the material and
-physical assumptions; AtRIS does not supply a universal value. A production
-rate additionally requires an incident particle rate.
+Use consistent energy units. The choice of $W$ depends on the material;
+AtRIS does not supply a universal value.
 
 ## Total atmospheric energy deposition
 
@@ -30,10 +32,8 @@ total deposited energy per unit volume per simulated primary, resolved by
 primary-energy bin, in MeV cm$^{-3}$ primary$^{-1}$.
 
 The difference `.edep - .ioni` is the correspondingly normalized non-ionizing
-energy deposition. `.edep` is useful input to an atmospheric-heating estimate,
-but it is not itself a heating rate: a physical incident spectrum and rate must
-be applied, and converting deposited energy to heat requires an explicit
-thermalization-efficiency assumption.
+energy deposition. Converting `.edep` into atmospheric heating also requires
+an assumption about thermalization efficiency.
 
 ## Phantom responses
 
@@ -64,9 +64,6 @@ per primary. Check the table's normalization before converting units.
 
 The phantom lookup-table approach is described by
 [Banjac et al. (2019)](https://doi.org/10.1029/2019JA026622).
-It lets AtRIS evaluate a phantom's response to the transported particle field
-without placing that phantom at every atmospheric level. The selected table
-therefore determines which material and detector response the result describes.
 
 ## Radiation-weighted response
 
@@ -81,15 +78,9 @@ matches a radiation-protection standard solely from the output's name.
 
 ## Counts and count rates
 
-The counting table supplies the detector response for a crossing particle.
-The processed `.ratesN` output is a response per primary, not counts per second.
-A rate requires combining it with a physical incident source rate, using a
-consistent source area and angular distribution. The same simulated particle
-field can give different detector responses for different phantom tables.
-
-See [processed output units](../reference/outputs.md#processed-response-tables)
-and [source normalization](normalization-and-uncertainty.md) before applying
-results to a physical irradiation scenario.
+The counting table supplies the detector response for a crossing particle,
+recorded in `.ratesN` after post-processing. Different detector tables can
+produce different counting responses to the same transported particle field.
 
 ```{figure} ../images/earth-example/protons.icru_zero_0.000MeV_detAB.png
 :name: earth-phantom-responses

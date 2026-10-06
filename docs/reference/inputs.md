@@ -137,10 +137,8 @@ where $M_i$ is the mass appropriate to each atom or molecule. For molecular
 species, combine their elemental mass contributions into the PSF's element
 columns. The converter does not normalize per-layer fractions for you.
 
-A compact {download}`two-layer format sample <../running-atris/examples/two-layer-atmosphere.psf>`
-is available for inspecting the text layout. It is a format example, not a
-physical atmosphere model. To construct a model step by step, use the
-[PSF notebook](../tutorials/exoplanet-psf.ipynb).
+The [PSF notebook](../tutorials/exoplanet-psf.ipynb) constructs a model step by
+step and shows the material header and first few rows.
 
 ## NRLMSIS source tables
 
