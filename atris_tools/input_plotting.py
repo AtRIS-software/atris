@@ -10,12 +10,11 @@ import numpy as np
 
 from .phantoms import read_phantoms
 from .psf import read_psf_layers
+from .phantom_tables import PhantomTable, ENERGY_EDGES_MEV, ENERGY_CENTRES_MEV
 
 
-PHANTOM_ENERGY_EDGES_MEV = 10.0 ** np.linspace(-6.0, 7.0, 651)
-PHANTOM_ENERGIES_MEV = (
-    PHANTOM_ENERGY_EDGES_MEV[:-1] + PHANTOM_ENERGY_EDGES_MEV[1:]
-) / 2.0
+PHANTOM_ENERGY_EDGES_MEV = ENERGY_EDGES_MEV
+PHANTOM_ENERGIES_MEV = ENERGY_CENTRES_MEV
 MASS_FRACTION_PLOT_MINIMUM = 1.0e-12
 LENGTH_TO_KM = {
     "mm": 1.0e-6,
@@ -589,16 +588,9 @@ def plot_species_inputs(simname):
     return filename
 
 
-def read_phantom_table(filename):
-    with Path(filename).open() as phantom_file:
-        particle_codes = np.fromstring(phantom_file.readline(), sep=" ", dtype=int)
-    response = np.atleast_2d(np.loadtxt(filename, skiprows=1))
-    if response.shape != (particle_codes.size, 650):
-        raise ValueError(
-            "%s has shape %s; expected (%i, 650)"
-            % (filename, response.shape, particle_codes.size)
-        )
-    return particle_codes, response
+def read_phantom_table(filename, *, counting=False):
+    table = PhantomTable.read(filename, counting=counting)
+    return table.pdg_codes, table.coefficients
 
 
 def plot_phantom_inputs(phantom_id, phantom_name):
@@ -606,7 +598,7 @@ def plot_phantom_inputs(phantom_id, phantom_name):
         "radiation_phantom%i.txt" % phantom_id
     )
     counting_codes, counting = read_phantom_table(
-        "counting_phantom%i.txt" % phantom_id
+        "counting_phantom%i.txt" % phantom_id, counting=True
     )
     if not np.array_equal(radiation_codes, counting_codes):
         raise ValueError(
@@ -653,7 +645,7 @@ def plot_phantom_inputs(phantom_id, phantom_name):
             )
             radiation_axis.plot(
                 PHANTOM_ENERGIES_MEV,
-                np.where(radiation[index] > 0, radiation[index], np.nan),
+                np.where(radiation[index] > 0, radiation[index] * PHANTOM_ENERGIES_MEV, np.nan),
                 color=color,
                 linewidth=1.0,
                 label=label,

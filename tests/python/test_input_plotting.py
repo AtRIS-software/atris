@@ -41,9 +41,10 @@ def prepare_inputs(run_directory, gdml_text):
     )
     for prefix in ("radiation", "counting"):
         filename = run_directory / (prefix + "_phantom0.txt")
-        filename.write_text("22 2212\n")
+        quantity = "energy_fraction" if prefix == "radiation" else "counting_efficiency"
+        filename.write_text(f"22 2212\n# atris_quantity: {quantity}\n")
         with filename.open("a") as phantom_file:
-            np.savetxt(phantom_file, response)
+            np.savetxt(phantom_file, response if prefix == "radiation" else response / 2)
 
 
 def test_read_macro_and_atmosphere(tmp_path, gdml_text):

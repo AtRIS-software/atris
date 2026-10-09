@@ -25,6 +25,8 @@ is performed. Per-chunk ROOT files are not automatically discovered or combined.
 Input images show the primary-energy configuration, atmospheric profiles,
 composition, and source settings. Phantom input images show the radiation and
 counting response tables. These plots can be made before running a simulation.
+The lower panels show mean deposited ionization energy in MeV. The diagonal
+reference line marks full absorption of the incident kinetic energy.
 
 After post-processing, each species result image contains primary-energy,
 source-direction, source-position, and ionization panels. Separate phantom

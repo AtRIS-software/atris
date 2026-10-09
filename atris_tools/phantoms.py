@@ -14,6 +14,8 @@ from .cli import (
 
 logger = logging.getLogger(__name__)
 RESPONSE_ENERGY_BINS = 650
+RESPONSE_ENERGY_MIN_MEV = 1e-6
+RESPONSE_ENERGY_MAX_MEV = 1e7
 
 
 def read_phantoms(run_directory):
