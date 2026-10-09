@@ -61,9 +61,14 @@ class SensitiveDetector : public G4VSensitiveDetector, public G4UImessenger
 
     void Initialize(G4HCofThisEvent* hitCollection) override;
     G4bool ProcessHits(G4Step* step, G4TouchableHistory* history) override;
+    // Phantom mode writes one row per event, including zero-deposit events.
+    void EndOfEvent(G4HCofThisEvent* hitCollection) override;
 
   private:
     SDHitsCollection* fHitsCollection;
+    // Worker-local totals include the primary and all of its secondary tracks.
+    G4double fDepositedEnergy = 0.;
+    G4double fIonizingEnergy = 0.;
 
 };
 

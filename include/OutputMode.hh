@@ -10,6 +10,14 @@ namespace atris {
 constexpr G4int kResponseOutputMode = -1;
 constexpr G4int kInterfaceOutputMode = 0;
 constexpr G4int kStepOutputMode = 1;
+// Internal calibration mode: event totals and statistics, not transport steps.
+constexpr G4int kPhantomOutputMode = 3;
+
+constexpr G4bool WritesMetadataNtuple(const G4int outputMode)
+{
+	return outputMode == kInterfaceOutputMode || outputMode == kStepOutputMode
+		|| outputMode == kPhantomOutputMode;
+}
 
 constexpr G4bool WritesInterfaceNtuple(const G4int outputMode)
 {

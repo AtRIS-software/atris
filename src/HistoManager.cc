@@ -227,7 +227,7 @@ void HistoManager::Book() const
 
 	}
 
-	if (!WritesInterfaceNtuple(mode)) return;
+	if (!WritesMetadataNtuple(mode)) return;
 
 	id = analysis->CreateNtuple("metadata", "AtRIS output metadata");
 	analysis->CreateNtupleIColumn(id, "schema");
@@ -240,6 +240,26 @@ void HistoManager::Book() const
 	analysis->CreateNtupleIColumn(id, "random_seed_1");
 	analysis->CreateNtupleIColumn(id, "random_seed_2");
 	analysis->FinishNtuple(id);
+	if (mode == kPhantomOutputMode) {
+		id = analysis->CreateH2("h2.fraction", "Per-primary ionizing energy fraction",
+			energyBins, detectorBins, "MeV");
+		AnnotateHistogram(analysis->GetH2(id), "h2.fraction",
+			"per-primary ionizing energy fraction",
+			"ionizing deposit / incident kinetic energy; one fill per primary, including zero; sum(w^2) retains the second moment");
+		id = analysis->CreateH2("h2.detected", "Primaries with positive ionizing deposit",
+			energyBins, detectorBins, "MeV");
+		AnnotateHistogram(analysis->GetH2(id), "h2.detected",
+			"primaries with positive ionizing deposit",
+			"1 if event ionizing deposit > 0 MeV, otherwise 0; divide by primary count for counting efficiency");
+		id = analysis->CreateNtuple("phantom_events", "Per-primary deposits, including zero-deposit events");
+		analysis->CreateNtupleIColumn(id, "event_id");
+		analysis->CreateNtupleIColumn(id, "detector_id");
+		analysis->CreateNtupleDColumn(id, "incident_energy_MeV");
+		analysis->CreateNtupleDColumn(id, "deposited_energy_MeV");
+		analysis->CreateNtupleDColumn(id, "ionizing_energy_MeV");
+		analysis->FinishNtuple(id);
+		return;
+	}
 	id = analysis->CreateNtuple(
 		"interfaces",
 		"Particle crossings at layer interfaces"
@@ -280,7 +300,7 @@ void HistoManager::Book() const
 
 void HistoManager::FillMetadata() const
 {
-	if (!WritesInterfaceNtuple(mode)) return;
+	if (!WritesMetadataNtuple(mode)) return;
 	// One worker records the shared run metadata while Geant4 merges all ntuples.
 	if (G4Threading::G4GetThreadId() != 0) return;
 	auto* const analysis = G4AnalysisManager::Instance();

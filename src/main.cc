@@ -114,7 +114,8 @@ int main(int argc,char** argv){
 		return 0;
 	}
 	const auto totalStart = std::chrono::steady_clock::now();
-	mode = std::stoi(argv[3]);
+	mode = std::string(argv[3]) == "phantom"
+		? atris::kPhantomOutputMode : std::stoi(argv[3]);
 	numberOfPhantoms = std::stoi(argv[4]);
 	// The simulation name selects the geometry, energy bins, and macro inputs;
 	// the phantom count selects the numbered radiation and counting responses.

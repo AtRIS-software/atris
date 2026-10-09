@@ -18,11 +18,12 @@ from .phantoms import read_phantoms
 
 logger = logging.getLogger(__name__)
 
-OUTPUT_MODES = ("response", "profile", "shower")
+OUTPUT_MODES = ("response", "profile", "shower", "phantom")
 OUTPUT_MODE_VALUES = {
     "response": "-1",
     "profile": "0",
     "shower": "1",
+    "phantom": "3",
 }
 
 
@@ -30,7 +31,7 @@ def normalize_output_mode(value):
     """Validate and return a named AtRIS output mode."""
     value = str(value)
     if value not in OUTPUT_MODES:
-        raise ValueError("output mode must be response, profile, or shower")
+        raise ValueError("Unknown output mode: " + value)
     return value
 
 
@@ -105,7 +106,7 @@ def run_chunks(
     run_directory = Path(run_directory).expanduser().resolve()
     mode_name = normalize_output_mode(mode)
     mode = OUTPUT_MODE_VALUES[mode_name]
-    output_suffix = ".root" if mode_name in ("profile", "shower") else ""
+    output_suffix = "" if mode_name == "response" else ".root"
     entries = read_chunk_plan(run_directory)
     selected_entries = select_entries(
         entries,
@@ -301,6 +302,8 @@ def main():
         "--mode",
         type=normalize_output_mode,
         choices=OUTPUT_MODES,
+        # Accept the internal calibration mode without advertising it.
+        metavar="{response,profile,shower}",
         default="response",
         help=(
             "AtRIS output mode: response writes the normal histograms; "

@@ -319,13 +319,13 @@ def test_incomplete_entry_numbers_uses_completion_markers(tmp_path):
     assert incomplete_entry_numbers(tmp_path) == [2]
 
 
-@pytest.mark.parametrize("value", ("response", "profile", "shower"))
+@pytest.mark.parametrize("value", ("response", "profile", "shower", "phantom"))
 def test_output_modes_use_named_values(value):
     assert normalize_output_mode(value) == value
 
 
 def test_output_mode_rejects_unknown_names():
-    with pytest.raises(ValueError, match="response, profile, or shower"):
+    with pytest.raises(ValueError, match="Unknown output mode"):
         normalize_output_mode("unknown")
 
 
@@ -335,6 +335,7 @@ def test_output_mode_rejects_unknown_names():
         ("response", "-1"),
         ("profile", "0"),
         ("shower", "1"),
+        ("phantom", "3"),
     ],
 )
 def test_run_chunks_translates_named_modes_for_atris(
@@ -349,7 +350,7 @@ def test_run_chunks_translates_named_modes_for_atris(
 
     assert run_chunks(tmp_path, mode=mode, entry=1) == 1
     assert calls[0][3] == value
-    expected_suffix = ".root" if mode in ("profile", "shower") else ""
+    expected_suffix = "" if mode == "response" else ".root"
     assert calls[0][2] == "chunks/protons_111111_222222" + expected_suffix
 
 
