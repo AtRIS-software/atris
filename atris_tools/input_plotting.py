@@ -11,6 +11,10 @@ import numpy as np
 from .phantoms import read_phantoms
 from .psf import read_psf_layers
 from .phantom_tables import PhantomTable, ENERGY_EDGES_MEV, ENERGY_CENTRES_MEV
+from .particles import (
+    ION_PDG_BASE, ELEMENT_ATOMIC_NUMBERS, ELEMENT_SYMBOLS,
+    PARTICLE_NAMES, PARTICLE_SYMBOLS, particle_name, particle_symbol,
+)
 
 
 PHANTOM_ENERGY_EDGES_MEV = ENERGY_EDGES_MEV
@@ -21,82 +25,6 @@ LENGTH_TO_KM = {
     "cm": 1.0e-5,
     "m": 1.0e-3,
     "km": 1.0,
-}
-PARTICLE_NAMES = {
-    22: "photon",
-    2212: "proton",
-    -2212: "antiproton",
-    2112: "neutron",
-    -2112: "antineutron",
-    11: "electron",
-    -11: "positron",
-    13: "muon-",
-    -13: "muon+",
-    211: "pion+",
-    -211: "pion-",
-    111: "pion0",
-    321: "kaon+",
-    -321: "kaon-",
-}
-PARTICLE_SYMBOLS = {
-    22: r"$\gamma$",
-    2212: r"$p$",
-    -2212: r"$\bar{p}$",
-    2112: r"$n$",
-    -2112: r"$\bar{n}$",
-    11: r"$e^{-}$",
-    -11: r"$e^{+}$",
-    12: r"$\nu_e$",
-    -12: r"$\bar{\nu}_e$",
-    13: r"$\mu^{-}$",
-    -13: r"$\mu^{+}$",
-    14: r"$\nu_\mu$",
-    -14: r"$\bar{\nu}_\mu$",
-    15: r"$\tau^{-}$",
-    -15: r"$\tau^{+}$",
-    16: r"$\nu_\tau$",
-    -16: r"$\bar{\nu}_\tau$",
-    211: r"$\pi^{+}$",
-    -211: r"$\pi^{-}$",
-    111: r"$\pi^{0}$",
-    321: r"$K^{+}$",
-    -321: r"$K^{-}$",
-}
-ELEMENT_SYMBOLS = (
-    "n",
-    "H",
-    "He",
-    "Li",
-    "Be",
-    "B",
-    "C",
-    "N",
-    "O",
-    "F",
-    "Ne",
-    "Na",
-    "Mg",
-    "Al",
-    "Si",
-    "P",
-    "S",
-    "Cl",
-    "Ar",
-    "K",
-    "Ca",
-    "Sc",
-    "Ti",
-    "V",
-    "Cr",
-    "Mn",
-    "Fe",
-    "Co",
-    "Ni",
-)
-ELEMENT_ATOMIC_NUMBERS = {
-    symbol: atomic_number
-    for atomic_number, symbol in enumerate(ELEMENT_SYMBOLS)
-    if atomic_number > 0
 }
 
 
@@ -121,42 +49,6 @@ def positive_log_edges(values, bins=80):
     return np.geomspace(lower, upper, bins + 1)
 
 
-def particle_name(pdg_code):
-    if pdg_code in PARTICLE_NAMES:
-        return PARTICLE_NAMES[pdg_code]
-    absolute_code = abs(pdg_code)
-    if absolute_code >= 1_000_000_000:
-        atomic_number = (absolute_code // 10_000) % 1_000
-        mass_number = (absolute_code // 10) % 1_000
-        element = (
-            ELEMENT_SYMBOLS[atomic_number]
-            if atomic_number < len(ELEMENT_SYMBOLS)
-            else "Z%i" % atomic_number
-        )
-        prefix = "anti-" if pdg_code < 0 else ""
-        return "%s%s-%i" % (prefix, element, mass_number)
-    return str(pdg_code)
-
-
-def particle_symbol(pdg_code):
-    if pdg_code in PARTICLE_SYMBOLS:
-        return PARTICLE_SYMBOLS[pdg_code]
-    absolute_code = abs(pdg_code)
-    if absolute_code >= 1_000_000_000:
-        atomic_number = (absolute_code // 10_000) % 1_000
-        mass_number = (absolute_code // 10) % 1_000
-        element = (
-            ELEMENT_SYMBOLS[atomic_number]
-            if atomic_number < len(ELEMENT_SYMBOLS)
-            else "Z%i" % atomic_number
-        )
-        if pdg_code < 0:
-            return r"$^{%i}\overline{\mathrm{%s}}$" % (
-                mass_number,
-                element,
-            )
-        return r"$^{%i}\mathrm{%s}$" % (mass_number, element)
-    return str(pdg_code)
 
 
 def element_label(reference):
@@ -173,7 +65,7 @@ def element_sort_key(reference):
 def _particle_groups(particle_codes):
     groups = ([], [])
     for index, code in enumerate(particle_codes):
-        group = 1 if abs(code) >= 1_000_000_000 else 0
+        group = 1 if abs(code) >= ION_PDG_BASE else 0
         groups[group].append(index)
     return groups
 
@@ -627,8 +519,7 @@ def plot_phantom_inputs(phantom_id, phantom_name):
             label="Perfect counting",
         )
         radiation_axis.plot(
-            PHANTOM_ENERGIES_MEV,
-            PHANTOM_ENERGIES_MEV,
+            PHANTOM_ENERGIES_MEV, PHANTOM_ENERGIES_MEV,
             color="0.25",
             linestyle=":",
             linewidth=1.0,
