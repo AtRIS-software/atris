@@ -277,7 +277,11 @@ G4bool LoadPhantoms(G4int count)
 		}
 
 		G4String line;
-		std::getline(radiationFile, line);
+		// Skip comments and blank lines before the PDG header.
+		while (std::getline(radiationFile, line)) {
+			line = line.substr(0, line.find('#'));
+			if (line.find_first_not_of(" \t\r") != std::string::npos) break;
+		}
 		std::stringstream header(line);
 		std::vector<G4int> pdgs;
 		G4int pdg;
@@ -352,7 +356,10 @@ G4bool LoadPhantoms(G4int count)
 			       << countingPhantomName << G4endl;
 			return false;
 		}
-		std::getline(countingFile, line);
+		while (std::getline(countingFile, line)) {
+			line = line.substr(0, line.find('#'));
+			if (line.find_first_not_of(" \t\r") != std::string::npos) break;
+		}
 		std::stringstream countingHeader(line);
 		pdgs.clear();
 		while (countingHeader >> pdg) pdgs.push_back(pdg);
