@@ -1,4 +1,4 @@
-"""Prepare a water-sphere calibration and read per-primary energy deposits.
+"""Prepare a water-sphere calibration and merge its per-bin statistics.
 
 The calibration irradiates the sphere's projected disk with a parallel beam.
 Rotational symmetry makes this equivalent to isotropic irradiation of an
@@ -395,12 +395,16 @@ def calibrate_water_phantom(runs_by_pdg, *, threshold_MeV=0.0):
             else "not recorded"
         )
         completed = []
+        statistics[pdg] = PhantomStatistics.empty()
         if (directory / "chunks.txt").exists():
             for entry in read_chunk_plan(directory):
                 name = chunk_name(entry)
                 if not (directory / "chunks" / (name + ".COMPLETE")).is_file():
                     continue
                 completed.append(f"{entry[1]} {entry[2]}")
+                statistics[pdg] += read_phantom_statistics(
+                    directory / "chunks" / (name + ".root"), threshold_MeV
+                )
                 records = read_ntuple(
                     directory / "chunks" / (name + ".root"),
                     "metadata",
@@ -418,9 +422,8 @@ def calibrate_water_phantom(runs_by_pdg, *, threshold_MeV=0.0):
         metadata[f"pdg_{pdg}_completed_chunk_seed_pairs"] = (
             "; ".join(completed) or "not recorded"
         )
-        statistics[pdg] = PhantomStatistics.from_events(
-            read_water_phantom_events(directory), threshold_MeV
-        )
+        if not completed:
+            raise ValueError(f"No completed calibration chunks in {directory}")
     metadata.update(
         production_cut_mm=geometry[2] if geometry[2] is not None else "not recorded",
         electron_muon_hadron_tracking_floor_eV=(
@@ -558,7 +561,8 @@ def prepare_water_phantom(
         guard_outer=2.3 * radius_cm,
     )
     (directory / "calibration.gdml").write_text(geometry)
-    np.savetxt(directory / "calibration.bins", edges)
+    # The source range may cover only part of the shared response grid.
+    np.savetxt(directory / "calibration.bins", RESPONSE_ENERGY_EDGES_MEV)
     macro = f"""{tracking_commands}/run/setCut {production_cut_mm} mm
 /run/initialize
 {source_commands}/gps/pos/type Plane
@@ -592,6 +596,45 @@ def _write_chunk_plan(directory, chunks, seed, entries=()):
         output.write(plan)
 
 
+def read_phantom_statistics(path, threshold_MeV=0.0):
+    """Read compact native statistics, or reduce retained older event records.
+
+    Native counting uses positive ionizing deposition (threshold zero).
+    Changing that threshold requires older files with individual event records.
+    ROOT's per-bin sum(w^2) is a raw second moment, not a sample variance.
+    """
+    with uproot.open(path) as root:
+        if "phantom_events" in root or "steps" in root:
+            return PhantomStatistics.from_events(
+                read_phantom_events(path), threshold_MeV
+            )
+        if threshold_MeV != 0:
+            raise ValueError("Compact phantom statistics use a zero counting threshold")
+        primary = root["h1.1"]
+        fraction = root["h2.fraction"]
+        edges = primary.axis().edges()
+        if edges.shape != RESPONSE_ENERGY_EDGES_MEV.shape or not np.allclose(
+            edges, RESPONSE_ENERGY_EDGES_MEV, rtol=1e-12, atol=0
+        ):
+            raise ValueError(
+                "Compact phantom histograms must use the AtRIS response grid"
+            )
+        if len(fraction.member("fSumw2")) == 0:
+            raise ValueError("Phantom histogram is missing per-bin squared sums")
+        water_bin = (
+            np.searchsorted(fraction.axes[1].edges(), WATER_DETECTOR_ID, side="right")
+            - 1
+        )
+        counts = primary.values().astype(np.int64)
+        totals = fraction.values()[:, water_bin]
+        squares = fraction.variances()[:, water_bin]
+        means = np.divide(totals, counts, out=np.zeros_like(totals), where=counts > 0)
+        # Raw second-moment subtraction can round slightly below zero.
+        deviations = np.maximum(0, squares - totals * means)
+        detected = root["h2.detected"].values()[:, water_bin].astype(np.int64)
+    return PhantomStatistics(counts, means, deviations, detected)
+
+
 def read_phantom_events(path):
     """Read one native phantom chunk, or sum its older shower step records."""
     with uproot.open(path) as root:
@@ -606,6 +649,10 @@ def read_phantom_events(path):
             )
             return PhantomEvents(
                 *(arrays[name][water] for name in PhantomEvents.__dataclass_fields__)
+            )
+        if "steps" not in root:
+            raise ValueError(
+                "This chunk stores per-bin statistics; use read_phantom_statistics"
             )
         event_count = int(root["h1.1"].member("fEntries"))
     energy = np.zeros(event_count)

@@ -7,9 +7,11 @@ import pytest
 
 from atris_tools.phantom_calibration import (
     RESPONSE_ENERGY_EDGES_MEV,
+    PhantomStatistics,
     calibrate_water_phantom,
+    compact_water_phantom_chunk,
     prepare_water_phantom,
-    read_water_phantom_events,
+    read_phantom_statistics,
 )
 from atris_tools.gather import chunk_name, read_chunk_plan
 from atris_tools.run_chunks import run_chunks
@@ -32,8 +34,10 @@ def test_native_chunks_feed_calibration_and_resume(
         events_per_chunk=256,
         chunks=2,
     )
-    assert run_chunks(tmp_path, mode="phantom", entry=1) == 1
+    # Mix a retained old event-record chunk with new compact phantom output.
+    assert run_chunks(tmp_path, mode="shower", entry=1) == 1
     first = tmp_path / "chunks" / (chunk_name(read_chunk_plan(tmp_path)[0]) + ".root")
+    compact_water_phantom_chunk(first)
     checksum = hashlib.sha256(first.read_bytes()).digest()
     partial = calibrate_water_phantom({2212: tmp_path})
     assert partial.sample_counts.sum() == 256
@@ -41,19 +45,26 @@ def test_native_chunks_feed_calibration_and_resume(
     assert run_chunks(tmp_path, mode="phantom") == 0
     assert hashlib.sha256(first.read_bytes()).digest() == checksum
     response = calibrate_water_phantom({2212: tmp_path})
-    events = read_water_phantom_events(tmp_path)
-    assert len(events.incident_energy_MeV) == 512
-    count = np.histogram(events.incident_energy_MeV, RESPONSE_ENERGY_EDGES_MEV)[0]
-    np.testing.assert_array_equal(response.sample_counts[0], count)
-    fraction = events.ionizing_energy_MeV / events.incident_energy_MeV
-    bins = np.searchsorted(RESPONSE_ENERGY_EDGES_MEV, events.incident_energy_MeV) - 1
-    for index in np.flatnonzero(count > 1):
-        samples = fraction[bins == index]
-        np.testing.assert_allclose(response.energy_fraction[0, index], samples.mean())
-        np.testing.assert_allclose(
-            response.fraction_variance[0, index], samples.var(ddof=1), atol=1e-15
+    statistics = PhantomStatistics.empty()
+    for entry in read_chunk_plan(tmp_path):
+        statistics += read_phantom_statistics(
+            tmp_path / "chunks" / (chunk_name(entry) + ".root")
         )
-        assert response.counting_efficiency[0, index] == np.count_nonzero(
-            samples > 0
-        ) / len(samples)
+    count = statistics.sample_counts
+    assert count.sum() == 512
+    np.testing.assert_array_equal(response.sample_counts[0], count)
+    sampled = count > 0
+    np.testing.assert_allclose(
+        response.energy_fraction[0, sampled], statistics.mean_fraction[sampled]
+    )
+    np.testing.assert_allclose(
+        response.counting_efficiency[0, sampled],
+        statistics.detected_counts[sampled] / count[sampled],
+    )
+    enough = count > 1
+    np.testing.assert_allclose(
+        response.fraction_variance[0, enough],
+        statistics.squared_deviations[enough] / (count[enough] - 1),
+        atol=1e-15,
+    )
     assert np.all(np.isnan(response.energy_fraction[0, count == 0]))

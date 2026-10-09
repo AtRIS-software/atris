@@ -13,6 +13,7 @@ from atris_tools.phantom_calibration import (
     calibrate_water_phantom,
     compact_water_phantom_chunk,
     prepare_water_phantom,
+    read_phantom_statistics,
     read_water_phantom_events,
 )
 from atris_tools.phantoms import read_phantoms, stage_phantoms
@@ -30,6 +31,9 @@ def test_geometry_keeps_source_and_water_inside_termination_shells(tmp_path):
     assert volumes["water_volume"].find("auxiliary").attrib["auxvalue"] == "1"
     assert len(gdml.findall(".//auxiliary")) == 3
     assert len((tmp_path / "chunks.txt").read_text().splitlines()) == 2
+    np.testing.assert_array_equal(
+        np.loadtxt(tmp_path / "calibration.bins"), RESPONSE_ENERGY_EDGES_MEV
+    )
 
 
 def test_repreparing_same_setup_preserves_results_but_changed_setup_is_rejected(
@@ -114,6 +118,18 @@ def test_native_phantom_mode_selects_water_and_keeps_zero_events(tmp_path):
     np.testing.assert_array_equal(events.incident_energy_MeV, [10, 20])
     np.testing.assert_array_equal(events.deposited_energy_MeV, [5, 0])
     np.testing.assert_array_equal(events.ionizing_energy_MeV, [4, 0])
+    statistics = read_phantom_statistics(tmp_path / "chunks" / (name + ".root"))
+    expected = PhantomStatistics.from_events(events)
+    for field in PhantomStatistics.__dataclass_fields__:
+        np.testing.assert_array_equal(
+            getattr(statistics, field), getattr(expected, field)
+        )
+    np.testing.assert_array_equal(
+        read_phantom_statistics(
+            tmp_path / "chunks" / (name + ".root"), threshold_MeV=4
+        ).detected_counts,
+        0,
+    )
 
 
 @pytest.mark.parametrize("edges", [[0, 1], [1, 1], [1, np.nan], [1, np.inf]])
@@ -174,9 +190,23 @@ def calibration(tmp_path, monkeypatch):
     incident = np.repeat(centres, 2)
     deposited = incident * np.tile([0.0, 1.0], len(centres))
     events = PhantomEvents(incident, deposited, deposited)
-    monkeypatch.setattr(module, "read_water_phantom_events", lambda _: events)
+    monkeypatch.setattr(
+        module,
+        "read_phantom_statistics",
+        lambda *args: PhantomStatistics.from_events(events),
+    )
+    monkeypatch.setattr(
+        module,
+        "read_ntuple",
+        lambda *args: np.empty(
+            0, dtype=[("atris_version", "U1"), ("physics_list", "U1")]
+        ),
+    )
     config = {"radius_cm": 15.0, "density_g_cm3": 0.997, "production_cut_mm": 0.1}
     (tmp_path / "water-phantom.json").write_text(json.dumps(config))
+    (tmp_path / "chunks.txt").write_text("calibration 111111 222222\n")
+    (tmp_path / "chunks").mkdir()
+    (tmp_path / "chunks/calibration_111111_222222.COMPLETE").touch()
     return calibrate_water_phantom({22: tmp_path, 2212: tmp_path})
 
 

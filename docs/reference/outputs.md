@@ -3,12 +3,13 @@
 `<name>` below is the suffix-free simulation prefix; `N` is a zero-based
 phantom ID. The simulation argument's extension selects the Geant4 output
 backend independently of the output mode. A missing extension defaults to CSV.
+The internal phantom-calibration mode (`3`) instead defaults to ROOT.
 
 ## Raw histogram files
 
 | CSV suffix / ROOT object | Axes | Accumulated weight |
 | --- | --- | --- |
-| `_h1_h1.1.csv` / `h1.1` | Primary kinetic energy, MeV | Primary kinetic energy, MeV. Use `entries`, not `Sw`, for primary counts. |
+| `_h1_h1.1.csv` / `h1.1` | Primary kinetic energy, MeV | One per primary. Use `entries` in CSV or bin contents in ROOT for primary counts. |
 | `_h2_h2.dir.csv` / `h2.dir` | Global azimuth, rad; cos(polar angle) | One per primary direction. |
 | `_h2_h2.pos.csv` / `h2.pos` | Global azimuth, rad; cos(polar angle) | One per primary source position. |
 | `_h2_h2.ion.csv` / `h2.ion` | Primary energy, MeV; detector ID | Total deposit minus non-ionizing deposit, MeV, for steps in non-terminating sensitive layers. |
@@ -26,6 +27,33 @@ areas.
 
 Source-position and direction histograms have 120 azimuth bins from 0 to $2\pi$
 and 60 $\cos\theta$ bins from -1 to 1.
+
+### Phantom calibration statistics
+
+Internal mode `3` adds two energy-versus-detector histograms. For each primary,
+the sensitive detector first totals ionizing deposition from the primary and
+its secondaries; only then does it fill these histograms, including zero
+deposits. Termination shells are not calibration volumes.
+
+| ROOT object | Per-bin quantity |
+| --- | --- |
+| `h1.1` | Primary count $N$ (unit-weight fills). |
+| `h2.fraction` | Sum $S$ of ionizing deposited-energy fractions $x=E_{\mathrm{ion}}/E_{\mathrm{incident}}$, with squared sum $Q=\sum x^2$ in ROOT's `fSumw2`. |
+| `h2.detected` | Count $K$ of primaries with strictly positive ionizing deposit. |
+
+The response is $S/N$, counting efficiency is $K/N$, and the sampled variance
+of individual energy fractions is $(Q-S^2/N)/(N-1)$ for $N>1$.
+ROOT's squared sums are not themselves sample variances. Raw-moment subtraction
+has floating-point cancellation when the variance is very small.
+
+`read_phantom_statistics` in `atris_tools.phantom_calibration` reads these
+statistics and also accepts older event-record chunks. `calibrate_water_phantom`
+combines completed chunks and exports tables with sampling uncertainties.
+New phantom-mode files contain histograms and run metadata, not per-primary,
+interface-crossing, or transport-step records. The grid fixes their array sizes,
+regardless of how many primaries a chunk simulates. Changing the zero counting
+threshold afterward requires individual-event records and is not supported by
+the compact files.
 
 ### CSV structure
 

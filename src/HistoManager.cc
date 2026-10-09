@@ -251,13 +251,6 @@ void HistoManager::Book() const
 		AnnotateHistogram(analysis->GetH2(id), "h2.detected",
 			"primaries with positive ionizing deposit",
 			"1 if event ionizing deposit > 0 MeV, otherwise 0; divide by primary count for counting efficiency");
-		id = analysis->CreateNtuple("phantom_events", "Per-primary deposits, including zero-deposit events");
-		analysis->CreateNtupleIColumn(id, "event_id");
-		analysis->CreateNtupleIColumn(id, "detector_id");
-		analysis->CreateNtupleDColumn(id, "incident_energy_MeV");
-		analysis->CreateNtupleDColumn(id, "deposited_energy_MeV");
-		analysis->CreateNtupleDColumn(id, "ionizing_energy_MeV");
-		analysis->FinishNtuple(id);
 		return;
 	}
 	id = analysis->CreateNtuple(

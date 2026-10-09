@@ -4,8 +4,11 @@
 #include "G4AnalysisManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4PhysicalConstants.hh"
+#include "OutputMode.hh"
 #include <chrono>
 #include <ctime>
+
+extern G4int mode;
 
 namespace atris {
 
@@ -36,7 +39,8 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	fParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle
 
 	const G4int current = anEvent->GetEventID();
-	if (current % kProgressEventInterval == 0){
+	// Calibration drivers report chunk progress; avoid an event-sized log.
+	if (mode != kPhantomOutputMode && current % kProgressEventInterval == 0){
 		if (current != 0){
 		const G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;
 		const G4double speed = (G4double) current / (G4double) elapsed;

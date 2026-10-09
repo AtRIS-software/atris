@@ -71,7 +71,6 @@ SensitiveDetector::~SensitiveDetector()
 {}
 
 void SensitiveDetector::Initialize(G4HCofThisEvent* hce){
-	fDepositedEnergy = 0.;
 	fIonizingEnergy = 0.;
 	// Create hits collection
 	fHitsCollection	= new SDHitsCollection(SensitiveDetectorName, collectionName[0]);
@@ -176,10 +175,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step* step, G4TouchableHistory*){
 		return false;
 	}
 	const G4double ionizingEnergyDeposit = energyDeposit - nonionizingEnergyDeposit;
-	if (mode == kPhantomOutputMode) {
-		fDepositedEnergy += energyDeposit;
-		fIonizingEnergy += ionizingEnergyDeposit;
-	}
+	if (mode == kPhantomOutputMode) fIonizingEnergy += ionizingEnergyDeposit;
 	analysis->FillH2(
 		kIonizingEnergyHistogramId,
 		primaryEnergy,
@@ -330,12 +326,6 @@ void SensitiveDetector::EndOfEvent(G4HCofThisEvent*)
 	const G4Event* const event = G4RunManager::GetRunManager()->GetCurrentEvent();
 	const G4double incidentEnergy = event->GetPrimaryVertex()->GetPrimary()->GetKineticEnergy();
 	G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
-	analysis->FillNtupleIColumn(kPhantomNtupleId, kPhantomEventId, event->GetEventID());
-	analysis->FillNtupleIColumn(kPhantomNtupleId, kPhantomDetectorId, detectorId);
-	analysis->FillNtupleDColumn(kPhantomNtupleId, kPhantomIncidentEnergyMeV, incidentEnergy/MeV);
-	analysis->FillNtupleDColumn(kPhantomNtupleId, kPhantomDepositedEnergyMeV, fDepositedEnergy/MeV);
-	analysis->FillNtupleDColumn(kPhantomNtupleId, kPhantomIonizingEnergyMeV, fIonizingEnergy/MeV);
-	analysis->AddNtupleRow(kPhantomNtupleId);
 	// One fill per primary gives event-level sum(w^2), unlike per-step scoring.
 	analysis->FillH2(analysis->GetH2Id("h2.fraction"), incidentEnergy, detectorId,
 		fIonizingEnergy/incidentEnergy);

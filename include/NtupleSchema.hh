@@ -55,16 +55,6 @@ enum StepNtupleColumn : G4int {
 	kStepProcess,
 };
 
-// Phantom mode books this instead of the interface and step ntuples.
-constexpr G4int kPhantomNtupleId = 1;
-enum PhantomNtupleColumn : G4int {
-	kPhantomEventId = 0,
-	kPhantomDetectorId,
-	kPhantomIncidentEnergyMeV,
-	kPhantomDepositedEnergyMeV,
-	kPhantomIonizingEnergyMeV,
-};
-
 }  // namespace atris
 
 #endif
