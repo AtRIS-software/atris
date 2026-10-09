@@ -40,6 +40,8 @@ class PhantomTable:
     coefficients: np.ndarray
     quantity: str = ENERGY_FRACTION
     metadata: dict = field(default_factory=dict)
+    # Calibration builds can explicitly retain NaN for not-yet-sampled bins.
+    allow_missing: bool = False
 
     def __post_init__(self):
         self.pdg_codes = np.asarray(self.pdg_codes)
@@ -57,7 +59,11 @@ class PhantomTable:
             )
         if self.coefficients.shape != (self.pdg_codes.size, RESPONSE_ENERGY_BINS):
             raise ValueError("Each particle row must contain exactly 650 coefficients")
-        if not np.all(np.isfinite(self.coefficients)) or np.any(self.coefficients < 0):
+        if (
+            np.any(np.isinf(self.coefficients))
+            or np.any(self.coefficients < 0)
+            or (not self.allow_missing and np.any(np.isnan(self.coefficients)))
+        ):
             raise ValueError("Phantom coefficients must be finite and nonnegative")
         if self.quantity == COUNTING_EFFICIENCY and np.any(self.coefficients > 1):
             raise ValueError("Counting efficiencies must lie in [0, 1]")
@@ -70,7 +76,7 @@ class PhantomTable:
         return self.coefficients * ENERGY_CENTRES_MEV
 
     @classmethod
-    def read(cls, path, *, counting=False):
+    def read(cls, path, *, counting=False, allow_missing=False):
         """Read raw coefficients; comments never select units or rescale values."""
         path = Path(path)
         lines = path.read_text().splitlines()
@@ -105,7 +111,11 @@ class PhantomTable:
                 if separator:
                     metadata[key.strip()] = value.strip()
         return cls(
-            codes, data, COUNTING_EFFICIENCY if counting else ENERGY_FRACTION, metadata
+            codes,
+            data,
+            COUNTING_EFFICIENCY if counting else ENERGY_FRACTION,
+            metadata,
+            allow_missing=allow_missing,
         )
 
     def write(self, path, **savetxt_kwargs):

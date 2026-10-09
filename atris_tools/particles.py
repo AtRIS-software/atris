@@ -8,13 +8,24 @@ ION_A_SCALE = 10
 ION_FIELD_BASE = 1_000
 
 GEANT4_PARTICLES = {
-    "gamma": 22, "proton": 2212, "anti_proton": -2212,
-    "e-": 11, "e+": -11, "mu-": 13, "mu+": -13,
-    "neutron": 2112, "anti_neutron": -2112,
-    "pi+": 211, "pi-": -211, "pi0": 111,
-    "kaon+": 321, "kaon-": -321,
-    "deuteron": 1000010020, "triton": 1000010030,
-    "He3": 1000020030, "alpha": 1000020040,
+    "gamma": 22,
+    "proton": 2212,
+    "anti_proton": -2212,
+    "e-": 11,
+    "e+": -11,
+    "mu-": 13,
+    "mu+": -13,
+    "neutron": 2112,
+    "anti_neutron": -2112,
+    "pi+": 211,
+    "pi-": -211,
+    "pi0": 111,
+    "kaon+": 321,
+    "kaon-": -321,
+    "deuteron": 1000010020,
+    "triton": 1000010030,
+    "He3": 1000020030,
+    "alpha": 1000020040,
 }
 _GEANT4_NAMES = {code: name for name, code in GEANT4_PARTICLES.items()}
 
@@ -67,7 +78,9 @@ def particle_source(pdg, *, charge=None):
     if charge is None and pdg in _GEANT4_NAMES:
         return {"particle": _GEANT4_NAMES[pdg]}
     if pdg < ION_PDG_BASE:
-        raise ValueError("No source mapping for this code/charge; charge applies to positive nuclei")
+        raise ValueError(
+            "No source mapping for this code/charge; charge applies to positive nuclei"
+        )
     Z, A = ion_numbers(pdg)
     charge = Z if charge is None else index(charge)
     if not 0 <= charge <= Z:
