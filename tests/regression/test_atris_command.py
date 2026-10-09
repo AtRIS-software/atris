@@ -97,6 +97,58 @@ def prepare_interface_run(run_directory):
     shutil.copyfile(FIXTURE / "interface.mac", run_directory / "protons.mac")
 
 
+@pytest.mark.regression
+def test_untagged_response_coefficients_scale_dose(tmp_path, atris_command):
+    histograms = []
+    for scale in (1.0, 0.5):
+        directory = tmp_path / str(scale)
+        directory.mkdir()
+        prepare_interface_run(directory)
+        path = directory / "radiation_phantom0.txt"
+        pdgs = np.loadtxt(path, max_rows=1, dtype=int)
+        coefficients = np.loadtxt(path, skiprows=1)
+        np.savetxt(
+            path, coefficients * scale, header=" ".join(map(str, pdgs)), comments=""
+        )
+        result = run_atris(atris_command, directory, "protons.root")
+        assert result.returncode == 0, result.stdout + result.stderr
+        with uproot.open(directory / "protons.root") as root:
+            histograms.append(
+                {name: root[name].values() for name in ("h2.dos0", "h2.equi0", "h2.rates0")}
+            )
+    assert np.sum(histograms[0]["h2.dos0"]) > 0
+    for name in ("h2.dos0", "h2.equi0"):
+        np.testing.assert_allclose(
+            histograms[1][name], histograms[0][name] * 0.5, rtol=1e-12
+        )
+    np.testing.assert_array_equal(histograms[0]["h2.rates0"], histograms[1]["h2.rates0"])
+
+
+@pytest.mark.regression
+def test_phantom_comments_leave_transport_results_unchanged(tmp_path, atris_command):
+    results = []
+    for annotated in (False, True):
+        directory = tmp_path / str(annotated)
+        directory.mkdir()
+        prepare_interface_run(directory)
+        if annotated:
+            for name in ("radiation_phantom0.txt", "counting_phantom0.txt"):
+                path = directory / name
+                lines = path.read_text().splitlines(keepends=True)
+                lines[0] = lines[0].rstrip("\n") + " # PDG particle codes.\n"
+                lines.insert(2, "# Comments may also appear between particle rows.\n")
+                path.write_text(
+                    "\n  # Material and geometry documentation.\n\n" + "".join(lines)
+                )
+        result = run_atris(atris_command, directory, "protons.root")
+        assert result.returncode == 0, result.stdout + result.stderr
+        with uproot.open(directory / "protons.root") as root:
+            results.append({name: root[name].values() for name in
+                            ("h2.dos0", "h2.equi0", "h2.rates0")})
+    for name in results[0]:
+        np.testing.assert_array_equal(results[0][name], results[1][name])
+
+
 def invoke_atris(command, run_directory, *arguments, threads="1"):
     environment = os.environ.copy()
     environment["G4FORCENUMBEROFTHREADS"] = threads
@@ -627,6 +679,7 @@ def test_mismatched_phantom_pdg_headers_exit_nonzero(
     path = tmp_path / mismatched_file
     lines = path.read_text().splitlines()
     lines[0] = " ".join(lines[0].split()[:-1])
+    lines = lines[:-1]
     path.write_text("\n".join(lines) + "\n")
 
     result = run_atris(atris_command, tmp_path, "protons", phantom_count="2")
