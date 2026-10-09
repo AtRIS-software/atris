@@ -17,10 +17,7 @@ def make_archive(tmp_path):
 
 def write_phantoms(
     run_directory,
-    rows=(
-        "0  first    1.5  2.5\n"
-        "1  second  30.5 40.5\n"
-    ),
+    rows=("0  first    1.5  2.5\n" "1  second  30.5 40.5\n"),
 ):
     contents = "# ID  Phantom  mass [g]  area [cm2]\n" + rows
     (run_directory / "phantoms.txt").write_text(contents)
@@ -33,8 +30,7 @@ def test_stage_phantoms_uses_ids_independently_of_row_order(tmp_path):
     run_directory.mkdir()
     metadata = write_phantoms(
         run_directory,
-        "1  second  30.5 40.5\n"
-        "0  first   10.5 20.5\n",
+        "1  second  30.5 40.5\n" "0  first   10.5 20.5\n",
     )
 
     count = stage_phantoms(run_directory, archive)
@@ -164,9 +160,7 @@ def test_stage_phantoms_removes_links_for_removed_rows(tmp_path):
     assert not (run_directory / "counting_phantom1.txt").exists()
 
 
-def test_stage_phantoms_removes_old_links_when_replacement_is_missing(
-    tmp_path, caplog
-):
+def test_stage_phantoms_removes_old_links_when_replacement_is_missing(tmp_path, caplog):
     archive = make_archive(tmp_path)
     run_directory = tmp_path / "run"
     run_directory.mkdir()
@@ -284,7 +278,10 @@ def test_stage_phantoms_can_create_dummy_counting_response(tmp_path, caplog):
     assert count == 1
     assert count_again == 1
     dummy = run_directory / "first_dummy_counting.txt"
-    lines = dummy.read_text().splitlines()
+    assert "# counting_definition: dummy values of one" in dummy.read_text()
+    lines = [
+        line for line in dummy.read_text().splitlines() if not line.startswith("#")
+    ]
     assert lines[0] == "22 2212"
     assert len(lines) == 3
     for line in lines[1:]:
@@ -295,6 +292,24 @@ def test_stage_phantoms_can_create_dummy_counting_response(tmp_path, caplog):
     assert counting.is_symlink()
     assert os.readlink(counting) == "first_dummy_counting.txt"
     assert "dummy counting response with values of one" in caplog.messages[-1]
+
+
+def test_dummy_counting_accepts_response_comment_headers(tmp_path):
+    from atris_tools.phantom_tables import PhantomTable
+
+    archive = make_archive(tmp_path)
+    (archive / "first_response.txt").write_text(
+        "# Water phantom\n# radius_cm: 0.0004\n22 2212\n"
+    )
+    (archive / "first_counting.txt").unlink()
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    write_phantoms(run_directory, "0 first 1.5 2.5\n")
+    assert stage_phantoms(run_directory, archive, accept_missing_counting=True) == 1
+    table = PhantomTable.read(run_directory / "first_dummy_counting.txt", counting=True)
+    assert table.pdg_codes.tolist() == [22, 2212]
+    assert (table.coefficients == 1).all()
+    assert "dummy" in table.metadata["counting_definition"]
 
 
 def test_stage_phantoms_prefers_real_counting_response(tmp_path):

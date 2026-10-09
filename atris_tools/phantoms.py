@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import shutil
+from io import StringIO
 from pathlib import Path
 
 from .cli import (
@@ -10,7 +11,6 @@ from .cli import (
     add_version_argument,
     configure_logging,
 )
-
 
 logger = logging.getLogger(__name__)
 RESPONSE_ENERGY_BINS = 650
@@ -83,8 +83,17 @@ def _remove_staged_links(run_directory, phantom_id):
 
 
 def _dummy_counting_contents(response_file):
+    from .phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+
     with response_file.open() as stream:
-        header = stream.readline().strip()
+        header = next(
+            (
+                line.split("#", 1)[0].strip()
+                for line in stream
+                if line.split("#", 1)[0].strip()
+            ),
+            "",
+        )
     try:
         particle_codes = [int(value) for value in header.split()]
     except ValueError as error:
@@ -92,8 +101,18 @@ def _dummy_counting_contents(response_file):
     if not particle_codes:
         raise ValueError("Empty particle header in " + str(response_file))
 
-    row = " ".join(["1.000000e+00"] * RESPONSE_ENERGY_BINS) + "\n"
-    return header + "\n" + row * len(particle_codes)
+    table = PhantomTable(
+        particle_codes,
+        [[1.0] * RESPONSE_ENERGY_BINS] * len(particle_codes),
+        COUNTING_EFFICIENCY,
+        metadata={
+            "counting_definition": "dummy values of one; not a calculated detection efficiency",
+            "source_response_table": response_file.name,
+        },
+    )
+    output = StringIO()
+    table.write(output, fmt="%.6e")
+    return output.getvalue()
 
 
 def _stage_phantom(
@@ -110,9 +129,7 @@ def _stage_phantom(
     counting_filename = stem + "_counting.txt"
     dummy = None
     try:
-        counting_source = find_phantom_file(
-            counting_filename, run_directory, archive
-        )
+        counting_source = find_phantom_file(counting_filename, run_directory, archive)
     except FileNotFoundError:
         if not accept_missing_counting:
             raise
