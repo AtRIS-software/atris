@@ -23,10 +23,22 @@ is performed. Per-chunk ROOT files are not automatically discovered or combined.
 ## Reading the plots
 
 Input images show the primary-energy configuration, atmospheric profiles,
-composition, and source settings. Phantom input images show the radiation and
-counting response tables. These plots can be made before running a simulation.
-The lower panels show mean deposited ionization energy in MeV. The diagonal
-reference line marks full absorption of the incident kinetic energy.
+composition, and source settings. Each phantom response table gets its own
+input image; these plots can be made before running a simulation.
+The radiation image shows mean deposited-energy fraction above mean deposited
+ionizing energy in MeV, following the relative/absolute presentation of
+[Banjac et al. (2019), Figure 3](https://doi.org/10.1029/2019JA026622).
+Both rows use logarithmic axes. The horizontal reference at fraction 1 and the
+diagonal reference $E_{\rm dep}=E_{\rm incident}$ mark deposition equal to the
+incident kinetic energy. Fractions above 1 remain visible, including energy
+released by decay or annihilation.
+
+The separate counting image shows counting efficiency with an automatically
+scaled linear vertical axis, including exact zero and unit efficiencies.
+Both images retain separate
+particles and nuclei columns. A missing or invalid response table does not
+prevent plotting its available companion. Staged tables do not contain
+statistical uncertainties, so these input plots do not add uncertainty bands.
 
 After post-processing, each species result image contains primary-energy,
 source-direction, source-position, and ionization panels. Separate phantom

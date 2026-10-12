@@ -239,7 +239,8 @@ def test_plot_inputs_writes_species_and_phantom_pngs(
 
     assert filenames == [
         "protons.inputs.png",
-        "phantom.test-phantom.inputs.png",
+        "phantom.test-phantom.radiation.inputs.png",
+        "phantom.test-phantom.counting.inputs.png",
     ]
     assert errors == []
     for filename in filenames:
@@ -282,12 +283,13 @@ def test_plot_inputs_writes_planet_specification_alongside_species_inputs(
     assert filenames == [
         "protons.inputs.png",
         "simulation.psf.png",
-        "phantom.test-phantom.inputs.png",
+        "phantom.test-phantom.radiation.inputs.png",
+        "phantom.test-phantom.counting.inputs.png",
     ]
     assert errors == []
 
 
-def test_plot_inputs_reports_missing_phantom_pair_but_keeps_species_plot(
+def test_plot_inputs_accepts_radiation_without_counting(
     tmp_path, monkeypatch, gdml_text
 ):
     prepare_inputs(tmp_path, gdml_text)
@@ -296,10 +298,8 @@ def test_plot_inputs_reports_missing_phantom_pair_but_keeps_species_plot(
 
     filenames, errors = input_plotting.plot_inputs()
 
-    assert filenames == ["protons.inputs.png"]
-    assert errors == [
-        "phantom 0 inputs: missing counting_phantom0.txt"
-    ]
+    assert filenames == ["protons.inputs.png", "phantom.test-phantom.radiation.inputs.png"]
+    assert errors == []
 
 
 def test_plot_inputs_uses_numbered_name_without_phantom_metadata(
@@ -311,5 +311,94 @@ def test_plot_inputs_uses_numbered_name_without_phantom_metadata(
 
     filenames, errors = input_plotting.plot_inputs()
 
-    assert filenames == ["protons.inputs.png", "phantom-0.inputs.png"]
+    assert filenames == [
+        "protons.inputs.png", "phantom-0.radiation.inputs.png",
+        "phantom-0.counting.inputs.png",
+    ]
     assert errors == []
+
+
+def test_plot_inputs_accepts_counting_without_radiation(tmp_path, monkeypatch, gdml_text):
+    prepare_inputs(tmp_path, gdml_text)
+    (tmp_path / "radiation_phantom0.txt").unlink()
+    monkeypatch.chdir(tmp_path)
+    filenames, errors = input_plotting.plot_inputs()
+    assert filenames == ["protons.inputs.png", "phantom.test-phantom.counting.inputs.png"]
+    assert errors == []
+
+
+def test_bad_radiation_does_not_hide_counting(tmp_path, monkeypatch, gdml_text):
+    prepare_inputs(tmp_path, gdml_text)
+    (tmp_path / "radiation_phantom0.txt").write_text("22\ninvalid\n")
+    monkeypatch.chdir(tmp_path)
+    filenames, errors = input_plotting.plot_inputs()
+    assert filenames == ["protons.inputs.png", "phantom.test-phantom.counting.inputs.png"]
+    assert len(errors) == 1
+    assert errors[0].startswith("phantom 0 radiation inputs:")
+
+
+def test_counting_plot_preserves_zero_and_unit_efficiencies(tmp_path, monkeypatch):
+    from matplotlib.figure import Figure
+    from atris_tools.phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+
+    monkeypatch.chdir(tmp_path)
+    values = np.zeros((2, 650))
+    values[1] = 1
+    PhantomTable(np.array([22, 1000060120]), values, COUNTING_EFFICIENCY).write(
+        "counting_phantom0.txt"
+    )
+    figures = []
+    monkeypatch.setattr(Figure, "savefig", lambda figure, *args: figures.append(figure))
+    filename = input_plotting.plot_phantom_inputs(0, "test", counting=True)
+    assert filename == "phantom.test.counting.inputs.png"
+    assert len(figures[0].axes) == 2
+    for index, axis in enumerate(figures[0].axes):
+        assert axis.get_yscale() == "linear"
+        np.testing.assert_array_equal(axis.lines[0].get_ydata(), values[index])
+        assert axis.get_autoscalex_on()
+        assert axis.get_autoscaley_on()
+        expected = input_plotting.particle_symbol([22, 1000060120][index])
+        if index == 0:
+            expected += " photon"
+        assert axis.get_legend_handles_labels()[1] == [expected]
+        assert axis.get_legend().get_texts()[0].get_text() == expected
+
+
+def test_counting_linear_preserves_probabilities_and_taller_layout(tmp_path, monkeypatch):
+    from matplotlib.figure import Figure
+    from atris_tools.phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+
+    monkeypatch.chdir(tmp_path)
+    values = np.linspace(0, 1, 650)[None, :]
+    PhantomTable(np.array([22]), values, COUNTING_EFFICIENCY).write(
+        "counting_phantom0.txt"
+    )
+    figures = []
+    monkeypatch.setattr(Figure, "savefig", lambda figure, *args: figures.append(figure))
+    input_plotting.plot_phantom_inputs(0, "test", counting=True)
+    axis = figures[0].axes[0]
+    plotted = axis.lines[0].get_ydata()
+    np.testing.assert_array_equal(plotted, values[0])
+    np.testing.assert_array_equal(figures[0].get_size_inches(), [14, 9])
+
+
+def test_particle_legend_keeps_charge_only_in_symbol(tmp_path, monkeypatch):
+    from matplotlib.figure import Figure
+    from atris_tools.phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+
+    monkeypatch.chdir(tmp_path)
+    codes = np.array([13, -13, 211, -211, 111, 321, -321])
+    PhantomTable(codes, np.ones((7, 650)), COUNTING_EFFICIENCY).write(
+        "counting_phantom0.txt"
+    )
+    figures = []
+    monkeypatch.setattr(Figure, "savefig", lambda figure, *args: figures.append(figure))
+    input_plotting.plot_phantom_inputs(0, "test", counting=True)
+    labels = figures[0].axes[0].get_legend_handles_labels()[1]
+    legend = figures[0].axes[0].get_legend()
+    assert legend._ncols == 4
+    assert legend.get_bbox_to_anchor().width == figures[0].axes[0].get_window_extent().width
+    assert labels == [
+        input_plotting.particle_symbol(code) + " " + name
+        for code, name in zip(codes, ["muon", "muon", "pion", "pion", "pion", "kaon", "kaon"])
+    ]

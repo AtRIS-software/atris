@@ -144,7 +144,8 @@ when the selection was staged during preparation:
 
 ```text
 protons.inputs.png                       # source and atmosphere inputs
-phantom.ramona_zero_0.060MeV_detA_old.inputs.png
+phantom.ramona_zero_0.060MeV_detA_old.radiation.inputs.png
+phantom.ramona_zero_0.060MeV_detA_old.counting.inputs.png
 protons.png                              # source diagnostics and ionization
 protons.ramona_zero_0.060MeV_detA_old.png   # phantom 0 responses
 protons.icru_zero_0.000MeV_detAB_old.png    # phantom 1 responses

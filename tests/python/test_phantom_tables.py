@@ -148,6 +148,12 @@ def test_plot_uses_cpp_fraction_convention_regardless_of_comments(tmp_path, monk
     monkeypatch.setattr(Figure, "savefig", lambda figure, *args: figures.append(figure))
     plot_phantom_inputs(0, "test")
     assert len(figures[0].axes) == 4
+    for axis in figures[0].axes[:2]:
+        np.testing.assert_allclose(axis.lines[0].get_ydata(), [1, 1])
+        np.testing.assert_allclose(axis.lines[1].get_ydata(), values[0])
+        ticks = axis.get_yticks()
+        assert 1.0 in ticks
+        np.testing.assert_allclose(np.diff(np.log10(ticks)), 2)
     for axis in figures[0].axes[2:]:
         np.testing.assert_allclose(axis.lines[0].get_ydata(), ENERGY_CENTRES_MEV)
         np.testing.assert_allclose(axis.lines[1].get_ydata(), values[0] * ENERGY_CENTRES_MEV)

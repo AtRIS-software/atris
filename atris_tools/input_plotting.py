@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+from matplotlib.ticker import FixedLocator
 import numpy as np
 
 from .phantoms import read_phantoms
@@ -485,92 +486,115 @@ def read_phantom_table(filename, *, counting=False):
     return table.pdg_codes, table.coefficients
 
 
-def plot_phantom_inputs(phantom_id, phantom_name):
-    radiation_codes, radiation = read_phantom_table(
-        "radiation_phantom%i.txt" % phantom_id
+def plot_phantom_inputs(phantom_id, phantom_name, *, counting=False):
+    """Plot one response table, without requiring its companion table."""
+    prefix = "counting" if counting else "radiation"
+    table = PhantomTable.read(
+        "%s_phantom%i.txt" % (prefix, phantom_id), counting=counting
     )
-    counting_codes, counting = read_phantom_table(
-        "counting_phantom%i.txt" % phantom_id, counting=True
-    )
-    if not np.array_equal(radiation_codes, counting_codes):
-        raise ValueError(
-            "Radiation and counting particle codes differ for phantom %i"
-            % phantom_id
-        )
-
-    groups = _particle_groups(radiation_codes)
+    groups = _particle_groups(table.pdg_codes)
     group_titles = ("Particles", "Nuclei")
     figure, axes = plt.subplots(
         ncols=2,
-        nrows=2,
-        figsize=(14, 10),
+        nrows=1 if counting else 2,
+        figsize=(14, 9) if counting else (14, 12),
         sharex=True,
         sharey="row",
+        squeeze=False,
     )
     for column, (indices, group_title) in enumerate(zip(groups, group_titles)):
-        colors = plt.get_cmap("turbo")(np.linspace(0.05, 0.95, len(indices)))
-        count_axis = axes[0, column]
-        radiation_axis = axes[1, column]
-        count_axis.axhline(
-            1.0,
-            color="0.25",
-            linestyle=":",
-            linewidth=1.0,
-            label="Perfect counting",
-        )
-        radiation_axis.plot(
-            PHANTOM_ENERGIES_MEV, PHANTOM_ENERGIES_MEV,
-            color="0.25",
-            linestyle=":",
-            linewidth=1.0,
-            label="Full absorption",
-        )
+        if column == 0:
+            colors = plt.get_cmap("tab20")(np.arange(len(indices)) % 20)
+        else:
+            colors = plt.get_cmap("turbo")(np.linspace(0.05, 0.95, len(indices)))
+        relative_axis = axes[0, column]
+        if not counting:
+            relative_axis.axhline(1.0, color="0.25", linestyle=":", linewidth=1.0)
+            axes[1, column].plot(
+                PHANTOM_ENERGIES_MEV, PHANTOM_ENERGIES_MEV,
+                color="0.25", linestyle=":", linewidth=1.0,
+            )
         for color, index in zip(colors, indices):
-            label = particle_name(radiation_codes[index])
-            count_axis.plot(
+            code = table.pdg_codes[index]
+            label = particle_symbol(code)
+            if abs(code) < ION_PDG_BASE:
+                name = "pion" if code == 111 else particle_name(code).rstrip("+-")
+                label += " " + name
+            values = table.coefficients[index]
+            relative_axis.plot(
                 PHANTOM_ENERGIES_MEV,
-                np.where(counting[index] > 0, counting[index], np.nan),
+                values if counting else np.where(values > 0, values, np.nan),
                 color=color,
                 linewidth=1.0,
                 label=label,
             )
-            radiation_axis.plot(
-                PHANTOM_ENERGIES_MEV,
-                np.where(radiation[index] > 0, radiation[index] * PHANTOM_ENERGIES_MEV, np.nan),
-                color=color,
-                linewidth=1.0,
-                label=label,
-            )
+            if not counting:
+                deposited = table.deposited_energy_MeV[index]
+                axes[1, column].plot(
+                    PHANTOM_ENERGIES_MEV,
+                    np.where(deposited > 0, deposited, np.nan),
+                    color=color, linewidth=1.0, label=label,
+                )
 
-        count_axis.set_title(group_title)
-        for axis in (count_axis, radiation_axis):
+        relative_axis.set_title(group_title)
+        for axis in axes[:, column]:
             axis.set_xscale("log")
-            axis.set_yscale("log")
+            if not counting:
+                axis.set_yscale("log")
             axis.grid(alpha=0.25)
-            axis.legend(fontsize=7, ncols=2)
-        radiation_axis.set_xlabel("Incident particle energy [MeV]")
+        if not counting:
+            lower, upper = relative_axis.get_ylim()
+            first_power = 2 * int(np.floor(np.log10(lower) / 2))
+            last_power = 2 * int(np.ceil(np.log10(upper) / 2))
+            relative_axis.yaxis.set_major_locator(
+                FixedLocator(10.0 ** np.arange(first_power, last_power + 1, 2))
+            )
+        axes[-1, column].set_xlabel("Incident kinetic energy [MeV]")
+        if counting:
+            relative_axis.set_yscale("linear")
 
-    axes[0, 0].set_ylabel("Counting efficiency")
-    axes[1, 0].set_ylabel("Ionization response [MeV]")
+    axes[0, 0].set_ylabel(
+        "Counting efficiency" if counting else "Mean deposited-energy fraction"
+    )
+    if not counting:
+        axes[1, 0].set_ylabel("Mean deposited ionizing energy [MeV]")
     display_name = phantom_name or "Phantom %i" % phantom_id
-    figure.suptitle(display_name)
-    figure.tight_layout()
+    response_name = "Counting response" if counting else "Ionizing-energy response"
+    figure.suptitle(display_name + " | " + response_name)
+    legend_top = 0.14 if counting else 0.10
+    figure.tight_layout(rect=(0, 0.17 if counting else 0.13, 1, 0.97))
+    for column, indices in enumerate(groups):
+        if not indices:
+            continue
+        axis = axes[0, column]
+        position = axis.get_position()
+        axis.legend(
+            fontsize=9,
+            ncols=min(len(indices), 4 if column == 0 else 8),
+            loc="upper left",
+            bbox_to_anchor=(position.x0, legend_top, position.width, 0),
+            bbox_transform=figure.transFigure,
+            mode="expand",
+            columnspacing=1.0,
+            borderaxespad=0,
+            frameon=False,
+        )
     if phantom_name:
         safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", phantom_name)
-        filename = "phantom.%s.inputs.png" % safe_name
+        filename = "phantom.%s.%s.inputs.png" % (safe_name, prefix)
     else:
-        filename = "phantom-%i.inputs.png" % phantom_id
+        filename = "phantom-%i.%s.inputs.png" % (phantom_id, prefix)
     figure.savefig(filename)
     plt.close(figure)
     return filename
 
 
 def _input_phantom_ids():
-    pattern = re.compile(r"^radiation_phantom(\d+)\.txt$")
+    pattern = re.compile(r"^(?:radiation|counting)_phantom(\d+)\.txt$")
     return sorted(
-        int(match.group(1))
+        {int(match.group(1))
         for path in Path.cwd().iterdir()
-        if (match := pattern.match(path.name)) is not None
+        if (match := pattern.match(path.name)) is not None}
     )
 
 
@@ -611,13 +635,14 @@ def plot_inputs():
         metadata = {}
         errors.append("phantom metadata: " + str(error))
     for phantom_id in _input_phantom_ids():
-        counting = Path("counting_phantom%i.txt" % phantom_id)
-        if not counting.is_file():
-            errors.append("phantom %i inputs: missing %s" % (phantom_id, counting))
-            continue
         phantom_name = metadata.get(phantom_id)
-        try:
-            filenames.append(plot_phantom_inputs(phantom_id, phantom_name))
-        except Exception as error:
-            errors.append("phantom %i inputs: %s" % (phantom_id, error))
+        for prefix in ("radiation", "counting"):
+            if not Path("%s_phantom%i.txt" % (prefix, phantom_id)).is_file():
+                continue
+            try:
+                filenames.append(plot_phantom_inputs(
+                    phantom_id, phantom_name, counting=prefix == "counting"
+                ))
+            except Exception as error:
+                errors.append("phantom %i %s inputs: %s" % (phantom_id, prefix, error))
     return filenames, errors

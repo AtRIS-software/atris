@@ -307,14 +307,18 @@ atris-dump protons.root steps | head
 | Filename | Contents |
 | --- | --- |
 | `<species>.inputs.png` | Source and geometry inputs |
-| `phantom.<name>.inputs.png` | Phantom input response curves, with a sanitized name |
+| `phantom.<name>.radiation.inputs.png` | Mean deposited-energy fraction and deposited ionizing energy, with a sanitized phantom name |
+| `phantom.<name>.counting.inputs.png` | Counting efficiency versus incident kinetic energy |
 | `<species>.png` | Source diagnostics and processed ionization |
 | `<species>.<phantom-stem>.png` | Processed phantom responses |
 | `<species>.interfaces.png` | Interface-crossing diagnostics |
 | `<species>.steps.png`, `<species>.shower.png` | Step summary and shower visualization |
 | `<species>.convergence.png` | Gathered ionization convergence diagnostics |
 
-An unnamed phantom input plot uses `phantom-N.inputs.png`. The plot command
+Unnamed phantom input plots use `phantom-N.radiation.inputs.png` and
+`phantom-N.counting.inputs.png`. Each available table is plotted independently.
+The old combined `phantom.<name>.inputs.png` is no longer generated; existing
+copies are left untouched. The plot command
 inspects canonical `protons` and `alphas` products in the selected directory;
 it does not automatically collect per-chunk particle ntuples. See
 [Scatter/gather files](chunks.md) for logs, completion markers, gathered-state
