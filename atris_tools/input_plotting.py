@@ -576,7 +576,8 @@ def plot_phantom_inputs(phantom_id, phantom_name, *, counting=False):
             if column == 0 else (position.x0, legend_top, position.width, 0),
             bbox_transform=figure.transFigure,
             mode=None if column == 0 else "expand",
-            columnspacing=1.0,
+            columnspacing=2.5 if column == 0 else 1.0,
+            handletextpad=0.8,
             borderaxespad=0,
             frameon=False,
         )
