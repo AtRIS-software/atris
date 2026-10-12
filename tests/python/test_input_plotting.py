@@ -397,7 +397,8 @@ def test_particle_legend_keeps_charge_only_in_symbol(tmp_path, monkeypatch):
     labels = figures[0].axes[0].get_legend_handles_labels()[1]
     legend = figures[0].axes[0].get_legend()
     assert legend._ncols == 4
-    assert legend.get_bbox_to_anchor().width == figures[0].axes[0].get_window_extent().width
+    assert legend.get_bbox_to_anchor().width == 0
+    assert legend.get_window_extent().width < figures[0].axes[0].get_window_extent().width
     assert labels == [
         input_plotting.particle_symbol(code) + " " + name
         for code, name in zip(codes, ["muon", "muon", "pion", "pion", "pion", "kaon", "kaon"])

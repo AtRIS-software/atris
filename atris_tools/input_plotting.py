@@ -571,10 +571,11 @@ def plot_phantom_inputs(phantom_id, phantom_name, *, counting=False):
         axis.legend(
             fontsize=9,
             ncols=min(len(indices), 4 if column == 0 else 8),
-            loc="upper left",
-            bbox_to_anchor=(position.x0, legend_top, position.width, 0),
+            loc="upper center" if column == 0 else "upper left",
+            bbox_to_anchor=(position.x0 + position.width / 2, legend_top)
+            if column == 0 else (position.x0, legend_top, position.width, 0),
             bbox_transform=figure.transFigure,
-            mode="expand",
+            mode=None if column == 0 else "expand",
             columnspacing=1.0,
             borderaxespad=0,
             frameon=False,
