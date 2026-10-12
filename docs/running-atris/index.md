@@ -14,6 +14,7 @@ prepare-simulation
 plan-chunks
 run-simulation
 process-results
+build-phantoms
 ```
 
 For a worked example, start with [Earth simulation preparation](../tutorials/earth-nrlmsis-full.md).

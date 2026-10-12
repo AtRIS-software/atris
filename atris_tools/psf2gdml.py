@@ -222,7 +222,9 @@ def gdml_compile(materials, world, geometry, structure, filename):
     f.write(finalfile)
     f.close()
 
-def psf2gdml(input_path, output_path=None):
+def psf2gdml(input_path, output_path=None, *, world_margin_km=100.0):
+    if not np.isfinite(world_margin_km) or world_margin_km < 0:
+        raise ValueError("World margin must be finite and nonnegative")
     input_path = Path(input_path)
     output_path = (
         Path(output_path) if output_path else input_path.with_suffix(".gdml")
@@ -230,7 +232,7 @@ def psf2gdml(input_path, output_path=None):
     materials, geometry, structure, world = line_processor(input_path)
     gdml_compile(
         materials,
-        world + 100,
+        world + world_margin_km,
         geometry,
         structure,
         output_path,
@@ -266,8 +268,10 @@ def main():
         help="GDML file to write (default: input basename with .gdml suffix).",
     )
     add_version_argument(parser)
+    parser.add_argument("--world-margin-km", type=float, default=100.0,
+                        help="Margin beyond the outer radius for the vacuum world (default: 100 km).")
     args = parser.parse_args()
-    psf2gdml(args.psf_file, args.output)
+    psf2gdml(args.psf_file, args.output, world_margin_km=args.world_margin_km)
 
 
 if __name__ == "__main__":

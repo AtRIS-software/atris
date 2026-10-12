@@ -231,8 +231,10 @@ that they are positive; post-processing requires physically valid values.
 For the water sphere, the effective area is $2\pi r^2$, half its total surface
 area and twice its projected area. This converts interface crossings to sphere
 interceptions for an isotropic field; it does not mean that only half the sphere
-is exposed. The [water-phantom notebook](../tutorials/water-phantom.ipynb#why-the-effective-area-is-twice-the-projected-area)
-derives the factor.
+is exposed. A planar interface sees an isotropic field from both sides, whereas
+each primary intercepts the sphere once. Their rates are proportional to twice
+the projected area and the projected area, respectively. The area convention
+keeps the calibrated response consistent with AtRIS's interface-crossing flux.
 
 For each stem, staging locates `<stem>_response.txt` and `<stem>_counting.txt`
 in the run directory first, then the archive. It creates numbered relative

@@ -11,6 +11,7 @@ atris-nrlmsis-to-psf
 atris-psf-to-gdml
 atris-generate-macros
 atris-stage-phantoms
+atris-build-phantom
 atris-clone
 atris-scatter
 atris-run

@@ -6,7 +6,6 @@ unshielded sphere. It is not an angular average for a nonspherical detector.
 """
 
 from dataclasses import dataclass, field
-from importlib.resources import files
 import hashlib
 import json
 from pathlib import Path
@@ -19,6 +18,8 @@ from .root_output import iterate_ntuple, read_ntuple
 from .particles import ion_pdg, pdg_code
 from .phantom_tables import PhantomTable, COUNTING_EFFICIENCY, ENERGY_EDGES_MEV
 from .phantoms import RESPONSE_ENERGY_BINS
+from .psf import build_psf, write_psf, DETECTOR_ID
+from .psf2gdml import psf2gdml
 
 WATER_DETECTOR_ID = 1
 RESPONSE_ENERGY_EDGES_MEV = ENERGY_EDGES_MEV
@@ -550,17 +551,21 @@ def prepare_water_phantom(
             "A different calibration already exists in this directory"
         )
 
-    template = files("atris_tools").joinpath("data/water-phantom.gdml").read_text()
-    geometry = template.format(
-        radius=radius_cm,
-        density=density_g_cm3,
-        world_size=8 * radius_cm,
-        escape_inner=2 * radius_cm,
-        escape_outer=2.1 * radius_cm,
-        guard_inner=2.2 * radius_cm,
-        guard_outer=2.3 * radius_cm,
+    radius_km = radius_cm / 1e5
+    geometry = build_psf(
+        inner_radius_km=np.array([0, 2, 2.2]) * radius_km,
+        outer_radius_km=np.array([1, 2.1, 2.3]) * radius_km,
+        temperature_k=293, density_g_cm3=[density_g_cm3, 1e-25, 1e-25],
+        pressure_pa=[101325, 0, 0], state=["liquid", "gas", "gas"],
+        mass_fractions={"H": [2 * 1.00794 / 18.01528, 1, 1],
+                        "O": [15.9994 / 18.01528, 0, 0]},
+        solid_composition="H112O888",
     )
-    (directory / "calibration.gdml").write_text(geometry)
+    # IDs 0 and 2 terminate tracks outside the source; ID 1 scores the water.
+    geometry.layers[:, DETECTOR_ID] = [1, 0, 2]
+    write_psf(directory / "calibration.psf", geometry)
+    psf2gdml(directory / "calibration.psf", directory / "calibration.gdml",
+             world_margin_km=1.7 * radius_km)
     # The source range may cover only part of the shared response grid.
     np.savetxt(directory / "calibration.bins", RESPONSE_ENERGY_EDGES_MEV)
     macro = f"""{tracking_commands}/run/setCut {production_cut_mm:.17e} mm

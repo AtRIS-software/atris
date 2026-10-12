@@ -24,11 +24,11 @@ def test_geometry_keeps_source_and_water_inside_termination_shells(tmp_path):
     prepare_water_phantom(tmp_path, [1, 10, 100], radius_cm=4, chunks=2)
     gdml = ET.parse(tmp_path / "calibration.gdml")
     spheres = {s.attrib["name"]: s.attrib for s in gdml.findall("./solids/sphere")}
-    assert float(spheres["water_sphere"]["rmax"]) == 4
+    assert float(spheres["solid1"]["rmax"]) == pytest.approx(4 / 1e5)
     # The whole incident disk at z = -1.1 R is inside the escape shell.
-    assert np.hypot(4, 1.1 * 4) < float(spheres["escape_shell"]["rmin"])
+    assert np.hypot(4, 1.1 * 4) / 1e5 < float(spheres["solid0"]["rmin"])
     volumes = {v.attrib["name"]: v for v in gdml.findall("./structure/volume")}
-    assert volumes["water_volume"].find("auxiliary").attrib["auxvalue"] == "1"
+    assert volumes["volume1"].find("auxiliary").attrib["auxvalue"] == "1"
     assert len(gdml.findall(".//auxiliary")) == 3
     assert len((tmp_path / "chunks.txt").read_text().splitlines()) == 2
     np.testing.assert_array_equal(

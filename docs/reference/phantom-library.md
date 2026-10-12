@@ -19,8 +19,11 @@ To calculate a response yourself, use the Jupyter notebook at
 `docs/tutorials/water-phantom.ipynb`:
 [View notebook](../tutorials/water-phantom.ipynb) or download
 {download}`water-phantom.ipynb <../tutorials/water-phantom.ipynb>`.
-It constructs the water sphere in GDML, irradiates it with protons in Geant4,
-and compares its energy response with the older and later supplied tables.
+It defines a sphere in PSF and prepares a photon/proton calibration through
+`PhantomBuild`, including iron-56 and nickel-58 pilots. Transport is an explicit
+terminal command; the notebook resumes
+with postprocessing and creation diagnostics. Follow
+[building phantoms](../running-atris/build-phantoms.md) for your own run.
 
 ## Existing Earth example
 
@@ -93,8 +96,8 @@ histograms and metadata needed for calibration, while removing detailed
 transport-step and interface-crossing records. It verifies the event arrays
 before replacing the generated chunk file and records the discarded ntuples
 in that file. `read_water_phantom_events` reads either representation.
-The notebook uses `shower` output to retain individual events and explore
-counting thresholds. The internal `phantom` output mode instead stores per-bin
+The `shower` output mode retains individual events for exploring counting
+thresholds. The builder uses `phantom` output mode, which stores per-bin
 statistics with a zero counting threshold; read those with
 `read_phantom_statistics` or combine them with `calibrate_water_phantom`.
 

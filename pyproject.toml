@@ -15,7 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 plot = ["matplotlib>=3.7,<4"]
 test = ["pytest", "matplotlib>=3.7,<4"]
-notebook = ["jupyterlab>=4,<5", "ipykernel>=6.29,<7", "matplotlib>=3.7,<4"]
+notebook = ["jupyterlab>=4,<5", "ipykernel>=6.29,<7", "ipython>=8,<10", "matplotlib>=3.7,<4"]
 docs = [
     "Sphinx==7.4.7",
     "myst-parser==3.0.1",
@@ -34,6 +34,7 @@ atris-stage-phantoms = "atris_tools.phantoms:main"
 atris-clone = "atris_tools.clone_run:main"
 atris-scatter = "atris_tools.scatter:main"
 atris-run = "atris_tools.run_chunks:main"
+atris-build-phantom = "atris_tools.phantom_builder:main"
 atris-gather = "atris_tools.gather:main"
 atris-postprocess = "atris_tools.postprocess:main"
 atris-plot = "atris_tools.plotting:main"
