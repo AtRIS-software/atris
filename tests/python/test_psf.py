@@ -1,10 +1,30 @@
 import numpy as np
 import pytest
+import xml.etree.ElementTree as ET
 
 from atris_tools.psf import (
     DETECTOR_ID, STATE, FIRST_ELEMENT, GEOMETRY_COLUMNS,
     build_psf, load_psf, read_psf_header, read_psf_layers, write_psf,
 )
+
+
+def test_gdml_preserves_micrometre_spheres_and_world(tmp_path):
+    from atris_tools.psf2gdml import line_processor, gdml_compile
+    radius = 4e-9  # 4 micrometres, in PSF kilometres.
+    psf = build_psf(inner_radius_km=[0], outer_radius_km=[radius],
+                    temperature_k=293, density_g_cm3=1, pressure_pa=101325,
+                    mass_fractions={"H": 1}, solid_composition="H1000")
+    path = tmp_path / "sphere.psf"
+    write_psf(path, psf)
+    output = tmp_path / "sphere.gdml"
+    materials, geometry, structure, _ = line_processor(path)
+    gdml_compile(materials, 2 * radius, geometry, structure, output)
+    gdml = ET.parse(output)
+    sphere = gdml.find("./solids/sphere")
+    world = gdml.find("./solids/box")
+    assert float(sphere.attrib["rmax"]) == radius
+    assert float(world.attrib["x"]) == 4 * radius
+    assert "e-09" in sphere.attrib["rmax"]
 
 
 def test_build_and_write_named_layers(tmp_path):

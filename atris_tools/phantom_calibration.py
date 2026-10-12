@@ -310,7 +310,7 @@ class PhantomResponse:
         )
         (directory / "phantoms.txt").write_text(
             "# ID stem mass_g area_cm2\n"
-            f"0 {stem} {self.mass_g:.12g} {self.area_cm2:.12g}\n"
+            f"0 {stem} {self.mass_g:.17e} {self.area_cm2:.17e}\n"
         )
         np.savez_compressed(
             directory / f"{stem}_sampling.npz",
@@ -530,8 +530,8 @@ def prepare_water_phantom(
     if tracking_floor_eV is not None:
         config["tracking_floor_eV"] = tracking_floor_eV
         tracking_commands = (
-            f"/process/em/lowestElectronEnergy {tracking_floor_eV} eV\n"
-            f"/process/em/lowestMuHadEnergy {tracking_floor_eV} eV\n"
+            f"/process/em/lowestElectronEnergy {tracking_floor_eV:.17e} eV\n"
+            f"/process/em/lowestMuHadEnergy {tracking_floor_eV:.17e} eV\n"
         )
     config_path = directory / "water-phantom.json"
     if (directory / "chunks.txt").exists():
@@ -563,17 +563,17 @@ def prepare_water_phantom(
     (directory / "calibration.gdml").write_text(geometry)
     # The source range may cover only part of the shared response grid.
     np.savetxt(directory / "calibration.bins", RESPONSE_ENERGY_EDGES_MEV)
-    macro = f"""{tracking_commands}/run/setCut {production_cut_mm} mm
+    macro = f"""{tracking_commands}/run/setCut {production_cut_mm:.17e} mm
 /run/initialize
 {source_commands}/gps/pos/type Plane
 /gps/pos/shape Circle
-/gps/pos/centre 0 0 {-1.1 * radius_cm} cm
-/gps/pos/radius {radius_cm} cm
+/gps/pos/centre 0 0 {-1.1 * radius_cm:.17e} cm
+/gps/pos/radius {radius_cm:.17e} cm
 /gps/direction 0 0 1
 /gps/ene/type Pow
 /gps/ene/alpha -1
-/gps/ene/min {edges[0]} MeV
-/gps/ene/max {edges[-1]} MeV
+/gps/ene/min {edges[0]:.17e} MeV
+/gps/ene/max {edges[-1]:.17e} MeV
 /run/beamOn {events_per_chunk}
 """
     (directory / "calibration.chunk.mac").write_text(macro)

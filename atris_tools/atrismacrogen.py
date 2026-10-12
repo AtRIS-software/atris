@@ -112,13 +112,13 @@ def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,output_dir="./atris/simulat
     lines += "/gps/hist/type energy\n"
     bins   = thebins*fact
     np.savetxt(os.path.join(output_dir, name + '.bins'), bins)
-    lines += "/gps/hist/point %.9f %.9f\n"%(bins[0],0.0)
+    lines += "/gps/hist/point %.17e %.17e\n"%(bins[0],0.0)
     for thebin in bins[1:]:
-        lines += "/gps/hist/point %.9f %.9f\n"%(thebin,1.0)
+        lines += "/gps/hist/point %.17e %.17e\n"%(thebin,1.0)
     lines += "/gps/pos/type Surface\n"
     lines += "/gps/pos/shape Sphere\n"
     lines += "/gps/pos/centre 0 0 0 m\n"
-    lines += "/gps/pos/radius %.3f km\n"%radius #THIS HAS TO BE CONFIGURED MANUALLY!
+    lines += "/gps/pos/radius %.17e km\n"%radius
     lines += "/gps/ang/type cos\n"
     lines += "/gps/ang/mintheta 0 deg\n"
     lines += "/gps/ang/maxtheta 90 deg\n"

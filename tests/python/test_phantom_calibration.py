@@ -157,7 +157,7 @@ def test_ion_source_sets_isotope_charge_and_ground_state(tmp_path):
     prepare_water_phantom(tmp_path, [12, 120], particle="ion", ion=ion)
     macro = (tmp_path / "calibration.chunk.mac").read_text()
     assert "/gps/particle ion\n/gps/ion 6 12 6 0\n" in macro
-    assert "/gps/ene/min 12.0 MeV" in macro
+    assert f"/gps/ene/min {12.0:.17e} MeV" in macro
     assert json.loads((tmp_path / "water-phantom.json").read_text())["ion"] == ion
     prepare_water_phantom(tmp_path, [12, 120], particle="ion", ion=ion)
     with pytest.raises(FileExistsError):

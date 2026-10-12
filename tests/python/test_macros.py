@@ -35,7 +35,7 @@ def test_macro_defaults_generate_expected_sampling(tmp_path, monkeypatch, interf
     for species, events in [("protons", 605000), ("alphas", 399300)]:
         macro = (tmp_path / f"{species}.mac").read_text()
         assert f"/run/beamOn {events}\n" in macro
-        assert "/gps/pos/radius 1.001 km\n" in macro
+        assert f"/gps/pos/radius {1.001:.17e} km\n" in macro
         assert "/gps/ang/type cos\n" in macro
         assert "/run/setCut 100. m\n" in macro
     assert not (tmp_path / "phantoms.txt").exists()
@@ -77,7 +77,7 @@ def test_macro_generation_is_reproducible_and_preserves_requested_counts(tmp_pat
     assert "/gps/particle alpha" in alpha_macro
     assert "/run/beamOn 6" in proton_macro
     assert "/run/beamOn 3" in alpha_macro
-    assert "/gps/pos/radius 1.001 km" in proton_macro
+    assert f"/gps/pos/radius {1.001:.17e} km" in proton_macro
     assert re.search(r"^/random/setSeeds \d{2,6} \d{2,6}$", proton_macro, re.MULTILINE)
     assert re.search(r"^/random/setSeeds \d{2,6} \d{2,6}$", alpha_macro, re.MULTILINE)
 
@@ -116,15 +116,15 @@ def test_psf_conversion_preserves_reviewed_layer_geometry(tmp_path, monkeypatch)
 
     def layer_geometry(root):
         return [
-            (sphere.attrib["rmin"], sphere.attrib["rmax"])
+            (float(sphere.attrib["rmin"]), float(sphere.attrib["rmax"]))
             for sphere in root.findall("./solids/sphere")
         ]
 
     assert layer_geometry(generated) == [
-        ("0.000000", "1.000000"),
-        ("1.000000", "2.000000"),
+        (0, 1),
+        (1, 2),
     ]
-    assert layer_geometry(reviewed) == [("0", "1"), ("1", "2")]
+    assert layer_geometry(reviewed) == [(0, 1), (1, 2)]
     assert [
         auxiliary.attrib["auxvalue"]
         for auxiliary in generated.findall("./structure/volume/auxiliary")

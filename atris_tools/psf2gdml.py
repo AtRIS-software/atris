@@ -163,7 +163,7 @@ def line_processor(filename):
         thetamax = thetamax - thetamin
         if np.abs(thetamax -np.pi) < 0.01: thetamax = "PI"
         if thetamax == 2.0: thetamax = "PI"
-        sphere   = '\t<sphere name="%s" rmin="%f" rmax="%f" startphi="%.4f" deltaphi="%s" starttheta="%.4f" deltatheta="%s" lunit="km" aunit="rad"/>\n'%(solname,rmin,rmax,phimin,str(phimax),thetamin,str(thetamax))
+        sphere   = '\t<sphere name="%s" rmin="%.17e" rmax="%.17e" startphi="%.17e" deltaphi="%s" starttheta="%.17e" deltatheta="%s" lunit="km" aunit="rad"/>\n'%(solname,rmin,rmax,phimin,str(phimax) if isinstance(phimax, str) else format(phimax, '.17e'),thetamin,str(thetamax) if isinstance(thetamax, str) else format(thetamax, '.17e'))
         geometry.append(sphere)
         struct.append(['volume'+str(sdid),name,solname,sdid])
     wrld = data[-1, OUTER_RADIUS]
@@ -195,7 +195,7 @@ def gdml_compile(materials, world, geometry, structure, filename):
     finalfile += "<solids>\n"
     #add the world
     wd         = world * 2
-    add        = '\t<box name="WorldBox" x="%f" y="%f" z="%f" lunit="km"/>\n'%(wd,wd,wd)
+    add        = '\t<box name="WorldBox" x="%.17e" y="%.17e" z="%.17e" lunit="km"/>\n'%(wd,wd,wd)
     finalfile += add
     
     for vol in geometry:

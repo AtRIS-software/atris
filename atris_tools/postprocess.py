@@ -235,7 +235,7 @@ def make_output(
     sdid = geometry["sdid"][1:-1, None]
     extensions = [".dose", ".equi", ".rates"]
     number_format = ["%.5e"] * data[3].shape[1]
-    number_format = ["%8.3f"] + number_format
+    number_format = ["%.17e"] + number_format
     number_format = ["%5i"] + number_format
     phantom_start = 3 + len(atmospheric_extensions)
     outputs = [

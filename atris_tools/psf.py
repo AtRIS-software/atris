@@ -37,7 +37,7 @@ class PSF:
         """Return NumPy formats preserving geometry and integer columns."""
         formats = [value_format] * self.layers.shape[1]
         for column in GEOMETRY_COLUMNS:
-            formats[column] = "%s"
+            formats[column] = "%.17e"
         formats[DETECTOR_ID] = formats[STATE] = "%d"
         return formats
 

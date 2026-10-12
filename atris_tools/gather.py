@@ -279,7 +279,7 @@ def write_histogram(path, header, columns, data, total_plane_sum):
         for line in output_header:
             output.write(line + "\n")
         output.write(columns + "\n")
-        formats = ["%.0f"] + ["%.17g"] * (data.shape[1] - 1)
+        formats = ["%.0f"] + ["%.17e"] * (data.shape[1] - 1)
         np.savetxt(output, data, delimiter=",", fmt=formats)
 
 
