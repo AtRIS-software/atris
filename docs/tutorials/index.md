@@ -10,6 +10,7 @@ earth-nrlmsis-full
 run-earth-simulation
 earth-spectrum-folding
 exoplanet-psf
+water-phantom
 ```
 
 ## Earth simulation
@@ -34,3 +35,12 @@ atmosphere with NumPy, plots its profiles, and writes `simulation.psf`.
 This Jupyter notebook is at `docs/tutorials/exoplanet-psf.ipynb`.
 [View notebook](exoplanet-psf.ipynb) or download
 {download}`exoplanet-psf.ipynb <exoplanet-psf.ipynb>`.
+
+## Create a phantom
+
+[Create a water-sphere phantom](water-phantom.ipynb) builds a 15 cm water sphere,
+calculates its response in Geant4, and writes loadable phantom tables. It shows
+named-particle and ion sources, starting with a proton comparison against the
+supplied library. The notebook is at `docs/tutorials/water-phantom.ipynb`.
+[View notebook](water-phantom.ipynb) or download
+{download}`water-phantom.ipynb <water-phantom.ipynb>`.

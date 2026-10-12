@@ -1,6 +1,79 @@
 # Known bugs
 
-This file records confirmed defects that have not yet been fixed.
+This page records unresolved defects, possible bugs awaiting confirmation,
+and corrections that affect existing simulation results.
+
+## Mixed units in phantom response tables
+
+The supplied radiation tables show evidence of two quantities. Older
+`*_old_response.txt` files and the biological (`bact`, `cell`, `sbug`) tables
+store dimensionless energy fractions. Later ICRU and RAMONA tables store
+deposited energy in MeV, as shown in the
+[archived phantom analysis](reference/notebooks/explorer_v2.ipynb).
+The files did not declare this distinction.
+
+The C++ reader passes both quantities directly to the scorer, which
+multiplies them by the crossing particle's kinetic energy in eV. That is
+appropriate for a fraction, but applies an extra energy factor to a value
+already representing deposited energy. The resulting error depends on the
+crossing particle's energy; it is not a single scale factor for the whole run.
+
+See the [response-table format](reference/inputs.md#phantom-response-matrices).
+
+This mismatch affects `h2.dosN`, `h2.equiN`, and their processed dose and
+radiation-weighted results. Gathering or post-processing them again cannot
+correct it: recalculating these
+responses requires rerunning transport. Counting responses, particle transport,
+and atmospheric energy-deposit histograms are unaffected.
+
+Energy-fraction tables are kept in `phantoms/`; deposited-energy tables are
+kept separately in `phantoms/MeV-valued/`. The
+[phantom reference](reference/phantom-library.md) describes the example inputs.
+
+### Differences between old and new phantom tables
+
+The older and newer ICRU tables predict different deposited energies even
+when compared in the same units. Their generation settings have not been
+recovered, so the cause remains unresolved.
+
+The old unshielded ICRU response is also zero below roughly 60 keV for
+protons, electrons, and alpha particles despite its `0.000MeV` filename.
+Several old RAMONA tables labelled `0.000MeV` and `0.060MeV` contain identical
+values. The threshold labels therefore do not consistently describe the old
+response tables.
+
+## Possible radiation-weighting bug
+
+The radiation weights in `src/SensitiveDetector.cc` resemble the prescription
+in [ICRP Publication 103](https://www.maff.go.jp/e/policies/market/reference/attach/pdf/reference-25.pdf),
+Table 2 and Equation 4.3, but differ in three places:
+
+- The low-energy neutron branch starts with `3.5`, whereas the ICRP formula
+  starts with `2.5`.
+- Each neutron branch squares the energy expression inside the logarithm,
+  producing $\ln(x^2)$ rather than $(\ln x)^2$. Here $x$ is the branch's
+  dimensionless energy expression: $e$, $2e$, or $0.04e$, with
+  $e=E_{\mathrm{kin}}/(1\,\mathrm{MeV})$. These are different functions, not
+  equivalent ways of writing the same formula.
+- The pion condition applies weight `2` to neutral pions (PDG `111`), not
+  charged pions (PDG `211` and `-211`), which are the pions specified by ICRP.
+
+[Banjac et al. (2019), Section 4](https://doi.org/10.1029/2019JA026622),
+cites both ICRP 60 and ICRP 103 for the energy-dependent neutron weight, but
+does not reproduce the piecewise formula or explain these differences.
+
+If ICRP 103 is the intended prescription, these differences are possible
+formula-transcription and particle-selection bugs. The intended prescription
+has not yet been confirmed, and the calculation remains unchanged.
+
+The affected outputs are the raw `h2.equiN` histograms, processed `.equiN`
+tables, and quantities derived from them. These weighting differences do not
+affect Geant4 particle transport, `.doseN`, `.ratesN`, `.ioni`, or `.edep`.
+They cannot be corrected in the combined `.equiN` table, which no longer
+separates contributions by crossing particle species and energy.
+See [radiation-weighted response](background/radiation-quantities.md#radiation-weighted-response)
+for the calculation's purpose and [radiation weighting as implemented](reference/outputs.md#radiation-weighting-as-implemented)
+for the exact current formula.
 
 ## Primary energies are sampled linearly inside logarithmic bins
 

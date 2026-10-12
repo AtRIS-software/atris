@@ -54,10 +54,10 @@ The example's atmosphere, plotted from `simulation.psf`. The steps follow the
 
 ## Prepare the phantom inputs
 
-Phantom tables let us estimate detector counts and dose from the particles
-crossing each atmospheric layer. This example uses a RAMONA detector and an
-ICRU water sphere. Skip this step if you only need energy deposition in the
-atmosphere.
+Phantom tables let us estimate dose and detector counts from particles crossing
+each atmospheric layer. This example uses the original RAMONA silicon detector
+A and ICRU water-sphere tables, both without added shielding.
+Skip this step if you only need energy deposition in the atmosphere.
 
 Copy the selection file and prepare its tables:
 
@@ -68,20 +68,24 @@ atris-stage-phantoms . --copy
 
 | Reads | Creates |
 | --- | --- |
-| `phantoms.txt`, selected tables in `$ATRIS_ROOT/phantoms` | Local named response/counting tables and four numbered symlinks |
+| `phantoms.txt`, selected tables in `$ATRIS_ROOT/phantoms` | Local response/counting tables and four numbered symlinks |
 
-`phantoms.txt` selects the tables and records each phantom's mass and area.
-Staging connects their descriptive filenames to the numbered names read by AtRIS:
+`phantoms.txt` records each phantom's mass and area. Staging connects its named
+tables to the numbered inputs read by AtRIS:
 
 ```text
-radiation_phantom0.txt -> ramona_zero_0.060MeV_detA_response.txt
-counting_phantom0.txt  -> ramona_zero_0.060MeV_detA_counting.txt
-radiation_phantom1.txt -> icru_zero_0.000MeV_detAB_response.txt
-counting_phantom1.txt  -> icru_zero_0.000MeV_detAB_counting.txt
+radiation_phantom0.txt -> ramona_zero_0.060MeV_detA_old_response.txt
+counting_phantom0.txt  -> ramona_zero_0.060MeV_detA_old_counting.txt
+radiation_phantom1.txt -> icru_zero_0.000MeV_detAB_old_response.txt
+counting_phantom1.txt  -> icru_zero_0.000MeV_detAB_old_counting.txt
 ```
 
-`--copy` keeps the link targets inside the run directory, so the directory can
-be transferred as a whole. Inspect them with
+The responses use the supplied `_old` energy-fraction tables. The corresponding
+`_old_counting.txt` names are aliases of the original `_counting.txt` files,
+containing the supplied counting efficiencies. The [phantom reference](../reference/phantom-library.md#existing-earth-example)
+gives the geometry and file pairing.
+
+`--copy` keeps the link targets inside the run directory. Inspect them with
 `ls -l radiation_phantom*.txt counting_phantom*.txt`.
 The tables score [phantom responses](../background/radiation-quantities.md#phantom-responses)
 during transport; they do not add detector volumes to the geometry.

@@ -144,10 +144,10 @@ when the selection was staged during preparation:
 
 ```text
 protons.inputs.png                       # source and atmosphere inputs
-phantom.ramona_zero_0.060MeV_detA.inputs.png
+phantom.ramona_zero_0.060MeV_detA_old.inputs.png
 protons.png                              # source diagnostics and ionization
-protons.ramona_zero_0.060MeV_detA.png       # phantom 0 responses
-protons.icru_zero_0.000MeV_detAB.png        # phantom 1 responses
+protons.ramona_zero_0.060MeV_detA_old.png   # phantom 0 responses
+protons.icru_zero_0.000MeV_detAB_old.png    # phantom 1 responses
 ```
 
 There are corresponding alpha plots. The numerical results remain in the

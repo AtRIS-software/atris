@@ -156,7 +156,7 @@ Estimating atmospheric heating still requires a physical incident spectrum and
 an assumption about how much deposited energy thermalizes as heat.
 
 The code does not convert eV/g to Gy or apply a source flux or an ion-pair
-creation energy. If the supplied radiation coefficients are dimensionless
+creation energy. With radiation tables containing the expected dimensionless
 energy fractions, `.doseN` has units eV g⁻¹ primary⁻¹; the conversion to
 Gy primary⁻¹ would multiply by `1.602176634e-16`. The equivalent response has
 the corresponding radiation-weighted units. Coefficient normalization and the
@@ -205,7 +205,12 @@ PDG codes `2212` and `111`, and 20 for supported positive heavy-ion codes in
 the phantom header. Thus the pion condition here specifically names neutral
 pions; it is not a test for every pion species.
 
-For neutrons, with $e$ equal to kinetic energy in MeV, the implemented weight is:
+The weight uses the crossing particle's species and kinetic energy, including
+secondary particles. The histogram's energy axis instead records the initiating
+primary's energy. The physical meaning and calculation sequence are explained
+under [radiation-weighted response](../background/radiation-quantities.md#radiation-weighted-response).
+
+For neutrons, with $e=E_{\mathrm{kin}}/(1\,\mathrm{MeV})$, the implemented weight is:
 
 $$
 w(e)=\begin{cases}
@@ -215,10 +220,9 @@ w(e)=\begin{cases}
 \end{cases}
 $$
 
-Here $\ln$ is the natural logarithm. These expressions describe the source
-literally, including the placement of the square inside the logarithm; they
-are not a statement that the implementation matches a particular radiation
-protection standard.
+Here $\ln$ is the natural logarithm. The differences from ICRP Publication 103,
+including the square inside the logarithm, are recorded as a
+[possible radiation-weighting bug](../known-bugs.md#possible-radiation-weighting-bug).
 
 (root-output)=
 

@@ -43,6 +43,10 @@ interfaces; selecting a table does not insert a physical detector into the
 planetary geometry or alter the surrounding particle transport. Choose a table
 that represents the material and detector response you want to study. The
 [phantom library](../reference/phantom-library.md) describes the supplied examples.
+The calculation of energy-response tables and their use for absorbed and
+radiation-weighted dose are described by
+[Banjac et al. (2019)](https://doi.org/10.1029/2019JA026622), which extends the
+original AtRIS description with the phantom method and a balloon-data comparison.
 The [runtime discussion](what-determines-runtime.md#phantom-responses)
 explains the additional scoring, memory, and output costs of selecting phantoms.
 
@@ -58,23 +62,39 @@ AtRIS's phantom dose response is calculated from particles crossing an
 interface and the selected phantom's response table. It is distinct from the
 energy deposited directly in an atmospheric shell. The post-processor applies
 primary-count, phantom-mass, and area normalization, but does not convert the
-result to gray or apply a physical source flux. If a table uses dimensionless
-energy fractions, its processed energy-per-mass response is in eV g$^{-1}$
-per primary. Check the table's normalization before converting units.
-
-The phantom lookup-table approach is described by
-[Banjac et al. (2019)](https://doi.org/10.1029/2019JA026622).
+result to gray or apply a physical source flux. With the expected energy-fraction
+tables, the processed response is in eV g$^{-1}$ per primary.
 
 ## Radiation-weighted response
 
-The `.equiN` output applies the radiation weights implemented in AtRIS to the
-phantom response. It is intended to distinguish radiation types, rather than
-treat equal deposited energies as interchangeable. It is not effective dose,
-which requires tissue weighting and an appropriate anatomical model.
+Equal absorbed doses from different radiation types can have different
+biological effects. Radiation protection accounts for this using dimensionless
+weights $w_R$. The corresponding [equivalent dose](https://icrpaedia.org/Equivalent_dose)
+is $H=\sum_R w_R D_R$, where $D_R$ is the absorbed dose from radiation type $R$.
 
-For interpretation, use the [implemented weighting formula](../reference/outputs.md#radiation-weighting-as-implemented).
-That reference documents the code literally; do not assume the implementation
-matches a radiation-protection standard solely from the output's name.
+The `.equiN` files contain AtRIS's radiation-weighted phantom response. At each
+interface crossing, AtRIS looks up the phantom's energy response for the
+crossing particle's species and kinetic energy. It multiplies that contribution
+by a radiation weight before adding it to the histogram. The weights are
+implemented in AtRIS, separately from the phantom tables and Geant4 transport.
+
+For example, `protons.equi1` describes showers initiated by protons, scored
+for phantom 1 (the water sphere in the Earth example). Secondary neutrons,
+photons, and other supported particles contribute with their own weights;
+the result is therefore not simply `protons.dose1` multiplied by the proton
+weight. Rows give altitude and columns give incoming primary energy, as in
+the [other processed response tables](../reference/outputs.md#processed-response-tables).
+
+Gathering sums the raw histograms. Post-processing applies the same primary-count,
+mass, and area normalization as for `.doseN`.
+`.equiN` is in radiation-weighted eV g$^{-1}$ per primary; a physical dose rate
+still requires unit conversion and an incident spectrum. It is not effective
+dose, which also requires tissue weighting and an anatomical model.
+
+The current weights differ from ICRP Publication 103 in the neutron formula and
+pion selection. See the [possible radiation-weighting bug](../known-bugs.md#possible-radiation-weighting-bug)
+for these discrepancies and the [output reference](../reference/outputs.md#radiation-weighting-as-implemented)
+for the exact implemented formula.
 
 ## Counts and count rates
 
@@ -82,17 +102,18 @@ The counting table supplies the detector response for a crossing particle,
 recorded in `.ratesN` after post-processing. Different detector tables can
 produce different counting responses to the same transported particle field.
 
-```{figure} ../images/earth-example/protons.icru_zero_0.000MeV_detAB.png
+```{figure} ../images/earth-example/protons.icru_zero_0.000MeV_detAB_old.png
 :name: earth-phantom-responses
-:alt: Three energy-altitude response matrices for the ICRU phantom: absorbed dose, radiation-weighted dose, and counting response to proton-initiated showers.
+:alt: Three energy-altitude response matrices for the ICRU water sphere: absorbed dose, radiation-weighted dose, and counting response to proton-initiated showers.
 :width: 100%
 
-The ICRU phantom's responses to proton-initiated showers in the Earth example:
-absorbed dose, radiation-weighted dose, and counts. All three are responses per
-simulated primary; physical rates require an incident spectrum and intensity.
+The ICRU water sphere's responses to proton-initiated showers in the Earth example:
+absorbed dose, radiation-weighted dose, and counting response. These are
+responses per simulated primary; physical rates
+require an incident spectrum and intensity.
 ```
 
-[Open the full-size phantom responses](../images/earth-example/protons.icru_zero_0.000MeV_detAB.png).
+[Open the full-size phantom responses](../images/earth-example/protons.icru_zero_0.000MeV_detAB_old.png).
 
 ## Implementation
 

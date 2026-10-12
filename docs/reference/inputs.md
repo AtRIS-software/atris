@@ -218,15 +218,21 @@ spectrum into the results. Such files may be retained as run inputs by
 `phantoms.txt` has four whitespace-separated fields per non-comment line:
 
 ```text
-# ID  stem                          mass_g      area_cm2
-0     ramona_zero_0.060MeV_detA      0.5082      6.928
-1     icru_zero_0.000MeV_detAB       14094.7550  1413.72
+# ID  stem                              mass_g      area_cm2
+0     ramona_zero_0.060MeV_detA_old       0.5082      6.928
+1     icru_zero_0.000MeV_detAB_old        14094.7550  1413.72
 ```
 
 IDs must be unique and contiguous from zero; rows are sorted by ID. Mass is
 in grams and area in cm². Use the area associated with the response table's
 calibration. The parser accepts numeric mass and area values without checking
 that they are positive; post-processing requires physically valid values.
+
+For the water sphere, the effective area is $2\pi r^2$, half its total surface
+area and twice its projected area. This converts interface crossings to sphere
+interceptions for an isotropic field; it does not mean that only half the sphere
+is exposed. The [water-phantom notebook](../tutorials/water-phantom.ipynb#why-the-effective-area-is-twice-the-projected-area)
+derives the factor.
 
 For each stem, staging locates `<stem>_response.txt` and `<stem>_counting.txt`
 in the run directory first, then the archive. It creates numbered relative
@@ -236,19 +242,45 @@ in the Python tools; direct AtRIS runs still load the requested phantom count.
 
 ## Phantom response matrices
 
-Each table starts with an uncommented, whitespace-separated list of integer
-PDG particle codes. Every subsequent particle row contains 650 coefficients,
-in the same particle order as the header. All loaded radiation and counting
-tables must have identical PDG headers. The executable expects
-`650 × number_of_PDG_codes` numeric values per table; a wrong count is reported
-but does not reliably stop execution.
+The first non-comment line is a whitespace-separated list of integer
+PDG particle codes. Each particle row contains 650 coefficients, in the same
+order as the header. All loaded radiation and counting tables must have
+identical PDG headers. Empty or mismatched PDG headers stop the run before
+transport. A wrong total coefficient count is reported but does not reliably
+stop execution.
+
+Lines beginning with `#` document the table. They can precede the PDG line or
+appear between particle rows. New tables declare their quantity in a comment:
+
+```text
+# AtRIS phantom table
+# material: liquid water; H2O (2 H atoms per O atom)
+# radius_cm: 0.0004
+# density_g_cm3: 0.997
+# atris_quantity: energy_fraction
+22 2212
+```
+
+The C++ reader assumes radiation coefficients are energy fractions and counting
+coefficients are counting efficiencies. It reads their values unchanged and
+ignores all comments, including `atris_quantity`.
+`PhantomTable.read` in the Python tools follows the same convention: it
+preserves the coefficients and keeps comments as descriptive metadata.
+
+The phantom writer also records the dimensions, mass, geometric and
+effective areas, source sampling, production cut, tracking settings, counting
+threshold, normalization, completed chunk seeds and software versions. It
+identifies the companion sampling file and explains its counts and standard
+errors. Unknown generation settings are labelled `not recorded`. The Python
+reader retains comment fields; C++ ignores them. These comments do not configure the
+simulation or replace the mass and area in `phantoms.txt`.
 
 The fixed energy edges are `10**linspace(-6, 7, 651)` MeV: 1 eV to 10 TeV,
 with 0.02 spacing in log10 energy. The lookup uses
 `max(0, int(log10(kinetic_energy/eV) / 0.02))`, without interpolation or an
 upper-bound clamp. Keep energies inside the represented range.
 
-Radiation coefficients multiply the crossing particle's kinetic energy in eV;
+The radiation coefficients multiply the crossing particle's kinetic energy in eV;
 counting coefficients are accumulated directly. See the
 [normalization formulas](outputs.md#processed-response-tables). A dummy counting
 table created with `--accept-missing-counting` contains ones and represents
