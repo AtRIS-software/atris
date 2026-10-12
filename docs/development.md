@@ -39,6 +39,110 @@ established before removal. Preserve the source data while resolving that
 history. The [phantom library reference](reference/phantom-library.md) contains
 the available examples, historical notes, and original exploration notebook.
 
+## Future development: propagate phantom uncertainty
+
+AtRIS should propagate the sampling uncertainty of a calibrated phantom through
+an atmospheric response calculation without storing individual calibration
+events or interface crossings. This is distinct from uncertainty in Geant4's
+physics models, the atmosphere, or a later physical source spectrum. Transport
+sampling uncertainty and phantom-calibration uncertainty should remain separate
+quantities so that their origins are clear.
+
+### Retain compact calibration statistics
+
+Phantom-calibration mode already accumulates the quantities needed for one
+scoring volume and particle-energy cell: the primary count $N$, the sum $S$ of
+deposited-energy fractions, the squared sum $Q$, and the detected-primary count
+$K$. These give the mean response, its sampling variance and standard error,
+and the counting efficiency with its sampling uncertainty. Keep these
+mergeable accumulators rather than individual events or a covariance value
+calculated before all chunks have been gathered.
+
+A calibration with several scoring volumes may also retain the cross-product
+
+$$
+Q_{ab}=\sum_i x_{i,a}x_{i,b}
+$$
+
+for each required pair of volumes $a$ and $b$. Together with $N$, $S_a$, and
+$S_b$, this gives the sample covariance after gathering. Store only one
+triangle because $Q_{ab}=Q_{ba}$, and create cross-products only for explicitly
+related detector channels. This avoids quadratic growth for geometries whose
+volumes do not need a joint uncertainty estimate.
+
+Use ROOT as the compact scientific record for the calibration axes, particle
+codes, accumulators, metadata, and optional cross-products. Do not add separate
+NPZ and JSON representations of the same result. Until the C++ phantom loader
+is deliberately replaced, retain the existing `_response.txt` and
+`_counting.txt` matrices as the small backward-compatible runtime inputs. They
+can be generated from the calibrated result; the ROOT record retains the
+statistics needed for later analysis. The runtime matrix sizes therefore do
+not grow when uncertainty information is added.
+
+### Retain response sensitivities
+
+The normal response output currently contains the final sum after a phantom
+coefficient has been applied. That sum does not reveal how strongly each
+particle-energy cell of the phantom table contributed. Add an optional sparse
+sensitivity product indexed by primary-energy bin, atmospheric interface,
+secondary-particle code, and secondary-energy bin. Each occupied row needs
+three mergeable accumulators:
+
+- the number of crossings, which multiplies the counting coefficient;
+- the sum of crossing kinetic energies, which multiplies the energy-response
+  coefficient; and
+- the sum of radiation-weighted crossing kinetic energies, which multiplies
+  the same coefficient for the equivalent-response result.
+
+These transport sensitivities are common to compatible phantoms and should not
+be duplicated once per selected phantom. Store them as a sparse ROOT object,
+not as per-crossing or per-event records. Measure their size and runtime cost
+on a representative atmospheric run before deciding whether they should be
+enabled by default.
+
+For an output bin with response-table coefficients $r_j$ and accumulated
+sensitivities $W_j$, the phantom contribution is
+
+$$
+Y=\sum_j W_jr_j.
+$$
+
+With a coefficient covariance matrix $C$, its calibration variance is
+
+$$
+\operatorname{Var}(Y)=\boldsymbol{W}^{\mathsf T}C\boldsymbol{W}.
+$$
+
+When only the individual coefficient variances are available, the tools may
+calculate the diagonal approximation $\sum_j W_j^2\operatorname{Var}(r_j)$,
+but must identify the omitted covariance rather than silently treating it as
+known to be zero. The same calculation applies to counting and
+radiation-weighted responses using their corresponding sensitivities.
+
+Gather sensitivities by adding their raw accumulators across chunks before
+calculating a variance. The same uncertain phantom coefficient is reused in
+every chunk, so calculating a variance independently in each chunk and adding
+those variances would omit cross terms. A gathered response may still be
+produced from old or mixed chunks, but propagated phantom uncertainty is
+available only when the complete gathered set has compatible sensitivity data.
+
+### Retain transport sampling moments
+
+Phantom-table uncertainty is not the Monte Carlo uncertainty of the atmospheric
+transport. The current response histograms are filled at particle crossings,
+and their `Sw2` values treat those correlated crossings as separate fills. To
+estimate transport sampling uncertainty, accumulate each primary history's
+total contribution to each output bin and retain its first and second moments.
+These fixed-size moments can be gathered by addition and used independently of
+the phantom-calibration covariance.
+
+Keep the established response histogram names and numerical meanings unchanged.
+Add new uncertainty products under versioned names and record the schema in
+their ROOT metadata. Existing phantom tables and response files must remain
+readable; when the additional statistics are absent, the tools should report
+that the corresponding uncertainty is unavailable rather than infer it from
+crossing-level `Sw2` values.
+
 ## Simulation preparation interface
 
 Physics-list and output-mode choices currently reach the simulation through
