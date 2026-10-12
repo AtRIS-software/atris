@@ -307,16 +307,15 @@ atris-dump protons.root steps | head
 | Filename | Contents |
 | --- | --- |
 | `<species>.inputs.png` | Source and geometry inputs |
-| `phantom.<name>.radiation.inputs.png` | Mean deposited-energy fraction and deposited ionizing energy, with a sanitized phantom name |
-| `phantom.<name>.counting.inputs.png` | Counting efficiency versus incident kinetic energy |
+| `phantom.<name>.inputs.png` | Counting efficiency and mean deposited-energy fraction, with constant deposited-energy guides and a sanitized phantom name |
 | `<species>.png` | Source diagnostics and processed ionization |
 | `<species>.<phantom-stem>.png` | Processed phantom responses |
 | `<species>.interfaces.png` | Interface-crossing diagnostics |
 | `<species>.steps.png`, `<species>.shower.png` | Step summary and shower visualization |
 | `<species>.convergence.png` | Gathered ionization convergence diagnostics |
 
-Unnamed phantom input plots use `phantom-N.radiation.inputs.png` and
-`phantom-N.counting.inputs.png`. Each available table is plotted independently.
+Unnamed phantom input plots use `phantom-N.inputs.png`. Each available response
+table contributes one row to the combined image.
 The old combined `phantom.<name>.inputs.png` is no longer generated; existing
 copies are left untouched. The plot command
 inspects canonical `protons` and `alphas` products in the selected directory;

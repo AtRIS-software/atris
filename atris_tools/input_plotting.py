@@ -486,18 +486,24 @@ def read_phantom_table(filename, *, counting=False):
     return table.pdg_codes, table.coefficients
 
 
-def plot_phantom_inputs(phantom_id, phantom_name, *, counting=False):
-    """Plot one response table, without requiring its companion table."""
-    prefix = "counting" if counting else "radiation"
-    table = PhantomTable.read(
-        "%s_phantom%i.txt" % (prefix, phantom_id), counting=counting
-    )
-    groups = _particle_groups(table.pdg_codes)
+def plot_phantom_inputs(phantom_id, phantom_name, *, tables=None):
+    """Plot counting and energy retention, one row per available response."""
+    if tables is None:
+        tables = {
+            prefix: PhantomTable.read(path, counting=prefix == "counting")
+            for prefix in ("counting", "radiation")
+            if (path := Path("%s_phantom%i.txt" % (prefix, phantom_id))).is_file()
+        }
+    rows = [(prefix, tables[prefix]) for prefix in ("counting", "radiation") if prefix in tables]
+    if not rows:
+        raise ValueError("No phantom response tables available")
+    codes = np.array(list(dict.fromkeys(int(code) for _, table in rows for code in table.pdg_codes)))
+    groups = _particle_groups(codes)
     group_titles = ("Particles", "Nuclei")
     figure, axes = plt.subplots(
         ncols=2,
-        nrows=1 if counting else 2,
-        figsize=(14, 9) if counting else (14, 12),
+        nrows=len(rows),
+        figsize=(16, 9) if len(rows) == 1 else (16, 12),
         sharex=True,
         sharey="row",
         squeeze=False,
@@ -507,68 +513,74 @@ def plot_phantom_inputs(phantom_id, phantom_name, *, counting=False):
             colors = plt.get_cmap("tab20")(np.arange(len(indices)) % 20)
         else:
             colors = plt.get_cmap("turbo")(np.linspace(0.05, 0.95, len(indices)))
-        relative_axis = axes[0, column]
-        if not counting:
-            relative_axis.axhline(1.0, color="0.25", linestyle=":", linewidth=1.0)
-            axes[1, column].plot(
-                PHANTOM_ENERGIES_MEV, PHANTOM_ENERGIES_MEV,
-                color="0.25", linestyle=":", linewidth=1.0,
-            )
         for color, index in zip(colors, indices):
-            code = table.pdg_codes[index]
+            code = codes[index]
             label = particle_symbol(code)
             if abs(code) < ION_PDG_BASE:
                 name = "pion" if code == 111 else particle_name(code).rstrip("+-")
                 label += " " + name
-            values = table.coefficients[index]
-            relative_axis.plot(
-                PHANTOM_ENERGIES_MEV,
-                values if counting else np.where(values > 0, values, np.nan),
-                color=color,
-                linewidth=1.0,
-                label=label,
-            )
-            if not counting:
-                deposited = table.deposited_energy_MeV[index]
-                axes[1, column].plot(
+            for row, (prefix, table) in enumerate(rows):
+                matches = np.flatnonzero(table.pdg_codes == code)
+                if not matches.size:
+                    continue
+                values = table.coefficients[matches[0]]
+                axes[row, column].plot(
                     PHANTOM_ENERGIES_MEV,
-                    np.where(deposited > 0, deposited, np.nan),
+                    values if prefix == "counting" else np.where(values > 0, values, np.nan),
                     color=color, linewidth=1.0, label=label,
                 )
 
-        relative_axis.set_title(group_title)
-        for axis in axes[:, column]:
+    # Finish plotting both species groups before fixing shared axis limits.
+    for column, group_title in enumerate(group_titles):
+        axes[0, column].set_title(group_title)
+        for row, (prefix, _) in enumerate(rows):
+            axis = axes[row, column]
             axis.set_xscale("log")
-            if not counting:
+            if prefix == "radiation":
                 axis.set_yscale("log")
             axis.grid(alpha=0.25)
-        if not counting:
-            lower, upper = relative_axis.get_ylim()
-            first_power = 2 * int(np.floor(np.log10(lower) / 2))
-            last_power = 2 * int(np.ceil(np.log10(upper) / 2))
-            relative_axis.yaxis.set_major_locator(
-                FixedLocator(10.0 ** np.arange(first_power, last_power + 1, 2))
-            )
-        axes[-1, column].set_xlabel("Incident kinetic energy [MeV]")
-        if counting:
-            relative_axis.set_yscale("linear")
-
-    axes[0, 0].set_ylabel(
-        "Counting efficiency" if counting else "Mean deposited-energy fraction"
-    )
-    if not counting:
-        axes[1, 0].set_ylabel("Mean deposited ionizing energy [MeV]")
+            if prefix == "radiation":
+                lower, upper = axis.get_ylim()
+                first_power = 2 * int(np.floor(np.log10(lower) / 2))
+                last_power = 2 * int(np.ceil(np.log10(upper) / 2))
+                axis.yaxis.set_major_locator(
+                    FixedLocator(10.0 ** np.arange(first_power, last_power + 1, 2))
+                )
+                xlimits = axis.get_xlim()
+                for exponent in (-3, 0, 3, 6):
+                    energy = 10.0 ** exponent
+                    label_y = energy / xlimits[1]
+                    if not lower < label_y < upper:
+                        continue
+                    guide_x = np.asarray(xlimits)
+                    axis.plot(guide_x, energy / guide_x, color="0.25",
+                              linestyle=":", linewidth=1.0, zorder=0)
+                    if column == 1:
+                        axis.text(1.01, label_y, rf"$10^{{{exponent}}}$ MeV",
+                                  transform=axis.get_yaxis_transform(),
+                                  ha="left", va="center", clip_on=False)
+                axis.set_xlim(xlimits)
+                axis.set_ylim(lower, upper)
+                axis.axhline(1.0, color="black", linestyle="-", linewidth=1.0, zorder=0)
+            if column == 0:
+                axis.set_ylabel("Counting efficiency" if prefix == "counting"
+                                else r"Mean deposited-energy fraction $\langle W/K\rangle$")
+        axes[-1, column].set_xlabel(r"Incident kinetic energy $K$ (MeV)")
     display_name = phantom_name or "Phantom %i" % phantom_id
-    response_name = "Counting response" if counting else "Ionizing-energy response"
-    figure.suptitle(display_name + " | " + response_name)
-    legend_top = 0.14 if counting else 0.10
-    figure.tight_layout(rect=(0, 0.17 if counting else 0.13, 1, 0.97))
+    figure.suptitle(display_name + " | Phantom response")
+    legend_top = 0.14 if len(rows) == 1 else 0.10
+    figure.tight_layout(rect=(0, 0.17 if len(rows) == 1 else 0.13, .96, 0.97))
     for column, indices in enumerate(groups):
         if not indices:
             continue
         axis = axes[0, column]
         position = axis.get_position()
+        entries = {}
+        for row_axis in axes[:, column]:
+            handles, labels = row_axis.get_legend_handles_labels()
+            entries.update(zip(labels, handles))
         axis.legend(
+            list(entries.values()), list(entries),
             fontsize=9,
             ncols=min(len(indices), 4 if column == 0 else 8),
             loc="upper center" if column == 0 else "upper left",
@@ -583,9 +595,9 @@ def plot_phantom_inputs(phantom_id, phantom_name, *, counting=False):
         )
     if phantom_name:
         safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", phantom_name)
-        filename = "phantom.%s.%s.inputs.png" % (safe_name, prefix)
+        filename = "phantom.%s.inputs.png" % safe_name
     else:
-        filename = "phantom-%i.%s.inputs.png" % (phantom_id, prefix)
+        filename = "phantom-%i.inputs.png" % phantom_id
     figure.savefig(filename)
     plt.close(figure)
     return filename
@@ -638,13 +650,19 @@ def plot_inputs():
         errors.append("phantom metadata: " + str(error))
     for phantom_id in _input_phantom_ids():
         phantom_name = metadata.get(phantom_id)
+        tables = {}
         for prefix in ("radiation", "counting"):
             if not Path("%s_phantom%i.txt" % (prefix, phantom_id)).is_file():
                 continue
             try:
-                filenames.append(plot_phantom_inputs(
-                    phantom_id, phantom_name, counting=prefix == "counting"
-                ))
+                tables[prefix] = PhantomTable.read(
+                    "%s_phantom%i.txt" % (prefix, phantom_id), counting=prefix == "counting"
+                )
             except Exception as error:
                 errors.append("phantom %i %s inputs: %s" % (phantom_id, prefix, error))
+        if tables:
+            try:
+                filenames.append(plot_phantom_inputs(phantom_id, phantom_name, tables=tables))
+            except Exception as error:
+                errors.append("phantom %i inputs: %s" % (phantom_id, error))
     return filenames, errors

@@ -148,12 +148,22 @@ def test_plot_uses_cpp_fraction_convention_regardless_of_comments(tmp_path, monk
     monkeypatch.setattr(Figure, "savefig", lambda figure, *args: figures.append(figure))
     plot_phantom_inputs(0, "test")
     assert len(figures[0].axes) == 4
-    for axis in figures[0].axes[:2]:
-        np.testing.assert_allclose(axis.lines[0].get_ydata(), [1, 1])
-        np.testing.assert_allclose(axis.lines[1].get_ydata(), values[0])
+    assert figures[0].axes[0].get_ylabel() == "Counting efficiency"
+    assert figures[0].axes[2].get_ylabel() == r"Mean deposited-energy fraction $\langle W/K\rangle$"
+    assert figures[0].axes[2].get_xlabel() == r"Incident kinetic energy $K$ (MeV)"
+    for axis in figures[0].axes[2:]:
+        np.testing.assert_allclose(axis.lines[0].get_ydata(), values[0])
+        assert len(axis.texts) == (len(axis.lines) - 2 if axis is figures[0].axes[3] else 0)
+        np.testing.assert_allclose(axis.lines[-1].get_ydata(), [1, 1])
+        assert axis.lines[-1].get_color() == "black"
+        assert axis.lines[-1].get_linestyle() == "-"
+        for guide in axis.lines[1:-1]:
+            energy = guide.get_xdata() * guide.get_ydata()
+            np.testing.assert_allclose(energy, energy[0])
+            assert np.any(np.isclose(energy[0], [1e-3, 1, 1e3, 1e6]))
         ticks = axis.get_yticks()
         assert 1.0 in ticks
         np.testing.assert_allclose(np.diff(np.log10(ticks)), 2)
-    for axis in figures[0].axes[2:]:
-        np.testing.assert_allclose(axis.lines[0].get_ydata(), ENERGY_CENTRES_MEV)
-        np.testing.assert_allclose(axis.lines[1].get_ydata(), values[0] * ENERGY_CENTRES_MEV)
+    for axis in figures[0].axes[:2]:
+        assert axis.get_yscale() == "linear"
+        np.testing.assert_allclose(axis.lines[0].get_ydata(), fractions[0])
