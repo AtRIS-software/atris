@@ -1,23 +1,32 @@
-# AtRIS documentation
+# AtRIS: Atmospheric Radiation Interaction Simulator
 
-AtRIS (Atmospheric Radiation Interaction Simulator) is a particle-transport
-code for studying radiation in planetary and exoplanetary atmospheres.
-AtRIS was first described in
-[Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
+AtRIS (Atmospheric Radiation Interaction Simulator) is a research code for
+studying radiation in planetary atmospheres and surfaces. It was originally
+described by [Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
+AtRIS follows energetic particles as they pass through an atmosphere and into
+the ground, tracking the secondary particles they produce and the energy they
+leave behind. It uses [Geant4](https://geant4.web.cern.ch/), a toolkit for
+simulating particle interactions with matter. These calculations show how the
+atmosphere and surface shape the radiation reaching different altitudes and
+depths.
 
-The original AtRIS paper has been cited by
-[over 40 peer-reviewed publications](https://ui.adsabs.harvard.edu/search/q=citations%282019JGRA..124...50B%29%20property%3Arefereed).
-AtRIS has been used to study
-[atmospheric ionization on Earth](https://doi.org/10.3390/universe9120502),
-[radiation exposure and subsurface shielding on Mars](https://doi.org/10.1029/2019JE006246),
-[radiation doses in Venus's clouds](https://doi.org/10.1051/0004-6361/201936968),
-and [cosmic-ray effects on atmospheric chemistry and exoplanet biosignatures](https://doi.org/10.1051/0004-6361/201935888).
-
-The transport calculation uses [Geant4](https://geant4.web.cern.ch/), a toolkit for simulating the passage of
-particles through matter. Geant4 provides the models of physical interactions;
-AtRIS defines the planetary environment and incident radiation and records
-the simulation results. For dose and detector-response calculations, AtRIS weights particle
-crossings with precomputed phantom response tables.
+Researchers have used AtRIS to study how cosmic rays affect atmospheric
+chemistry and potential signs of life in the spectra of modern Earth
+([Herbst et al., 2019](https://doi.org/10.1051/0004-6361/201935888)) and
+TRAPPIST-1e ([Herbst et al., 2024](https://doi.org/10.3847/1538-4357/ad0895)).
+It has also been used to compare summer and winter muon fluxes on Earth
+([Al-Qaaod et al., 2025](https://doi.org/10.1029/2025JA034303)) and to
+investigate how Martian soil shields the subsurface from radiation
+([Röstel et al., 2020](https://doi.org/10.1029/2019JE006246)). Dose calculations
+are another application: the phantom method of
+[Banjac et al. (2019)](https://doi.org/10.1029/2019JA026622) estimates the
+energy deposited in a material or detector. Its uses extend from human
+radiation exposure to microbial cells in Venus's clouds
+([Herbst et al., 2020](https://doi.org/10.1051/0004-6361/201936968)). The original
+AtRIS paper has been cited by
+[over 40 peer-reviewed publications](https://ui.adsabs.harvard.edu/search/q=citations%282019JGRA..124...50B%29%20property%3Arefereed);
+[Research applications](background/research-applications.md) gives a fuller
+account of these studies.
 
 ## Working with AtRIS
 

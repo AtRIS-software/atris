@@ -11,6 +11,7 @@ and the response of selected detectors or materials throughout a planetary model
 :hidden:
 
 geant4-and-atris
+research-applications
 software-ecosystem
 planetary-geometry
 physics-lists
@@ -20,6 +21,10 @@ what-determines-runtime
 ```
 
 ## From a planetary model to particle histories
+
+[Research applications](research-applications.md) gives examples of AtRIS use
+in atmospheric chemistry, secondary-particle studies, planetary shielding,
+and dose calculations, with links to the original studies.
 
 The physical setup combines a material model, an incident particle source, and
 a choice of interaction models. The material model is supplied in
@@ -64,5 +69,7 @@ distinction and how to assess the sampling uncertainty.
 
 The original AtRIS model is described in
 [Banjac, Herbst, and Heber (2018)](https://doi.org/10.1029/2018JA026042).
+The later [Banjac et al. (2019) paper](https://doi.org/10.1029/2019JA026622)
+describes the phantom response method for absorbed and radiation-weighted dose.
 For the commands that prepare, execute, and process a simulation, see
 [Running AtRIS](../running-atris/index.md).

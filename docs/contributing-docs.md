@@ -1,4 +1,4 @@
-# Writing and previewing documentation
+# Editing documentation
 
 The manual uses Sphinx, MyST Markdown, and the Read the Docs theme. Building it
 requires Python 3.9 or newer. The `docs` extra installs the Python package and

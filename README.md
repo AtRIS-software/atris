@@ -13,8 +13,11 @@ of atmospheric ionization, chemistry, and habitability.
 The transport calculation uses [Geant4](https://geant4.web.cern.ch/), a toolkit
 for simulating the passage of particles through matter. AtRIS supplies the
 planetary model and incident radiation, records energy deposition and particle
-crossings, and uses optional phantom response tables for dose and detector
-response calculations.
+crossings. [Published applications](docs/background/research-applications.md)
+include atmospheric chemistry and biosignatures, secondary-particle fluxes,
+and planetary shielding. Dose and detector-response calculations are another
+application, using the optional phantom method described in
+[Banjac et al. (2019)](https://doi.org/10.1029/2019JA026622).
 
 This repository includes the simulator, Python tools for preparing and
 analyzing simulations, phantom response tables, and worked examples.
