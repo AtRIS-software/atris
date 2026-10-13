@@ -1,6 +1,7 @@
 """Read and write AtRIS Planet Specification Format files."""
 
 from pathlib import Path
+from os import PathLike
 from dataclasses import dataclass
 import re
 
@@ -20,18 +21,145 @@ DENSITY = 8
 PRESSURE = 9
 STATE = 10
 FIRST_ELEMENT = 11
+COMPACT_COMPOSITION_PARTS = 1000
 
 GEOMETRY_COLUMNS = (
     INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END,
 )
 
 
-@dataclass
+@dataclass(init=False)
 class PSF:
     """A numeric layer table together with its ordered material definition."""
 
     layers: np.ndarray
     materials: str
+
+    def __init__(
+        self,
+        *,
+        inner_radius_km,
+        outer_radius_km,
+        temperature_k,
+        density_g_cm3,
+        pressure_pa,
+        mass_fractions,
+        solid_composition=None,
+        state="gas",
+    ):
+        """Assemble full spherical shells from named physical quantities.
+
+        Every layer quantity accepts a scalar or a one-dimensional array.
+        Scalar radii describe one shell; paired radius arrays describe shells
+        ordered from the centre outwards. Scalar properties apply to every shell.
+        ``mass_fractions``
+        maps element symbols to their scalar or per-layer mass fractions; its order
+        determines both the numeric columns and the material header. Fractions must
+        sum to one, except that solid layers may use all zeros to select
+        ``solid_composition`` (a compact formula such as ``O533Si467``).
+        With explicit fractions in every layer, the compact header label is
+        derived from the first layer; numeric columns retain the supplied fractions.
+
+        ``state`` accepts ``gas``, ``solid``, or ``liquid``, individually or per layer.
+        Detector IDs are assigned sequentially from zero. No interior, crust, or
+        stopping shell is added implicitly; include them in the supplied arrays.
+        The PSF can be printed and saved with its ``save`` method.
+        """
+        inner = np.atleast_1d(np.asarray(inner_radius_km, dtype=float))
+        outer = np.atleast_1d(np.asarray(outer_radius_km, dtype=float))
+        if inner.ndim != 1 or inner.size == 0 or outer.shape != inner.shape:
+            raise ValueError("Inner and outer radii must be nonempty arrays of equal length")
+        if not np.isfinite(inner).all() or not np.isfinite(outer).all():
+            raise ValueError("Radii must be finite")
+        if np.any(inner < 0) or np.any(outer <= inner) or np.any(inner[1:] < outer[:-1]):
+            raise ValueError("Shells must have positive thickness and be ordered without overlap")
+
+        def per_layer(value, name, dtype=float):
+            try:
+                return np.broadcast_to(np.atleast_1d(np.asarray(value, dtype=dtype)), inner.shape)
+            except (ValueError, TypeError) as error:
+                raise ValueError(name + " must be a scalar or one value per layer") from error
+
+        states = per_layer(state, "state", dtype=str)
+        if not np.isin(states, ["gas", "solid", "liquid"]).all():
+            raise ValueError("State must be gas, solid, or liquid")
+        elements = list(mass_fractions)
+        if not elements or any(not isinstance(e, str) or not re.fullmatch(r"[A-Z][a-z]?", e)
+                               for e in elements):
+            raise ValueError("Mass fractions must be keyed by element symbols, e.g. N, C, O")
+        fractions = np.column_stack([
+            per_layer(mass_fractions[element], element + " mass fraction")
+            for element in elements
+        ])
+        if not np.isfinite(fractions).all() or np.any(fractions < 0):
+            raise ValueError("Mass fractions must be finite and nonnegative")
+        totals = fractions.sum(axis=1)
+        fallback = (states == "solid") & (totals == 0)
+        if not np.all(np.isclose(totals, 1, rtol=0, atol=1e-8) | fallback):
+            raise ValueError("Mass fractions must sum to one (or all zero for a compact solid)")
+        if solid_composition is None:
+            if fallback.any():
+                raise ValueError("All-zero solid fractions require solid_composition")
+            # The compact header uses integer parts per thousand; layer columns
+            # retain the full-precision composition used for transport.
+            parts_per_thousand = fractions[0] * COMPACT_COMPOSITION_PARTS
+            weights = np.floor(parts_per_thousand).astype(int)
+            remainder = COMPACT_COMPOSITION_PARTS - weights.sum()
+            order = np.argsort(-(parts_per_thousand - weights), kind="stable")
+            weights[order[:remainder]] += 1
+            solid_composition = "".join(element + str(weight)
+                                        for element, weight in zip(elements, weights) if weight)
+        _compact_fractions(solid_composition)
+
+        temperature = per_layer(temperature_k, "temperature_k")
+        density = per_layer(density_g_cm3, "density_g_cm3")
+        pressure = per_layer(pressure_pa, "pressure_pa")
+        if not all(np.isfinite(values).all() for values in (temperature, density, pressure)):
+            raise ValueError("Temperature, density, and pressure must be finite")
+        if np.any(temperature <= 0) or np.any(density <= 0) or np.any(pressure < 0):
+            raise ValueError("Temperature and density must be positive; pressure must be nonnegative")
+
+        layers = np.zeros((inner.size, FIRST_ELEMENT + len(elements)))
+        layers[:, INNER_RADIUS], layers[:, OUTER_RADIUS] = inner, outer
+        layers[:, PHI_END], layers[:, THETA_END] = 2 * np.pi, np.pi
+        layers[:, DETECTOR_ID] = np.arange(inner.size)
+        layers[:, TEMPERATURE], layers[:, DENSITY], layers[:, PRESSURE] = temperature, density, pressure
+        layers[:, STATE] = np.where(states == "solid", 1, np.where(states == "liquid", 2, 0))
+        layers[:, FIRST_ELEMENT:] = fractions
+        self.layers = layers
+        self.materials = " ".join([solid_composition, *elements])
+
+    @classmethod
+    def from_layers(cls, layers, materials):
+        """Represent an existing layer table with its material definition."""
+        psf = cls.__new__(cls)
+        psf.layers = np.asarray(layers, dtype=float)
+        psf.materials = materials
+        return psf
+
+    def __str__(self):
+        elements = self.materials.split()[1:]
+        states = {0: "gas", 1: "solid", 2: "liquid"}
+        layer_label = "layer" if len(self.layers) == 1 else "layers"
+        lines = [f"PSF: {len(self.layers)} spherical {layer_label}",
+                 "Radii (km); density (g/cm3); temperature (K); pressure (Pa)"]
+        for layer in self.layers:
+            composition = ", ".join(
+                f"{element}={fraction:.6e}"
+                for element, fraction in zip(elements, layer[FIRST_ELEMENT:])
+            )
+            lines.append(
+                f"Layer {int(layer[DETECTOR_ID])}: "
+                f"{layer[INNER_RADIUS]:.6e} to {layer[OUTER_RADIUS]:.6e}; "
+                f"{states[int(layer[STATE])]}; density={layer[DENSITY]:.6e}; "
+                f"temperature={layer[TEMPERATURE]:.6e}; pressure={layer[PRESSURE]:.6e}; "
+                f"mass fractions: {composition}"
+            )
+        return "\n".join(lines)
+
+    def save(self, path, **kwargs):
+        """Save the layer table and materials to a destination."""
+        write_psf(path, self, **kwargs)
 
     def formats(self, value_format):
         """Return NumPy formats preserving geometry and integer columns."""
@@ -42,93 +170,17 @@ class PSF:
         return formats
 
 
-def build_psf(
-    *,
-    inner_radius_km,
-    outer_radius_km,
-    temperature_k,
-    density_g_cm3,
-    pressure_pa,
-    mass_fractions,
-    solid_composition,
-    state="gas",
-):
-    """Assemble full spherical shells from named physical quantities.
-
-    Radii are one-dimensional arrays, ordered from the centre outwards.
-    Other quantities accept a scalar or one value per layer. ``mass_fractions``
-    maps element symbols to their scalar or per-layer mass fractions; its order
-    determines both the numeric columns and the material header. Fractions must
-    sum to one, except that solid layers may use all zeros to select
-    ``solid_composition`` (a compact formula such as ``O533Si467``).
-
-    ``state`` accepts ``gas``, ``solid``, or ``liquid``, individually or per layer.
-    Detector IDs are assigned sequentially from zero. No interior, crust, or
-    stopping shell is added implicitly; include them in the supplied arrays.
-    The returned PSF can be passed directly to ``write_psf``.
-    """
-    inner = np.atleast_1d(np.asarray(inner_radius_km, dtype=float))
-    outer = np.atleast_1d(np.asarray(outer_radius_km, dtype=float))
-    if inner.ndim != 1 or inner.size == 0 or outer.shape != inner.shape:
-        raise ValueError("Inner and outer radii must be nonempty arrays of equal length")
-    if not np.isfinite(inner).all() or not np.isfinite(outer).all():
-        raise ValueError("Radii must be finite")
-    if np.any(inner < 0) or np.any(outer <= inner) or np.any(inner[1:] < outer[:-1]):
-        raise ValueError("Shells must have positive thickness and be ordered without overlap")
-
-    def per_layer(value, name, dtype=float):
-        try:
-            return np.broadcast_to(np.asarray(value, dtype=dtype), inner.shape)
-        except (ValueError, TypeError) as error:
-            raise ValueError(name + " must be a scalar or one value per layer") from error
-
-    states = per_layer(state, "state", dtype=str)
-    if not np.isin(states, ["gas", "solid", "liquid"]).all():
-        raise ValueError("State must be gas, solid, or liquid")
-    elements = list(mass_fractions)
-    if not elements or any(not isinstance(e, str) or not re.fullmatch(r"[A-Z][a-z]?", e)
-                           for e in elements):
-        raise ValueError("Mass fractions must be keyed by element symbols, e.g. N, C, O")
-    _compact_fractions(solid_composition)
-    fractions = np.column_stack([
-        per_layer(mass_fractions[element], element + " mass fraction")
-        for element in elements
-    ])
-    if not np.isfinite(fractions).all() or np.any(fractions < 0):
-        raise ValueError("Mass fractions must be finite and nonnegative")
-    totals = fractions.sum(axis=1)
-    fallback = (states == "solid") & (totals == 0)
-    if not np.all(np.isclose(totals, 1, rtol=0, atol=1e-8) | fallback):
-        raise ValueError("Mass fractions must sum to one (or all zero for a compact solid)")
-
-    temperature = per_layer(temperature_k, "temperature_k")
-    density = per_layer(density_g_cm3, "density_g_cm3")
-    pressure = per_layer(pressure_pa, "pressure_pa")
-    if not all(np.isfinite(values).all() for values in (temperature, density, pressure)):
-        raise ValueError("Temperature, density, and pressure must be finite")
-    if np.any(temperature <= 0) or np.any(density <= 0) or np.any(pressure < 0):
-        raise ValueError("Temperature and density must be positive; pressure must be nonnegative")
-
-    layers = np.zeros((inner.size, FIRST_ELEMENT + len(elements)))
-    layers[:, INNER_RADIUS], layers[:, OUTER_RADIUS] = inner, outer
-    layers[:, PHI_END], layers[:, THETA_END] = 2 * np.pi, np.pi
-    layers[:, DETECTOR_ID] = np.arange(inner.size)
-    layers[:, TEMPERATURE], layers[:, DENSITY], layers[:, PRESSURE] = temperature, density, pressure
-    layers[:, STATE] = np.where(states == "solid", 1, np.where(states == "liquid", 2, 0))
-    layers[:, FIRST_ELEMENT:] = fractions
-    return PSF(layers, " ".join([solid_composition, *elements]))
-
-
 def write_psf(path, layers, *, materials=None, **kwargs):
     """Write a numeric layer array with column descriptions and material names.
 
-    Pass the PSF returned by ``build_psf``, or a numeric array and a
+    Pass a ``PSF`` object, or a numeric array and a
     ``materials`` definition, e.g. ``"O533Si467 N"``.
     The array uses PSF units and column order, as returned by ``load_psf``.
     Additional keyword arguments are forwarded to ``numpy.savetxt``.
     Without ``fmt``, NumPy uses its own formatting. For column-specific
     formatting, pass e.g. ``fmt=psf.formats("%.3e")``.
     Existing files are replaced; the destination directory must already exist.
+    Filename strings and paths gain a ``.psf`` suffix when it is missing.
     This checks the table format, not the physical validity of the model.
     """
     if isinstance(layers, PSF):
@@ -161,6 +213,10 @@ def write_psf(path, layers, *, materials=None, **kwargs):
         "# All-zero solid fractions use the compact composition in the material definition:\n"
         + " ".join(fields)
     )
+    if isinstance(path, (str, PathLike)):
+        path = Path(path)
+        if path.suffix != ".psf":
+            path = path.with_name(path.name + ".psf")
     np.savetxt(path, data, header=header, comments="", encoding="utf-8", **kwargs)
 
 

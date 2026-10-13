@@ -4,14 +4,40 @@ import xml.etree.ElementTree as ET
 
 from atris_tools.psf import (
     DETECTOR_ID, STATE, FIRST_ELEMENT, GEOMETRY_COLUMNS,
-    build_psf, load_psf, read_psf_header, read_psf_layers, write_psf,
+    PSF, load_psf, read_psf_header, read_psf_layers, write_psf,
 )
+
+
+@pytest.mark.parametrize("filename", ["sphere", "sphere.psf", "sphere.data"])
+@pytest.mark.parametrize("as_string", [False, True])
+def test_write_psf_appends_missing_suffix(tmp_path, filename, as_string):
+    psf = PSF(inner_radius_km=0, outer_radius_km=1e-4,
+                    temperature_k=293, density_g_cm3=1, pressure_pa=101325,
+                    mass_fractions={"H": 1})
+    path = tmp_path / filename
+    write_psf(str(path) if as_string else path, psf)
+    expected = path if filename.endswith(".psf") else tmp_path / (filename + ".psf")
+    np.testing.assert_allclose(load_psf(expected), psf.layers)
+    assert not (tmp_path / (filename + ".psf.psf")).exists()
+
+
+def test_psf_print_and_save(tmp_path):
+    psf = PSF(inner_radius_km=0, outer_radius_km=1e-4,
+                    temperature_k=293, density_g_cm3=1, pressure_pa=101325,
+                    state="liquid", mass_fractions={"H": 1})
+    summary = str(psf)
+    assert "1 spherical layer" in summary
+    assert "liquid" in summary
+    assert "1.000000e-04" in summary
+    assert "H=1.000000e+00" in summary
+    psf.save(tmp_path / "sphere")
+    np.testing.assert_allclose(load_psf(tmp_path / "sphere.psf"), psf.layers)
 
 
 def test_gdml_preserves_micrometre_spheres_and_world(tmp_path):
     from atris_tools.psf2gdml import line_processor, gdml_compile
     radius = 4e-9  # 4 micrometres, in PSF kilometres.
-    psf = build_psf(inner_radius_km=[0], outer_radius_km=[radius],
+    psf = PSF(inner_radius_km=[0], outer_radius_km=[radius],
                     temperature_k=293, density_g_cm3=1, pressure_pa=101325,
                     mass_fractions={"H": 1}, solid_composition="H1000")
     path = tmp_path / "sphere.psf"
@@ -28,7 +54,7 @@ def test_gdml_preserves_micrometre_spheres_and_world(tmp_path):
 
 
 def test_build_and_write_named_layers(tmp_path):
-    psf = build_psf(
+    psf = PSF(
         inner_radius_km=[0, 1, 2, 3.001],
         outer_radius_km=[1, 2, 3, 3.021],
         temperature_k=300,
@@ -53,7 +79,7 @@ def test_build_and_write_named_layers(tmp_path):
 
 
 def test_low_precision_preserves_thin_shells(tmp_path):
-    psf = build_psf(
+    psf = PSF(
         inner_radius_km=[9556.48, 9556.5, 9656.501],
         outer_radius_km=[9556.5, 9656.5, 9656.521],
         temperature_k=300, density_g_cm3=0.001234567,
@@ -70,8 +96,40 @@ def test_low_precision_preserves_thin_shells(tmp_path):
     assert "8.038e+04" in path.read_text()
 
 
+def test_scalar_shell_matches_single_element_arrays():
+    scalar = dict(inner_radius_km=0, outer_radius_km=1.5e-4,
+                  temperature_k=293, density_g_cm3=0.997, pressure_pa=101325,
+                  state="liquid", mass_fractions={"H": 0.112, "O": 0.888},
+                  solid_composition="H112O888")
+    arrays = {key: [value] for key, value in scalar.items()
+              if key not in ("mass_fractions", "solid_composition")}
+    arrays.update(mass_fractions={key: [value] for key, value in scalar["mass_fractions"].items()},
+                  solid_composition=scalar["solid_composition"])
+    np.testing.assert_array_equal(PSF(**scalar).layers, PSF(**arrays).layers)
+
+
+def test_explicit_liquid_fractions_supply_compact_header(tmp_path):
+    hydrogen = 2 * 1.00794 / (2 * 1.00794 + 15.9994)
+    oxygen = 1 - hydrogen
+    psf = PSF(inner_radius_km=0, outer_radius_km=1.5e-4,
+                    temperature_k=293, density_g_cm3=.997, pressure_pa=101325,
+                    state="liquid", mass_fractions={"H": hydrogen, "O": oxygen})
+    assert psf.materials == "H112O888 H O"
+    np.testing.assert_array_equal(psf.layers[:, FIRST_ELEMENT:], [[hydrogen, oxygen]])
+    path = tmp_path / "water.psf"
+    write_psf(path, psf)
+    assert read_psf_layers(path)[0]["fractions"] == {"H": hydrogen, "O": oxygen}
+
+
+def test_zero_fraction_solid_requires_explicit_fallback():
+    with pytest.raises(ValueError, match="require solid_composition"):
+        PSF(inner_radius_km=0, outer_radius_km=1,
+                  temperature_k=293, density_g_cm3=2.7, pressure_pa=0,
+                  state="solid", mass_fractions={"O": 0})
+
+
 def test_scalar_composition_broadcasts_across_layers():
-    psf = build_psf(
+    psf = PSF(
         inner_radius_km=[1, 2], outer_radius_km=[2, 3],
         temperature_k=[300, 200], density_g_cm3=0.001, pressure_pa=[10, 1],
         mass_fractions={"N": 0.8, "O": 0.2}, solid_composition="O533Si467",
@@ -101,7 +159,7 @@ def test_named_layers_reject_inconsistent_inputs(override, match):
     )
     arguments.update(override)
     with pytest.raises(ValueError, match=match):
-        build_psf(**arguments)
+        PSF(**arguments)
 
 
 def test_written_psf_preserves_values_materials_and_states(tmp_path):

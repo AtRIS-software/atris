@@ -1,7 +1,5 @@
 """Compare fixed-size phantom statistics with detailed shower records."""
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 import uproot
@@ -10,45 +8,25 @@ from test_atris_command import atris_command, invoke_atris
 from atris_tools.phantom_calibration import (
     PhantomEvents,
     PhantomStatistics,
+    prepare_water_phantom,
     read_phantom_statistics,
 )
 
-ROOT = Path(__file__).resolve().parents[2]
-EDGES = np.geomspace(1e-6, 1e7, 651)
 EVENTS = 64
 
 
 def prepare_calibration(directory, particle, *, miss=False, events=EVENTS):
     directory.mkdir()
-    template = (ROOT / "atris_tools/data/water-phantom.gdml").read_text()
     radius = 4e-4
-    (directory / "calibration.gdml").write_text(
-        template.format(
-            radius=radius,
-            density=0.997,
-            world_size=8 * radius,
-            escape_inner=2 * radius,
-            escape_outer=2.1 * radius,
-            guard_inner=2.2 * radius,
-            guard_outer=2.3 * radius,
-        )
-    )
-    np.savetxt(directory / "calibration.bins", EDGES)
-    (directory / "calibration.mac").write_text(
-        "/process/em/lowestElectronEnergy 1 eV\n"
-        "/process/em/lowestMuHadEnergy 1 eV\n"
-        "/run/setCut 0.00001 mm\n"
-        "/run/initialize\n"
-        f"/gps/particle {particle}\n"
+    prepare_water_phantom(directory, [0.001, 10], radius_cm=radius, particle=particle,
+                          events_per_chunk=events, production_cut_mm=0.00001,
+                          tracking_floor_eV=1)
+    macro = directory / "calibration.chunk.mac"
+    macro.write_text(macro.read_text().replace("/run/beamOn",
         "/gps/pos/type Point\n"
         f"/gps/pos/centre {1.5 * radius if miss else 0} 0 {-1.1 * radius} cm\n"
-        "/gps/direction 0 0 1\n"
-        "/gps/ene/type Pow\n"
-        "/gps/ene/alpha -1\n"
-        "/gps/ene/min 0.001 MeV\n"
-        "/gps/ene/max 10 MeV\n"
-        f"/run/beamOn {events}\n"
-    )
+        "/run/beamOn"))
+    (directory / "calibration.mac").symlink_to(macro.name)
 
 
 @pytest.mark.regression
