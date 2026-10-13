@@ -8,8 +8,9 @@ and corrections that affect existing simulation results.
 The supplied radiation tables show evidence of two quantities. Older
 `*_old_response.txt` files and the biological (`bact`, `cell`, `sbug`) tables
 store dimensionless energy fractions. Later ICRU and RAMONA tables store
-deposited energy in MeV, as shown in the
-[archived phantom analysis](reference/notebooks/explorer_v2.ipynb).
+deposited energy in MeV. The
+[phantom library reference](reference/phantom-library.md#moved-deposited-energy-tables)
+describes these tables and their conversion to energy fractions.
 The files did not declare this distinction.
 
 The C++ reader passes both quantities directly to the scorer, which
@@ -28,7 +29,8 @@ and atmospheric energy-deposit histograms are unaffected.
 
 Energy-fraction tables are kept in `phantoms/`; deposited-energy tables are
 kept separately in `phantoms/MeV-valued/`. The
-[phantom reference](reference/phantom-library.md) describes the example inputs.
+[phantom reference](reference/phantom-library.md#moved-deposited-energy-tables)
+lists the moved families and their required column-by-column conversion.
 
 ### Differences between old and new phantom tables
 
@@ -119,3 +121,39 @@ That would allow Geant4 to sample freely in log energy before AtRIS assigns the
 generated energy to an output bin. Changing the sampling rule changes the
 scientific meaning of each finite-bin response and therefore requires numerical
 regression tests and regenerated simulation results.
+
+## Zero-deposit phantom bins never become resolved
+
+The adaptive phantom builder considers an energy bin resolved only after at
+least two primaries have been sampled, its estimated uncertainty is finite, and
+its mean ionizing-energy deposit is positive. A bin in which every sampled
+primary deposits zero ionizing energy therefore remains unresolved regardless
+of how many zero-deposit events have been observed. The builder continues to
+schedule that energy decade instead of using the accumulating evidence that
+the response is small. With one sample, the calculated standard error is
+undefined. With two or more all-zero samples, the ordinary sample standard
+error is instead zero. That numerical zero describes the observed sample but
+incorrectly suggests certainty about rare, as-yet-unobserved deposits; the
+separate completion check nevertheless keeps the bin unresolved.
+
+Zero observations do constrain the probability $p$ of a positive deposit. After
+$n$ independent primaries with no positive deposits, the one-sided 95% upper
+confidence limit is
+
+$$
+p_{95}=1-0.05^{1/n}\approx\frac{3}{n}.
+$$
+
+If the deposited-energy fraction $R$ has a known upper bound $R_{\max}$, this
+also bounds the mean response by $E[R]\leq p_{95}R_{\max}$. Taking
+$R_{\max}=1$ would give the intuitive bound that the mean deposited-energy
+fraction cannot exceed the probability of a deposit. That unit bound must be
+verified for the scored Geant4 quantity, particularly for nuclear reactions
+that can release binding energy; otherwise an appropriate physical bound is
+needed.
+
+The builder should compare this response bound with its absolute dose tolerance.
+It may then classify a sufficiently constrained bin as consistent with zero,
+record the upper limit, and stop resampling it. Until this is implemented,
+adaptive phantom builds containing persistent zero-deposit bins may not report
+precision completion.

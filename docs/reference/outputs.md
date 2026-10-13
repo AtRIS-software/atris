@@ -111,6 +111,81 @@ particles have angles below 90 degrees, inward-moving particles above 90.
 The recorded angle is rounded to the nearest whole degree, so a stored value of
 90 cannot resolve a near-tangential crossing's original direction.
 
+## Phantom sampling ROOT exports
+
+`Phantom.save` writes `<name>_sampling.root` alongside the response
+and counting text tables. `Phantom.read_root` restores the scientific
+arrays and metadata without reading the text tables or runner JSON files.
+
+The `sampling` TTree has one entry per species, in response-table order:
+
+| Branch | Type and meaning |
+| --- | --- |
+| `pdg_codes` | Scalar int64 particle identifier. |
+| `sample_counts`, `detected_counts` | 650 int64 values: primary counts and positive-ionizing-deposit counts. |
+| `energy_fraction` | 650 float64 values: mean ionizing deposited-energy fraction, including zero-deposit primaries. |
+| `counting_efficiency` | 650 float64 values: detected count divided by primary count. |
+| `fraction_variance`, `counting_variance` | 650 float64 values: unbiased sample variances of individual fractions and detection indicators. |
+| `fraction_standard_error`, `counting_standard_error` | 650 float64 values: standard errors of the corresponding means. |
+
+The `energy_bins` TTree has 650 entries with float64 `lower_MeV` and
+`upper_MeV` branches on the fixed AtRIS kinetic-energy grid. Fractions,
+efficiencies, their variances, and their standard errors have no units.
+Unsampled means and uncertainties are NaN; counts remain zero. A single sample
+has a mean but no estimated variance or standard error.
+
+The `metadata` TObjString contains JSON text recording geometry, normalization,
+counting threshold, units, and generation provenance. `geometry_psf` contains
+the actual PSF contents, including radii, angular extent, material fractions,
+density, temperature, pressure, and their units. `geometry_psf_role` identifies
+whether this is the `physical` input layer or the expanded `transport` geometry.
+When no PSF was supplied to the response model, this field is null, not a
+reconstructed geometry presented as an original input.
+
+Metadata uses numeric values, booleans, short labels, and nested records rather
+than explanatory paragraphs. `schema` is `atris.phantom.v1`. `source` records
+the disk radius and centre in cm, direction vector, and energy sampling.
+`incident_energy` is `total_kinetic_energy`, `normalization` is
+`per_incident_primary`, `variance_ddof` is 1, and `uncertainty` is
+`standard_error_of_mean`. `sampling_status` is `partial` if any bin is unsampled,
+otherwise `sampled`; neither label establishes precision completion.
+
+With ionizing deposit $W_{\mathrm{ion}}$ and incident kinetic energy $K$,
+`response_definition` is `mean(W_ion/K)` and `counting_definition` is
+`P(W_ion > threshold)`. Zero-deposit primaries are included in both estimates.
+The counting threshold does not gate the energy response. Variances use
+denominator $N-1$, and standard errors are $\sqrt{s^2/N}$. A zero estimated
+counting error does not rule out rare events.
+
+The `validity` object records sphere geometry, homogeneity, shielding, material,
+scoring and termination IDs, and whether energy extrapolation is supported.
+The [water-sphere table](phantom-library.md#water-sphere-calibrations) gives the
+key properties of the four calibration runs. In calibration geometry,
+detector ID 1 is the scoring water volume. IDs 0 and 2 are vacuum termination
+shells: deposits there do not contribute. These are calibration IDs, not the
+phantom IDs assigned when loading tables into another atmospheric run. A
+physical one-layer PSF may have a different input detector ID; transport assigns
+the calibration IDs when adding shells.
+
+The response applies to the recorded unshielded homogeneous water sphere and
+its radius, density, and material settings. The projected-disk beam can represent
+incoming directions because of spherical symmetry; it does not establish a
+response for shielded or nonspherical objects. Only the stored PDG rows and
+kinetic-energy bins are calibrated. Missing species are not zero responses,
+and the file does not justify extrapolation beyond its grid. NaN estimates and
+finite estimates with inadequate precision remain incomplete sampling results.
+Builder exports record `precision_settings`: relative dose tolerance, absolute dose
+tolerance in Gy, and confidence factor. Apply the
+[builder's precision criterion](../running-atris/build-phantoms.md#refine-and-inspect)
+to the retained means, errors, and counts. A response created without those
+settings does not establish that any particular precision target was met.
+
+The TXT tables project the response arrays and retain short interpretive headers;
+they do not duplicate the full ROOT metadata. JSON files retain operational
+build settings, batch history, and progress needed to extend or resume a run;
+there is no calibration-metadata JSON export. Build and batch settings read
+geometry directly from PSF; ROOT retains the PSF associated with the results.
+
 ## Processed response tables
 
 `atris-postprocess` writes headerless, whitespace-separated files:

@@ -29,8 +29,8 @@ A PSF is a whitespace-separated numeric table preceded by a material-definition
 line. Blank and `#` comment lines may precede the table. Legacy files may put
 the material definition in the first comment line instead.
 
-From Python, `atris_tools.psf.build_psf` assembles layers from named quantities;
-`write_psf` saves the result with its descriptive header and material definition.
+From Python, `atris_tools.psf.PSF` constructs a layer table from named quantities.
+Its `save()` method writes the table with its descriptive header and material definition.
 See [Building a PSF from Python](#building-a-psf-from-python) and the
 [exoplanet notebook](../tutorials/exoplanet-psf.ipynb).
 
@@ -73,8 +73,7 @@ Custom PSFs must also respect the post-processor's
 
 ### Building a PSF from Python
 
-Import `build_psf` and `write_psf` from `atris_tools.psf`. All builder arguments
-are named:
+`PSF` is imported from `atris_tools.psf`. Its constructor accepts named arguments:
 
 | Argument | Values |
 | --- | --- |
@@ -83,15 +82,21 @@ are named:
 | `density_g_cm3` | Density in g/cm³ |
 | `pressure_pa` | Pressure in pascals |
 | `mass_fractions` | Element-to-fraction mapping, such as `{"N": 0.8, "O": 0.2}` |
-| `solid_composition` | Compact fallback composition, such as `"O533Si467"` |
+| `solid_composition` | Compact composition for solid rows with all-zero fractions, such as `"O533Si467"`; optional with explicit fractions |
 | `state` | `"gas"` (default), `"solid"`, or `"liquid"` |
 
-Except for the radii, each physical quantity and each element fraction can be a
-scalar shared by every layer or an array with one value per layer. States can
-also be supplied per layer. Fractions must sum to one; all-zero fractions in a
+Every layer quantity accepts a scalar or a one-dimensional array. Scalar inner
+and outer radii describe one shell; paired radius arrays describe multiple
+shells. Scalar material properties and element fractions apply to every shell;
+arrays supply one value per shell. States follow the same rule.
+Fractions must sum to one; all-zero fractions in a
 solid row select the compact fallback composition. The builder checks array
 lengths, finite values, positive temperature and density, nonnegative pressure,
 and non-overlapping shells. It does not normalize fractions silently.
+
+With explicit fractions in every layer, the compact header label is derived
+from the first layer's composition. The numeric layer columns retain the
+supplied fractions at full precision.
 
 The builder creates full spherical shells and assigns sequential IDs from zero.
 It preserves gaps between shells. Interior, surface, and outer stopping layers
@@ -209,18 +214,17 @@ nonnegative counts.
 The default totals are 605000 protons and 399300 alphas. Actual sampled counts
 in each bin are recorded in the primary histogram and used for normalization.
 
+`ATRIS_TIME_LIMIT` sets an optional event-loop wall-time budget in seconds,
+starting after the master prepares the run output. Its value is a finite positive
+number; an unset variable leaves the run event-limited. `/run/beamOn` sets the event ceiling. Each worker
+finishes its current event before stopping at the budget, then histograms are
+merged and saved normally. Initialization and output writing add time beyond
+the event-loop budget. The log records the actual completed count and which
+limit ended the run; normalization uses the completed primary histogram.
+
 The current generator does not read `.spec` files or fold a physical primary
 spectrum into the results. Such files may be retained as run inputs by
 `atris-clone`, but do not control this generated simulation workflow.
-
-`ATRIS_TIME_LIMIT` sets an optional event-loop wall-time budget in seconds,
-starting after the master prepares the run output. Its value is a finite positive
-number; an unset variable leaves the run event-limited. `/run/beamOn` sets the
-event ceiling. Each worker finishes its current event before stopping at the
-budget, then histograms are merged and saved normally. Initialization and output
-writing add time beyond the event-loop budget. The log records the actual
-completed count and which limit ended the run; normalization uses the completed
-primary histogram.
 
 ## Phantom selection
 
@@ -278,13 +282,14 @@ ignores all comments, including `atris_quantity`.
 `PhantomTable.read` in the Python tools follows the same convention: it
 preserves the coefficients and keeps comments as descriptive metadata.
 
-The phantom writer also records the dimensions, mass, geometric and
-effective areas, source sampling, production cut, tracking settings, counting
-threshold, normalization, completed chunk seeds and software versions. It
-identifies the companion sampling file and explains its counts and standard
-errors. Unknown generation settings are labelled `not recorded`. The Python
-reader retains comment fields; C++ ignores them. These comments do not configure the
-simulation or replace the mass and area in `phantoms.txt`.
+Generated TXT headers identify the companion sampling ROOT file and retain
+the table definitions, radius, density, mass, effective area, and counting
+threshold. Detailed geometry, source sampling, production cuts, tracking
+settings, normalization, and available generation provenance live in
+[ROOT metadata](outputs.md#phantom-sampling-root-exports), together with the
+sampling arrays and uncertainties. Unknown settings are explicitly unrecorded.
+The Python reader retains comment fields; C++ ignores them. Comments do not
+configure the simulation or replace the mass and area in `phantoms.txt`.
 
 The fixed energy edges are `10**linspace(-6, 7, 651)` MeV: 1 eV to 10 TeV,
 with 0.02 spacing in log10 energy. The lookup uses

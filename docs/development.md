@@ -79,6 +79,56 @@ can be generated from the calibrated result; the ROOT record retains the
 statistics needed for later analysis. The runtime matrix sizes therefore do
 not grow when uncertainty information is added.
 
+### Resolve zero-deposit calibration bins
+
+Model a phantom response as $R=IY$, where $I$ records whether a primary made a
+positive ionizing-energy deposit and $Y$ is the deposited fraction conditional
+on a positive deposit. Then $E[R]=P(I=1)E[Y]$. This two-part formulation avoids
+interpreting an all-zero sample as having zero uncertainty. Use an exact
+binomial upper confidence limit for $P(I=1)$ and a physical upper bound on $Y$
+defined separately for each particle species, energy bin, phantom material,
+and geometry.
+
+When the resulting upper bound on $E[R]$ is below the configured absolute dose
+tolerance, the builder may retain zero as the point estimate, record the upper
+limit, and consider the bin sufficiently constrained. Otherwise it should keep
+sampling. The existing primary count, positive-deposit count, and deposited-
+fraction moments are sufficient, so this change belongs in the Python builder
+and calibration analysis. Propagating the recorded limit through an ordinary
+AtRIS simulation is separate later work.
+
+### Accelerate small-phantom calibration
+
+Thin phantoms give neutral particles such as photons and neutrons a small
+probability of interacting. An analogue simulation therefore spends most of
+its histories recording zero response, while a few interactions dominate the
+estimated mean. Evaluate Geant4's generic force-collision biasing for these
+calibrations. The [Geant4 biasing framework][g4-biasing] provides
+`G4BOptrForceCollision`, which splits a track entering a selected volume
+into a correctly weighted uncollided branch and a branch forced to interact;
+`G4BOptnForceCommonTruncatedExp` samples the forced interaction before the
+particle exits. Geant4's `GB02` extended example provides the reference
+implementation.
+
+The phantom-calibration scorer must treat each original primary as one weighted
+sample. Its energy-response sample is the sum of statistically weighted energy
+deposits from the biased branches and their descendants. Its counting sample is
+the statistical weight of the branch satisfying the counting criterion, not
+an unweighted test of whether any deposit occurred. The event-level first and
+second moments must contain these complete weighted samples. Merely attaching
+the biasing operator while leaving the current scorer unchanged would produce
+biased response tables.
+
+Keep analogue calibration available while developing this path. Validate each
+biased particle type against an analogue calibration in a geometry and energy
+range where both obtain adequate statistics. Compare response and counting
+means within their estimated uncertainties, then benchmark uncertainty per CPU
+time for a representative micrometre-scale phantom. Start with photons and
+neutrons; do not assume that forcing a discrete collision benefits charged
+particles, which also lose energy continuously.
+
+[g4-biasing]: https://geant4.web.cern.ch/documentation/dev/bfad_html/ForApplicationDevelopers/Fundamentals/biasing.html
+
 ### Retain response sensitivities
 
 The normal response output currently contains the final sum after a phantom

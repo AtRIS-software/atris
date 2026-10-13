@@ -19,11 +19,122 @@ To calculate a response yourself, use the Jupyter notebook at
 `docs/tutorials/water-phantom.ipynb`:
 [View notebook](../tutorials/water-phantom.ipynb) or download
 {download}`water-phantom.ipynb <../tutorials/water-phantom.ipynb>`.
-It defines a sphere in PSF and prepares a photon/proton calibration through
-`PhantomBuild`, including iron-56 and nickel-58 pilots. Transport is an explicit
-terminal command; the notebook resumes
-with postprocessing and creation diagnostics. Follow
+It defines a water sphere with `PSF`, selects incident species, and prepares
+sampling with `PhantomBuilder`. The notebook runs a small batch group from Python,
+then gathers the phantom and plots its response and sampling precision. Follow
 [building phantoms](../running-atris/build-phantoms.md) for your own run.
+
+## Water-sphere calibrations
+
+The four water-sphere calibration runs have the following physical settings,
+recorded in their retained exports. The names identify sphere sizes.
+All four are homogeneous, unshielded liquid water with density
+$0.997\,\mathrm{g\,cm^{-3}}$.
+
+| Run name | Radius | Mass (g) | AtRIS effective area (cm²) | Production cut (mm) |
+| --- | --- | --- | --- | --- |
+| `bacteria-water-r4um` | 4 µm | 2.672783e-10 | 1.005310e-6 | 1e-5 |
+| `cell-water-r50um` | 50 µm | 5.220280e-7 | 1.570796e-4 | 1e-5 |
+| `small-bug-water-r1mm` | 1 mm | 4.176224e-3 | 6.283185e-2 | 1e-5 |
+| `icru-water-r15cm` | 15 cm | 1.409476e4 | 1.413717e3 | 1e-1 |
+
+Mass is $4\pi r^3\rho/3$. AtRIS effective area is $2\pi r^2$, reflecting
+the two-direction interface-crossing normalization; projected disk area is
+$\pi r^2$. All four exports cover 44 incident species on 650 kinetic-energy
+bins from 1 eV to 10 TeV and record `FTFP_BERT_HP`. Counting requires a strictly
+positive ionizing deposit. The production cut controls secondary production.
+The generated tables are stored in each run's exports. Sampling diagnostics
+record their coverage and precision.
+
+The response includes the primary and secondary ionizing deposits in the water
+volume and includes zero-deposit primaries in its mean. Scoring covers the
+water volume. Sphere symmetry relates the projected-disk beam to incident
+directions for these unshielded spheres. Missing species, unsampled bins, and
+bins needing further precision are incomplete sampling results.
+The
+[ROOT contents and scope](outputs.md#phantom-sampling-root-exports) for the
+compact metadata fields and [building phantoms](../running-atris/build-phantoms.md)
+for precision diagnostics.
+
+## Legacy phantom properties
+
+These are the supplied historical families, separate from the four calibration
+runs above. Unknown entries identify historical settings whose values remain
+unrecovered. Reconstruction candidates are listed separately from recorded properties.
+
+| Family | Recorded geometry/material | Mass (g) | AtRIS area (cm²) | Response values in `phantoms/` |
+| --- | --- | --- | --- | --- |
+| `icru_*_old_response.txt` | 15 cm radius water sphere, according to the historical notes | 1.4094755e4 | 1.41372e3 | Energy fraction; no energy scaling |
+| `ramona_*_old_response.txt` | Silicon detector A; radius 14.85 mm, thickness 0.315 mm | 5.082e-1 | 6.928 | Energy fraction; no energy scaling |
+| `bact_zero_0.000MeV_response.txt` | Original specification unrecovered; 4 µm water sphere is a reconstruction candidate | Unknown | Unknown | Energy fraction; no energy scaling |
+| `cell_zero_0.000MeV_response.txt` | 50 µm water-sphere reconstruction recipe; full historical settings unrecovered | Unknown | Unknown | Energy fraction; no energy scaling |
+| `sbug_zero_0.000MeV_response.txt` | Original specification unrecovered; 1 mm water sphere is a reconstruction candidate | Unknown | Unknown | Energy fraction; no energy scaling |
+| `flatramona_*`, `randramona_*`, `realramona_*` legacy responses | Variant geometries and source settings unrecovered | Unknown | Unknown | `_old_response.txt` files are energy fractions; no energy scaling |
+
+The listed RAMONA and ICRU masses and areas are the historical scoring-volume
+values used by the Earth example, not the mass or area of added aluminium
+shielding. Original production cuts and sampling uncertainties are not established
+by these dimensions. `zero`, `five`, `ten`, `fifteen`, `twenty`, and `twentyfive`
+denote nominal aluminium shielding thicknesses of 0, 5, 10, 15, 20, and 25 mm.
+Availability depends on the family; filename threshold labels are not reliable
+descriptions of all legacy energy responses. See
+[known discrepancies](../known-bugs.md#differences-between-old-and-new-phantom-tables).
+
+## Moved deposited-energy tables
+
+The unsuffixed radiation-response tables moved to `phantoms/MeV-valued/`
+contain deposited energy in MeV. AtRIS consumes the corresponding energy
+fractions. Their companion counting and variance files remain in `phantoms/`.
+
+| Moved family | Response files | Nominal shielding (mm Al) | Filename thresholds (MeV) | Required response scaling |
+| --- | --- | --- | --- | --- |
+| `icru_*_response.txt` | 5 | 0, 5, 10, 15, 20 | 0.000 | Divide each column by its $K$ in MeV |
+| `ramona_*_response.txt` | 10 | 0, 5, 10, 15, 20 | 0.000, 0.060 | Divide each column by its $K$ in MeV |
+| `flatramona_*_response.txt` | 5 | 0, 5, 10, 15, 20 | 0.060 | Divide each column by its $K$ in MeV |
+| `randramona_*_response.txt` | 12 | 0, 5, 10, 15, 20, 25 | 0.000, 0.060 | Divide each column by its $K$ in MeV |
+| `realramona_*_response.txt` | 5 | 0, 5, 10, 15, 20 | 0.060 | Divide each column by its $K$ in MeV |
+
+For stored deposited energy $W$ and energy-bin centre $K$, the converted
+coefficient is
+
+$$
+f = \frac{W\;[\mathrm{MeV}]}{K\;[\mathrm{MeV}]}.
+$$
+
+The conversion uses arithmetic centres of the fixed edges:
+$K_i=(K_{i,\mathrm{lower}}+K_{i,\mathrm{upper}})/2$.
+`ENERGY_CENTRES_MEV` supplies these 650 values. Each species row is divided by
+this centre vector, column by column. $K$ is total kinetic energy for every
+species, including nuclei. Both $W$ and $K$ are expressed in MeV, and the
+conversion factor varies with energy. Counting efficiencies are already
+dimensionless. If a companion contains variance of $W$
+in MeV², its fraction variance is obtained by division by $K^2$; a standard
+error in MeV is divided by $K$. The companion's stored quantity and units
+determine its conversion.
+
+For example, in a Python session in your run directory, with `ATRIS_ROOT`
+identifying the installation:
+
+```python
+import os
+from pathlib import Path
+from atris_tools.phantom_tables import PhantomTable, ENERGY_CENTRES_MEV
+
+source = Path(os.environ["ATRIS_ROOT"]) / "phantoms" / "MeV-valued" / "icru_zero_0.000MeV_detAB_response.txt"
+table = PhantomTable.read(source)  # Coefficients retain the stored values.
+table.coefficients /= ENERGY_CENTRES_MEV[None, :]
+table.metadata.update(source_file=source.name, source_quantity="deposited_energy_MeV",
+                      conversion="W_MeV / arithmetic_bin_centre_MeV")
+table.write("icru-converted_response.txt")
+```
+
+The example writes a separate energy-fraction file. Its corresponding counting
+table and documented mass and area complete the inputs for staging.
+The conversion represents each energy column by its arithmetic bin centre;
+an event-level mean of $W/K$ requires individual-event records. Historical
+generation settings remain partly unrecovered, and differences between ICRU
+calibrations are described in the known discrepancies. C++ and Python readers
+load the stored coefficients; the example performs the conversion explicitly.
 
 ## Existing Earth example
 
@@ -81,14 +192,18 @@ sources are outside this helper's scope.
 `prepare_water_phantom` writes the geometry and chunk inputs;
 `read_water_phantom_events` reads completed chunks into NumPy arrays;
 `calibrate_water_phantom` calculates the fixed-grid responses and sampling
-errors. Its `PhantomResponse.write` method writes the response and counting
-tables, `phantoms.txt`, and sampling metadata. By default it rejects unsampled
-energy bins. The [notebook](../tutorials/water-phantom.ipynb)
+errors. Its `Phantom.save` method writes the response and counting
+tables, `phantoms.txt`, and sampling ROOT arrays with metadata. Read that ROOT
+export with `Phantom.read_root(path)` to restore the response model,
+including counts and uncertainties. Geometry comes from the retained PSF,
+not the batch configuration JSON. Partial exports retain unsampled bins as
+missing values; `allow_partial=False` requires complete coverage.
+The [notebook](../tutorials/water-phantom.ipynb)
 shows both source setups and the complete export workflow.
 
-Generated tables contain `#` headers describing the geometry, material, energy
-grid, units, normalization, counting criterion, sampling uncertainties and
-generation settings; see [response-table headers](inputs.md#phantom-response-matrices).
+Generated tables contain short `#` headers identifying their values and ROOT
+companion; detailed scientific metadata lives in ROOT. See
+[response-table headers](inputs.md#phantom-response-matrices).
 The C++ reader skips all comments and reads coefficients unchanged.
 
 `compact_water_phantom_chunk(path)` retains the per-primary energy sums,
@@ -135,25 +250,3 @@ For water, I've used .997 g per ccm as desnity, while for TEM it is 1.00 g per c
    -            thickness: 0.315 mm
    -                 mass: 0.5082 g
    -                 area: 6.928 cm2
-
-## Archived exploration notebook
-
-[View notebook](notebooks/explorer_v2.ipynb) to read the original phantom
-exploration code and saved outputs, or download
-{download}`explorer_v2.ipynb <notebooks/explorer_v2.ipynb>` to work locally.
-The Jupyter notebook is located at `docs/reference/notebooks/explorer_v2.ipynb`
-in the project. This is an archived
-development notebook, not an automatically executed tutorial.
-
-It uses NumPy, Matplotlib, and pandas, reads response, variance, and counting
-tables from the kernel's working directory, and expects `../phantom.bins`.
-That bin file is not provided at that path in this checkout. Before running,
-configure the working directory and supply or update the bin-file path. The
-code also writes PDF plots to its working directory. The original notebook is
-preserved without changing its analysis.
-
-```{toctree}
-:hidden:
-
-notebooks/explorer_v2
-```

@@ -1,17 +1,30 @@
 # atris-build-phantom
 
 Run a bounded number of batches in a water-sphere calibration prepared with
-`atris_tools.phantom_builder.PhantomBuild.prepare`, or refresh its exports.
+`atris_tools.phantom_builder.PhantomBuilder`, or refresh its exports.
 See [building phantoms](../../running-atris/build-phantoms.md) for the procedure.
+
+The command opens a `PhantomBuilder` with `PhantomBuilder.open(run_directory)`
+and calls its `run()` method with the requested batches, threads and adaptive
+selection. With `--postprocess-only`, it gathers and saves completed statistics
+and draws the diagnostics.
 
 **Inputs:** `phantom-build.json`, its hash-verified `simulation.psf`, and
 `batches.json` in the run directory. Running transport also requires the installed
 `atris-run` command and native `AtRIS` executable on `PATH`.
 
 **Outputs:** numbered `batches/batch-*` directories containing geometry, macros,
-seeds and native chunk output; appended batch records; and refreshed `export/`
-response/counting tables, sampling NPZ/JSON, `phantoms.txt`, `diagnostics.png`,
-`sampling-precision.png`, and `sampling-state.json`.
+seeds and native chunk output; appended batch records; and refreshed named files
+in the run directory: `<name>_response.txt`, `<name>_counting.txt`,
+`<name>_sampling.root`, `<name>_diagnostics.png`,
+`<name>_sampling-precision.png`, and `<name>_sampling-state.json`.
+`phantoms.txt` selects the named phantom for a simulation.
+
+Batch records store the requested event ceiling as `events` and the actual
+completed primary count as `completed_events`. Time-shortened batches contribute
+both their saved statistics and measured throughput. Forecasts use completed
+counts from matching species, energy ranges and thread counts; the time budget
+caps predicted accumulation. Interrupted-clock measurements are excluded.
 
 **Overwrite behaviour:** completed batch outputs and inputs are retained. A
 pending batch is rerun with unchanged inputs after archiving its partial
@@ -22,13 +35,12 @@ The process lock prevents simultaneous builders in the same directory.
 ## Arguments and options
 
 `--time-limit` sets the event-loop budget per batch in seconds, passed to native
-transport as `ATRIS_TIME_LIMIT`. Python uses `builder.run(time_limit=60)` for a
+transport as `ATRIS_TIME_LIMIT`. Python uses `builder.run(time_limit_s=60)` for a
 one-minute budget. Omitting it leaves batches event-limited. Each batch records
-`time_limit_seconds`, `completed_events` and `wall_seconds`; the latter includes
+`time_limit_seconds`, `completed_events`, `event_loop_seconds` and `wall_seconds`;
+the latter includes
 launch, initialization and output writing. Interrupted batches resume their
-saved inputs with the budget supplied to the new invocation. Time-shortened
-batches contribute their saved statistics but are excluded from count-based
-runtime fits (`fit_timing=false`).
+saved inputs with the budget supplied to the new invocation.
 
 The following is the command's `--help` output for this revision.
 
