@@ -18,7 +18,7 @@ import numpy as np
 
 from .cli import HelpFormatter, add_version_argument
 from .gather import atomic_text_output, chunk_name, read_chunk_plan
-from .particles import particle_source
+from .particles import particle_name, particle_source
 from .root_output import read_ntuple
 from .phantom_calibration import (
     PhantomResponse, PhantomStatistics, RESPONSE_ENERGY_EDGES_MEV,
@@ -273,7 +273,7 @@ class PhantomBuild:
         environment["G4FORCENUMBEROFTHREADS"] = str(threads)
         batch["threads"] = threads
         batch["started_utc"] = datetime.now(timezone.utc).isoformat()
-        print(f"PDG {batch['pdg']}: {batch['events']} primaries, {batch['reason']}", flush=True)
+        print(f"{particle_name(batch['pdg'])} (PDG {batch['pdg']}): {batch['events']} primaries, {batch['reason']}", flush=True)
         start = previous = time.time()
         interrupted_clock = False
         process = subprocess.Popen(["atris-run", str(directory), "--mode", "phantom",
