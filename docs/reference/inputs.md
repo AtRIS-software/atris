@@ -213,6 +213,15 @@ The current generator does not read `.spec` files or fold a physical primary
 spectrum into the results. Such files may be retained as run inputs by
 `atris-clone`, but do not control this generated simulation workflow.
 
+`ATRIS_TIME_LIMIT` sets an optional event-loop wall-time budget in seconds,
+starting after the master prepares the run output. Its value is a finite positive
+number; an unset variable leaves the run event-limited. `/run/beamOn` sets the
+event ceiling. Each worker finishes its current event before stopping at the
+budget, then histograms are merged and saved normally. Initialization and output
+writing add time beyond the event-loop budget. The log records the actual
+completed count and which limit ended the run; normalization uses the completed
+primary histogram.
+
 ## Phantom selection
 
 `phantoms.txt` has four whitespace-separated fields per non-comment line:

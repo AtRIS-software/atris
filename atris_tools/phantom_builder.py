@@ -229,10 +229,12 @@ class PhantomBuild:
         reason = "exploration" if exploratory else "coverage" if coverage else "predicted precision gain per second"
         return code, decade, width, events, reason, expected
 
-    def run(self, *, batches=1, adaptive=False, threads=1):
+    def run(self, *, batches=1, adaptive=False, threads=1, time_limit=None):
         """Run a bounded number of batches, resuming a pending batch first."""
         if not isinstance(batches, int) or batches < 1 or not isinstance(threads, int) or threads < 1:
             raise ValueError("Batch and thread counts must be positive integers")
+        if time_limit is not None and (not np.isfinite(time_limit) or time_limit <= 0):
+            raise ValueError("time_limit must be a finite positive number of seconds")
         with self._lock():
             for _ in range(batches):
                 records = self._batches()
@@ -254,6 +256,8 @@ class PhantomBuild:
                                    events=events, reason=reason, forecast_seconds=forecast)
                     records.append(pending)
                     _save_json(self.directory / "batches.json", records)
+                pending["time_limit_seconds"] = time_limit
+                _save_json(self.directory / "batches.json", records)
                 self._execute(pending, threads)
                 _save_json(self.directory / "batches.json", records)
             return self.response()
@@ -271,6 +275,9 @@ class PhantomBuild:
                 shutil.move(str(path), archive / path.name)
         environment = os.environ.copy()
         environment["G4FORCENUMBEROFTHREADS"] = str(threads)
+        environment.pop("ATRIS_TIME_LIMIT", None)
+        if batch.get("time_limit_seconds") is not None:
+            environment["ATRIS_TIME_LIMIT"] = str(batch["time_limit_seconds"])
         batch["threads"] = threads
         batch["started_utc"] = datetime.now(timezone.utc).isoformat()
         print(f"{particle_name(batch['pdg'])} (PDG {batch['pdg']}): {batch['events']} primaries, {batch['reason']}", flush=True)
@@ -301,9 +308,11 @@ class PhantomBuild:
             raise
         batch["finished_utc"] = datetime.now(timezone.utc).isoformat()
         batch["wall_seconds"] = time.time() - start
-        batch["fit_timing"] = not interrupted_clock
         if not chunk.with_suffix(".COMPLETE").exists():
             raise RuntimeError("Transport finished without a saved COMPLETE chunk")
+        batch["completed_events"] = int(read_phantom_statistics(chunk.with_suffix(".root")).sample_counts.sum())
+        # Count-based forecasts assume the requested number was transported.
+        batch["fit_timing"] = not interrupted_clock and batch["completed_events"] == batch["events"]
 
     def postprocess(self):
         """Write partial response exports and creation diagnostics without transport."""
@@ -332,11 +341,12 @@ def main():
     parser.add_argument("--batches", type=int, default=1, help="Maximum new/resumed batches to run (default: 1).")
     parser.add_argument("--adaptive", action="store_true", help="Refine energy uncertainty with exploration and coverage turns.")
     parser.add_argument("--threads", type=int, default=1, help="Geant4 transport threads (default: 1).")
+    parser.add_argument("--time-limit", type=float, help="Event-loop time limit per batch in seconds (default: event-limited).")
     parser.add_argument("--postprocess-only", action="store_true", help="Read completed chunks and refresh exports/diagnostics without transport.")
     args = parser.parse_args()
     build = PhantomBuild.open(args.run_directory)
     if not args.postprocess_only:
-        build.run(batches=args.batches, adaptive=args.adaptive, threads=args.threads)
+        build.run(batches=args.batches, adaptive=args.adaptive, threads=args.threads, time_limit=args.time_limit)
     response = build.postprocess()
     quality = build.precision(response)
     print(f"Resolved {quality['resolved'].sum()}/{response.sample_counts.size} bins; "

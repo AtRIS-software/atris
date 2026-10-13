@@ -3,23 +3,41 @@
 #include "G4Run.hh"
 #include "globals.hh"
 #include "G4RunManager.hh"
-#include "G4SystemOfUnits.hh"
-#include "G4PhysicalConstants.hh"
 #include "HistoManager.hh"
 #include "G4AnalysisManager.hh"
-#include "G4UnitsTable.hh"
 #include "OutputMode.hh"
-#include <vector>
+#include <atomic>
+#include <chrono>
 #include <cmath>
-#include <fstream>
-#include <sstream>
-#include <iostream>
+#include <cstdlib>
 
 
 extern G4String outputFileName;                       // from src/main.cc
 extern G4int mode;
 
 namespace atris {
+
+namespace {
+
+std::chrono::duration<double> runTimeLimit{0};
+using Clock = std::chrono::steady_clock;
+Clock::time_point runStart;
+std::atomic<G4bool> timeLimitReached{false};
+
+class TimedRun final : public G4Run
+{
+  public:
+    void RecordEvent(const G4Event* event) override
+    {
+      G4Run::RecordEvent(event);
+      if (runTimeLimit.count() == 0 || Clock::now() - runStart < runTimeLimit) return;
+      timeLimitReached.store(true);
+      // This worker has scored a complete event; stop its own event loop.
+      G4RunManager::GetRunManager()->AbortRun(true);
+    }
+};
+
+}  // namespace
 
 RunAction::RunAction(G4bool role)
   : fHisto(nullptr)
@@ -48,12 +66,25 @@ G4Run* RunAction::GenerateRun()
 {
   G4cout << "### AtRIS: executing GenerateRun" << G4endl;
   G4cout << "=== MASTER: " << IsMaster() << G4endl;
-  return new G4Run;
+  return new TimedRun;
 }
 
 
 void RunAction::BeginOfRunAction(const G4Run*)
 {
+  if (IsMaster()) {
+    timeLimitReached.store(false);
+    runTimeLimit = std::chrono::duration<double>{0};
+    if (const char* value = std::getenv("ATRIS_TIME_LIMIT")) {
+      char* end = nullptr;
+      const double seconds = std::strtod(value, &end);
+      if (end == value || *end != '\0' || !std::isfinite(seconds) || seconds <= 0) {
+        G4Exception("atris::RunAction::BeginOfRunAction()", "AtRISTimeLimit001",
+                    FatalException, "ATRIS_TIME_LIMIT must be a finite positive number of seconds.");
+      }
+      runTimeLimit = std::chrono::duration<double>{seconds};
+    }
+  }
   G4cout << "### AtRIS: executing BeginOfRunAction" << G4endl;
   G4cout << "=== MASTER: " << IsMaster() << G4endl;
   G4AnalysisManager* const analysis = G4AnalysisManager::Instance();
@@ -76,10 +107,19 @@ void RunAction::BeginOfRunAction(const G4Run*)
     }
     fHisto->FillMetadata();
   }
+  // Geant4 releases workers after the master's run initialization completes.
+  if (IsMaster()) runStart = Clock::now();
 }
 
-void RunAction::EndOfRunAction(const G4Run*)
+void RunAction::EndOfRunAction(const G4Run* run)
 {
+  if (IsMaster()) {
+    G4cout << "### AtRIS run: completed " << run->GetNumberOfEvent()
+           << " of " << run->GetNumberOfEventToBeProcessed() << " requested events; "
+           << (timeLimitReached.load() ? "time limit reached" : "event limit reached")
+           << "; event-loop wall time: " << std::chrono::duration<double>(Clock::now() - runStart).count()
+           << " s; time limit: " << runTimeLimit.count() << " s (0 means unset)" << G4endl;
+  }
   G4cout << "### AtRIS: executing EndOfRunAction" << G4endl;
   auto* const analysis = G4AnalysisManager::Instance();
   if (analysis->IsActive()) {

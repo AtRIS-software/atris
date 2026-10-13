@@ -5,6 +5,29 @@ import subprocess
 import numpy as np
 import pytest
 
+
+@pytest.mark.parametrize("time_limit", [0, -1, float("nan"), float("inf")])
+def test_invalid_time_limit_leaves_batches_unchanged(build, time_limit):
+    before = build._batches()
+    with pytest.raises(ValueError, match="time_limit"):
+        build.run(time_limit=time_limit)
+    assert build._batches() == before
+
+
+@pytest.mark.parametrize("time_limit", [None, 2.5])
+def test_time_limit_passed_to_native_and_saved_before_launch(build, monkeypatch, time_limit):
+    monkeypatch.setenv("ATRIS_TIME_LIMIT", "999")
+    monkeypatch.setattr("atris_tools.phantom_builder.shutil.which", lambda name: name)
+
+    def launch(*args, **kwargs):
+        assert kwargs["env"].get("ATRIS_TIME_LIMIT") == (str(time_limit) if time_limit else None)
+        assert build._batches()[-1]["time_limit_seconds"] == time_limit
+        raise RuntimeError("captured launch")
+
+    monkeypatch.setattr("atris_tools.phantom_builder.subprocess.Popen", launch)
+    with pytest.raises(RuntimeError, match="captured launch"):
+        build.run(time_limit=time_limit)
+
 from atris_tools.phantom_builder import PhantomBuild
 from atris_tools.phantom_calibration import PhantomStatistics
 from atris_tools.psf import build_psf, write_psf
