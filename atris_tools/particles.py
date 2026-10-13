@@ -1,6 +1,7 @@
 """Particle labels, PDG codes, and Geant4 source settings used by AtRIS."""
 
 from operator import index
+import re
 
 ION_PDG_BASE = 1_000_000_000
 ION_Z_SCALE = 10_000
@@ -55,16 +56,41 @@ def ion_numbers(pdg):
 
 
 def pdg_code(name):
-    """Look up a Geant4 source name, or a familiar label such as 'electron'.
+    """Resolve a particle name, integer PDG code, or explicit isotope.
 
-    Use ion_pdg(Z, A) for other nuclei; this lookup does not guess isotopes.
+    Isotopes accept Fe-56, iron-56, Fe56, 56Fe, or (element, A), where
+    element is an atomic number, symbol, or name.
     """
+    if isinstance(name, tuple):
+        if len(name) != 2:
+            raise ValueError("An isotope pair contains (element, mass number)")
+        element, mass = name
+        if isinstance(element, str):
+            atomic_number = ISOTOPE_ATOMIC_NUMBERS.get(element.strip().lower())
+            if atomic_number is None:
+                raise ValueError(f"Unknown element {element!r}")
+        else:
+            atomic_number = element
+        return ion_pdg(atomic_number, mass)
+    if not isinstance(name, str):
+        return index(name)
+    name = name.strip()
     if name in GEANT4_PARTICLES:
         return GEANT4_PARTICLES[name]
     for code, label in PARTICLE_NAMES.items():
         if name == label:
             return code
-    raise ValueError(f"Unknown particle {name!r}; use a Geant4 name or ion_pdg(Z, A)")
+    isotope = re.fullmatch(r"([A-Za-z]+)[\s-]*(\d+)", name)
+    mass_first = re.fullmatch(r"(\d+)\s*([A-Za-z]+)", name)
+    if mass_first:
+        mass, element = mass_first.groups()
+        return pdg_code((element, int(mass)))
+    if isotope:
+        element, mass = isotope.groups()
+        atomic_number = ISOTOPE_ATOMIC_NUMBERS.get(element.lower())
+        if atomic_number is not None:
+            return ion_pdg(atomic_number, int(mass))
+    raise ValueError(f"Unknown particle {name!r}; expected a particle name or isotope such as Fe-56")
 
 
 def particle_source(pdg, *, charge=None):
@@ -164,6 +190,20 @@ ELEMENT_ATOMIC_NUMBERS = {
     for atomic_number, symbol in enumerate(ELEMENT_SYMBOLS)
     if atomic_number > 0
 }
+ELEMENT_NAMES = (
+    "", "hydrogen", "helium", "lithium", "beryllium", "boron", "carbon",
+    "nitrogen", "oxygen", "fluorine", "neon", "sodium", "magnesium",
+    "aluminium", "silicon", "phosphorus", "sulfur", "chlorine", "argon",
+    "potassium", "calcium", "scandium", "titanium", "vanadium", "chromium",
+    "manganese", "iron", "cobalt", "nickel",
+)
+ISOTOPE_ATOMIC_NUMBERS = {
+    label.lower(): number
+    for labels in (ELEMENT_SYMBOLS, ELEMENT_NAMES)
+    for number, label in enumerate(labels) if number > 0
+}
+ISOTOPE_ATOMIC_NUMBERS.update(aluminum=ELEMENT_ATOMIC_NUMBERS["Al"],
+                              sulphur=ELEMENT_ATOMIC_NUMBERS["S"])
 
 
 def particle_name(pdg_code):
