@@ -23,7 +23,7 @@ import numpy as np
 from .cli import HelpFormatter, add_version_argument, configure_logging
 from .gather import atomic_text_output, chunk_name, read_chunk_plan
 from .particles import particle_source, particle_name, pdg_code
-from .phantom_calibration import (
+from .phantom import (
     Phantom, RESPONSE_ENERGY_EDGES_MEV,
     prepare_phantom_batch, sphere_psf, read_phantom_statistics,
     CM_PER_KM, PHOTON_PDG, DETECTOR_LAYER, DosePrecision, SamplingSettings,
@@ -91,7 +91,7 @@ class Batch:
 
 @dataclass(init=False)
 class PhantomBuilder:
-    """A persistent calibration run, independent of a notebook session.
+    """A persistent phantom run, independent of a notebook session.
 
     A batch is one independently seeded native chunk. Completed inputs and
     outputs stay immutable; new adaptive batches live in new directories.
@@ -114,7 +114,7 @@ class PhantomBuilder:
             f"Absolute dose tolerance: {self.settings.precision.absolute_dose_tolerance_Gy:.1e} Gy",
         ])
 
-    def __init__(self, psf, pdg_codes, *, directory=".", name="water-sphere",
+    def __init__(self, psf, pdg_codes, *, directory=".", name="phantom",
                 pilot_events=1300, production_cut_mm=0.1, seed=314159,
                 dose_rtol=0.05, dose_atol_Gy=1e-12,
                 confidence_factor=1.96, physics_list="FTFP_BERT_HP", tracking_floor_eV=None):

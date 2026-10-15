@@ -40,7 +40,7 @@ class PhantomTable:
     coefficients: np.ndarray
     quantity: str = ENERGY_FRACTION
     metadata: dict = field(default_factory=dict)
-    # Calibration builds can explicitly retain NaN for not-yet-sampled bins.
+    # Phantom builds can explicitly retain NaN for not-yet-sampled bins.
     allow_missing: bool = False
 
     def __str__(self):

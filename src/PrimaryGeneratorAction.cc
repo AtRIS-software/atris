@@ -39,7 +39,7 @@ void PrimaryGeneratorAction::GeneratePrimaries(G4Event* anEvent){
 	fParticleGenerator->GeneratePrimaryVertex(anEvent);  // We generate the primary particle
 
 	const G4int current = anEvent->GetEventID();
-	// Calibration drivers report chunk progress; avoid an event-sized log.
+	// Phantom drivers report chunk progress; avoid an event-sized log.
 	if (mode != kPhantomOutputMode && current % kProgressEventInterval == 0){
 		if (current != 0){
 		const G4int elapsed = static_cast<G4int>(std::time(nullptr)) - fStartTime;

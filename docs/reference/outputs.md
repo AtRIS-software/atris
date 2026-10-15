@@ -3,7 +3,7 @@
 `<name>` below is the suffix-free simulation prefix; `N` is a zero-based
 phantom ID. The simulation argument's extension selects the Geant4 output
 backend independently of the output mode. A missing extension defaults to CSV.
-The internal phantom-calibration mode (`3`) instead defaults to ROOT.
+The internal phantom-statistics mode (`3`) instead defaults to ROOT.
 
 ## Raw histogram files
 
@@ -28,12 +28,12 @@ areas.
 Source-position and direction histograms have 120 azimuth bins from 0 to $2\pi$
 and 60 $\cos\theta$ bins from -1 to 1.
 
-### Phantom calibration statistics
+### Phantom statistics
 
 Internal mode `3` adds two energy-versus-detector histograms. For each primary,
 the sensitive detector first totals ionizing deposition from the primary and
 its secondaries; only then does it fill these histograms, including zero
-deposits. Termination shells are not calibration volumes.
+deposits. Termination shells are not scored detector volumes.
 
 | ROOT object | Per-bin quantity |
 | --- | --- |
@@ -46,7 +46,7 @@ of individual energy fractions is $(Q-S^2/N)/(N-1)$ for $N>1$.
 ROOT's squared sums are not themselves sample variances. Raw-moment subtraction
 has floating-point cancellation when the variance is very small.
 
-`read_phantom_statistics` in `atris_tools.phantom_calibration` reads these
+`read_phantom_statistics` in `atris_tools.phantom` reads these
 statistics and also accepts older event-record chunks. `Phantom.gather(name)`
 combines completed builder batches; `phantom.save()` writes the tables and sampling uncertainties.
 New phantom-mode files contain histograms and run metadata, not per-primary,
@@ -160,11 +160,11 @@ counting error does not rule out rare events.
 The `validity` object records spherical geometry, scoring and termination IDs,
 and whether energy extrapolation is supported. The retained physical PSF records
 the layers and their material settings.
-The [water-sphere table](phantom-library.md#water-sphere-calibrations) gives the
-key properties of the four calibration runs. In calibration geometry,
+The [water-sphere table](phantom-library.md#water-sphere-phantoms) gives the
+key properties of the four phantom runs. In this transport geometry,
 detector ID 1 scores the innermost physical layer. Outer physical layers are
 passive shielding and have no sensitive detector attached. IDs 0 and 2 are vacuum termination
-shells: deposits there do not contribute. These are calibration IDs, not the
+shells: deposits there do not contribute. These detector IDs are not the
 phantom IDs assigned when loading tables into another atmospheric run. A
 physical PSF may have different input detector IDs; transport assigns the scoring
 ID to the innermost layer when adding termination shells.
@@ -188,7 +188,7 @@ settings does not establish that any particular precision target was met.
 The TXT tables project the response arrays and retain short interpretive headers;
 they do not duplicate the full ROOT metadata. JSON files retain operational
 build settings, batch history, and progress needed to extend or resume a run;
-there is no calibration-metadata JSON export. Build and batch settings read
+there is no separate response-metadata JSON export. Build and batch settings read
 geometry directly from PSF; ROOT retains the PSF associated with the results.
 
 ## Processed response tables

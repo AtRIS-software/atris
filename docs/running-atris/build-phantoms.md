@@ -93,7 +93,7 @@ Each physical setup has its own run directory and retained results.
 
 `simulation.psf` is the geometry and material input. The builder reads its
 radius, density, temperature, pressure, and composition directly. JSON files retain
-sampling settings and batch history. The generated `calibration.psf` adds the
+sampling settings and batch history. The generated `phantom.psf` adds the
 transport shells while preserving the physical water layer.
 
 ## Production cuts and phantom size
@@ -235,7 +235,7 @@ into a `Phantom`. Saving its sampling ROOT file preserves these settings,
 geometry, arrays and uncertainties. Reading that file restores the same data model:
 
 ```python
-from atris_tools.phantom_calibration import Phantom
+from atris_tools.phantom import Phantom
 
 phantom = Phantom.read_root("water-sphere_sampling.root")
 counts = phantom.sample_counts

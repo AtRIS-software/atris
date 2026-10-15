@@ -1,4 +1,4 @@
-"""Exercise preparation, native phantom chunks, resume, and table statistics."""
+"""Exercise phantom preparation, native chunks, resume, and statistics."""
 
 import hashlib
 import json
@@ -6,11 +6,11 @@ import json
 import numpy as np
 import pytest
 
-from atris_tools.phantom_calibration import (
+from atris_tools.phantom import (
     RESPONSE_ENERGY_EDGES_MEV,
     PhantomStatistics,
     Phantom,
-    compact_water_phantom_chunk,
+    compact_phantom_chunk,
     prepare_phantom_batch,
     read_phantom_statistics,
 )
@@ -24,7 +24,7 @@ from phantom_fixture import water_psf
 
 
 @pytest.mark.regression
-def test_native_chunks_feed_calibration_and_resume(
+def test_native_chunks_feed_phantom_and_resume(
     tmp_path, atris_command, monkeypatch
 ):
     monkeypatch.setenv("G4FORCENUMBEROFTHREADS", "2")
@@ -41,7 +41,7 @@ def test_native_chunks_feed_calibration_and_resume(
     # Mix a retained old event-record chunk with new compact phantom output.
     assert run_chunks(tmp_path, mode="shower", entry=1) == 1
     first = tmp_path / "chunks" / (chunk_name(read_chunk_plan(tmp_path)[0]) + ".root")
-    compact_water_phantom_chunk(first)
+    compact_phantom_chunk(first)
     checksum = hashlib.sha256(first.read_bytes()).digest()
     sphere = PSF(inner_radius_km=0, outer_radius_km=4e-9,
                  temperature_k=293, density_g_cm3=.997, pressure_pa=101325,

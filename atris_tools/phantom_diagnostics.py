@@ -6,7 +6,7 @@ import numpy as np
 
 from .input_plotting import _particle_groups
 from .particles import ION_PDG_BASE, particle_name, particle_symbol
-from .phantom_calibration import RESPONSE_ENERGY_EDGES_MEV, JOULES_PER_MEV, KG_PER_GRAM
+from .phantom import RESPONSE_ENERGY_EDGES_MEV, JOULES_PER_MEV, KG_PER_GRAM
 
 
 def _sampling_values(response):

@@ -9,7 +9,7 @@ import pytest
 import uproot
 
 from atris_tools.gather import chunk_name, read_chunk_plan
-from atris_tools.phantom_calibration import (
+from atris_tools.phantom import (
     RESPONSE_ENERGY_EDGES_MEV, prepare_phantom_batch, read_phantom_statistics,
 )
 
@@ -53,16 +53,16 @@ def test_time_limit_saves_actual_completed_counts(tmp_path, atris_command, monke
         assert root["h2.detected"].member("fEntries") == completed
 
     # A small event ceiling finishes before the time budget.
-    macro = tmp_path / "calibration.chunk.mac"
+    macro = tmp_path / "phantom.chunk.mac"
     source = macro.read_text()
     macro.write_text(source.replace("/run/beamOn 1000000", "/run/beamOn 16"))
     result = subprocess.run(
-        [atris_command, "FTFP_BERT_HP", "calibration_123456_654321.root", "3", "0"],
+        [atris_command, "FTFP_BERT_HP", "phantom_123456_654321.root", "3", "0"],
         cwd=tmp_path, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "time limit reached" not in result.stdout
-    statistics = read_phantom_statistics(tmp_path / "calibration_123456_654321.root")
+    statistics = read_phantom_statistics(tmp_path / "phantom_123456_654321.root")
     assert statistics.sample_counts.sum() == 16
 
 
@@ -73,13 +73,13 @@ def test_event_ceiling_can_finish_before_time_budget(tmp_path, atris_command, mo
     prepare_phantom_batch(tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451], psf_path=water_psf(),
                           particle="proton", events_per_chunk=16, chunks=1)
     result = subprocess.run(
-        [atris_command, "FTFP_BERT_HP", "calibration_123456_654321.root", "3", "0"],
+        [atris_command, "FTFP_BERT_HP", "phantom_123456_654321.root", "3", "0"],
         cwd=tmp_path, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "completed 16 of 16 requested events; event limit reached" in result.stdout
     assert "time limit: 60 s" in result.stdout
-    assert read_phantom_statistics(tmp_path / "calibration_123456_654321.root").sample_counts.sum() == 16
+    assert read_phantom_statistics(tmp_path / "phantom_123456_654321.root").sample_counts.sum() == 16
 
 
 @pytest.mark.regression
@@ -93,7 +93,7 @@ def test_optional_time_limit_validation(tmp_path, atris_command, monkeypatch, li
     prepare_phantom_batch(tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451], psf_path=water_psf(),
                           particle="proton", events_per_chunk=16, chunks=1)
     result = subprocess.run(
-        [atris_command, "FTFP_BERT_HP", "calibration_123456_654321.root", "3", "0"],
+        [atris_command, "FTFP_BERT_HP", "phantom_123456_654321.root", "3", "0"],
         cwd=tmp_path, capture_output=True, text=True, timeout=60,
     )
     if limit is None:

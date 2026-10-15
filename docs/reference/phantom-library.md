@@ -24,9 +24,9 @@ sampling with `PhantomBuilder`. The notebook runs a small batch group from Pytho
 then gathers the phantom and plots its response and sampling precision. Follow
 [building phantoms](../running-atris/build-phantoms.md) for your own run.
 
-## Water-sphere calibrations
+## Water-sphere phantoms
 
-The four water-sphere calibration runs have the following physical settings,
+The four water-sphere phantom runs have the following physical settings,
 recorded in their retained exports. The names identify sphere sizes.
 All four are homogeneous, unshielded liquid water with density
 $0.997\,\mathrm{g\,cm^{-3}}$.
@@ -58,7 +58,7 @@ for precision diagnostics.
 
 ## Legacy phantom properties
 
-These are the supplied historical families, separate from the four calibration
+These are the supplied historical families, separate from the four phantom
 runs above. Unknown entries identify historical settings whose values remain
 unrecovered. Reconstruction candidates are listed separately from recorded properties.
 
@@ -133,7 +133,7 @@ table and documented mass and area complete the inputs for staging.
 The conversion represents each energy column by its arithmetic bin centre;
 an event-level mean of $W/K$ requires individual-event records. Historical
 generation settings remain partly unrecovered, and differences between ICRU
-calibrations are described in the known discrepancies. C++ and Python readers
+datasets are described in the known discrepancies. C++ and Python readers
 load the stored coefficients; the example performs the conversion explicitly.
 
 ## Existing Earth example
@@ -188,7 +188,7 @@ particle_source(1000060120)   # {"particle": "ion", "ion": {"Z": 6, "A": 12, "ch
 ```
 
 Pass `**particle_source(pdg)` to `prepare_phantom_batch` in
-`atris_tools.phantom_calibration`. Named particles include antiparticles and
+`atris_tools.phantom`. Named particles include antiparticles and
 the light nuclei `deuteron`, `triton`, `He3`, and `alpha`. Other positive
 ground-state nuclei use an ion source; they are fully stripped unless
 `particle_source` receives an explicit `charge`. The charge state does not
@@ -196,7 +196,7 @@ change the PDG code. Excited states, hypernuclei, and generic antinuclear
 sources are outside this helper's scope.
 
 `prepare_phantom_batch` writes geometry and chunk inputs from the supplied PSF;
-`read_water_phantom_events` reads completed chunks into NumPy arrays;
+`gather_phantom_events` reads completed chunks into NumPy arrays;
 `Phantom.gather(name)` combines completed builder batches into fixed-grid responses
 and sampling errors. Its `Phantom.save` method writes the response and counting
 tables and sampling ROOT arrays with metadata, returning a tuple of the paths
@@ -237,11 +237,11 @@ companion; detailed scientific metadata lives in ROOT. See
 [response-table headers](inputs.md#phantom-response-matrices).
 The C++ reader skips all comments and reads coefficients unchanged.
 
-`compact_water_phantom_chunk(path)` retains the per-primary energy sums,
-histograms and metadata needed for calibration, while removing detailed
+`compact_phantom_chunk(path)` retains the per-primary energy sums,
+histograms and metadata needed to reconstruct response statistics, while removing detailed
 transport-step and interface-crossing records. It verifies the event arrays
 before replacing the generated chunk file and records the discarded ntuples
-in that file. `read_water_phantom_events` reads either representation.
+in that file. `gather_phantom_events` reads either representation.
 The `shower` output mode retains individual events for exploring counting
 thresholds. The builder uses `phantom` output mode, which stores per-bin
 statistics with a zero counting threshold; read those with

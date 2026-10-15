@@ -302,7 +302,7 @@ def main():
         "--mode",
         type=normalize_output_mode,
         choices=OUTPUT_MODES,
-        # Accept the internal calibration mode without advertising it.
+        # Accept the internal phantom mode without advertising it.
         metavar="{response,profile,shower}",
         default="response",
         help=(

@@ -321,7 +321,7 @@ void SensitiveDetector::EndOfEvent(G4HCofThisEvent*)
 {
 	if (mode != kPhantomOutputMode) return;
 	const G4int detectorId = std::stoi(GetName());
-	// Termination shells stop transport; they are not calibration volumes.
+	// Termination shells stop transport; they are not phantom volumes.
 	if (detectorId == 0 || detectorId == numberOfDetectors - 1) return;
 	const G4Event* const event = G4RunManager::GetRunManager()->GetCurrentEvent();
 	const G4double incidentEnergy = event->GetPrimaryVertex()->GetPrimary()->GetKineticEnergy();

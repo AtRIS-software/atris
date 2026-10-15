@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from atris_tools.phantom_builder import Batch, PhantomBuilder
-from atris_tools.phantom_calibration import Phantom, PhantomStatistics
+from atris_tools.phantom import Phantom, PhantomStatistics
 from atris_tools.psf import PSF, write_psf
 
 
@@ -171,7 +171,7 @@ def test_tracking_floor_retained_in_new_batch(build, tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="prepared input"):
         builder.run()
     assert PhantomBuilder.open(builder.directory).settings.tracking_floor_eV == 1
-    macro = (builder.directory / builder._batches()[0]["directory"] / "calibration.chunk.mac").read_text()
+    macro = (builder.directory / builder._batches()[0]["directory"] / "phantom.chunk.mac").read_text()
     for command in ("/process/em/lowestElectronEnergy", "/process/em/lowestMuHadEnergy"):
         line = next(line for line in macro.splitlines() if line.startswith(command))
         assert float(line.split()[1]) == 1
@@ -211,11 +211,11 @@ def test_prepare_accepts_species_names(tmp_path):
     path = tmp_path / "water.psf"
     water_psf(path)
     names = ["photon", 2212, (26, 56), ("nickel", 58), "Fe-56", "iron-56", ("Fe", 56)]
-    calibration = PhantomBuilder(path, names, directory=tmp_path / "run")
-    assert calibration.settings.pdg_codes == [22, 2212, 1000260560, 1000280580]
-    reopened = PhantomBuilder(path, calibration.settings.pdg_codes,
+    phantom = PhantomBuilder(path, names, directory=tmp_path / "run")
+    assert phantom.settings.pdg_codes == [22, 2212, 1000260560, 1000280580]
+    reopened = PhantomBuilder(path, phantom.settings.pdg_codes,
                                      directory=tmp_path / "run")
-    assert reopened.settings == calibration.settings
+    assert reopened.settings == phantom.settings
 
 
 def test_name_controls_saved_filenames(tmp_path):
@@ -281,7 +281,7 @@ def test_rejects_changed_geometry_and_preserves_nonwater_material(tmp_path, buil
 
 
 def test_layered_psf_preserves_shielding_and_uses_sensor_mass(tmp_path):
-    from atris_tools.phantom_calibration import prepare_phantom_batch
+    from atris_tools.phantom import prepare_phantom_batch
     from atris_tools.psf import DETECTOR_ID, load_psf
     psf = PSF(inner_radius_km=[0, 1e-5], outer_radius_km=[1e-5, 2e-5],
               temperature_k=[290, 310], density_g_cm3=[2.7, 1.8], pressure_pa=0,
@@ -302,9 +302,9 @@ def test_layered_psf_preserves_shielding_and_uses_sensor_mass(tmp_path):
     prepare_phantom_batch(batch, [1, 10], psf_path=psf)
     expected = psf.layers.copy()
     expected[:, DETECTOR_ID] = [1, -1]
-    np.testing.assert_array_equal(load_psf(batch / "calibration.psf")[:-2], expected)
+    np.testing.assert_array_equal(load_psf(batch / "phantom.psf")[:-2], expected)
     import xml.etree.ElementTree as ET
-    gdml = ET.parse(batch / "calibration.gdml")
+    gdml = ET.parse(batch / "phantom.gdml")
     volumes = gdml.findall("./structure/volume")
     assert len({volume.attrib["name"] for volume in volumes}) == len(volumes)
     assert gdml.find("./structure/volume[@name='volume-1']/auxiliary") is None
@@ -442,8 +442,8 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
 
     stats = PhantomStatistics(np.full(650, 2), np.full(650, .5), np.full(650, .1), np.ones(650, dtype=int))
     monkeypatch.setattr(PhantomBuilder, "_execute", complete)
-    monkeypatch.setattr("atris_tools.phantom_calibration.read_phantom_statistics", lambda path: stats)
-    monkeypatch.setattr("atris_tools.phantom_calibration.read_ntuple", lambda *args: {
+    monkeypatch.setattr("atris_tools.phantom.read_phantom_statistics", lambda path: stats)
+    monkeypatch.setattr("atris_tools.phantom.read_ntuple", lambda *args: {
         "physics_list": ["FTFP_BERT_HP"], "atris_version": ["test-version"]})
     build.run(batches=2)
     assert f"Running phantom sampling in folder {build.directory}" in caplog.text
@@ -455,7 +455,9 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
     assert Phantom.gather(directory=build.directory).metadata["atris_version"] == "test-version"
     phantom = Phantom.gather(directory=build.directory)
     phantom.save(build.directory / "export", allow_partial=True)
-    restored = Phantom.read_root(build.directory / "export/water-sphere_sampling.root")
+    restored = Phantom.read_root(
+        build.directory / f"export/{build.settings.stem}_sampling.root"
+    )
     for field in fields(Phantom):
         original = getattr(phantom, field.name)
         saved = getattr(restored, field.name)
@@ -493,7 +495,7 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
     assert "Schedule preview: 4 batches" in preview
     build.run(batches=1, adaptive=True)
     assert len(build._batches()) == 3
-    monkeypatch.setattr("atris_tools.phantom_calibration.read_ntuple", lambda *args: {
+    monkeypatch.setattr("atris_tools.phantom.read_ntuple", lambda *args: {
         "physics_list": ["QGSP_BERT"], "atris_version": ["test-version"]})
     with pytest.raises(ValueError, match="physics list differs"):
         Phantom.gather(directory=build.directory)
@@ -515,7 +517,9 @@ def test_gather_and_save_have_no_extra_output_side_effects(build, monkeypatch):
     response.save()
     assert not (build.directory / "export").exists()
     assert not (build.directory / "water-sphere_diagnostics.png").exists()
-    state = json.loads((build.directory / "water-sphere_sampling-state.json").read_text())
+    state = json.loads(
+        (build.directory / f"{build.settings.stem}_sampling-state.json").read_text()
+    )
     assert state["resolved_bins"] == 0
     assert not state["precision_complete"]
     assert not state["counting_drives_sampling"]

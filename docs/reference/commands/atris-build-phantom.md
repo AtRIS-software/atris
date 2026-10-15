@@ -1,6 +1,6 @@
 # atris-build-phantom
 
-Run a bounded number of batches in a water-sphere calibration prepared with
+Run a bounded number of batches in a water-sphere phantom prepared with
 `atris_tools.phantom_builder.PhantomBuilder`, or refresh its exports.
 See [building phantoms](../../running-atris/build-phantoms.md) for the procedure.
 

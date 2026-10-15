@@ -10,7 +10,7 @@ namespace atris {
 constexpr G4int kResponseOutputMode = -1;
 constexpr G4int kInterfaceOutputMode = 0;
 constexpr G4int kStepOutputMode = 1;
-// Internal calibration mode: mergeable per-bin statistics, not event records.
+// Internal phantom mode: mergeable per-bin statistics, not event records.
 constexpr G4int kPhantomOutputMode = 3;
 
 constexpr G4bool WritesMetadataNtuple(const G4int outputMode)

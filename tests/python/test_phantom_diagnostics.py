@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from atris_tools.phantom_calibration import Phantom, PhantomStatistics
+from atris_tools.phantom import Phantom, PhantomStatistics
 from atris_tools.phantom_diagnostics import plot_creation_diagnostics, plot_sampling_precision
 from atris_tools.psf import PSF
 

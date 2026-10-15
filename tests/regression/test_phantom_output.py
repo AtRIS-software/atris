@@ -5,7 +5,7 @@ import pytest
 import uproot
 
 from test_atris_command import atris_command, invoke_atris
-from atris_tools.phantom_calibration import (
+from atris_tools.phantom import (
     PhantomEvents,
     PhantomStatistics,
     prepare_phantom_batch,
@@ -18,18 +18,18 @@ from atris_tools.psf import PSF
 EVENTS = 64
 
 
-def prepare_calibration(directory, particle, *, miss=False, events=EVENTS, psf=None):
+def prepare_phantom(directory, particle, *, miss=False, events=EVENTS, psf=None):
     directory.mkdir()
     radius = 4e-4
     prepare_phantom_batch(directory, [0.001, 10], psf_path=water_psf(radius) if psf is None else psf, particle=particle,
                           events_per_chunk=events, production_cut_mm=0.00001,
                           tracking_floor_eV=1)
-    macro = directory / "calibration.chunk.mac"
+    macro = directory / "phantom.chunk.mac"
     macro.write_text(macro.read_text().replace("/run/beamOn",
         "/gps/pos/type Point\n"
         f"/gps/pos/centre {1.5 * radius if miss else 0} 0 {-1.1 * radius} cm\n"
         "/run/beamOn"))
-    (directory / "calibration.mac").symlink_to(macro.name)
+    (directory / "phantom.mac").symlink_to(macro.name)
 
 
 @pytest.mark.regression
@@ -42,12 +42,12 @@ def test_phantom_matches_shower_and_retains_per_bin_statistics(
     sizes = {}
     for mode in ("1", "phantom"):
         directory = tmp_path / mode
-        prepare_calibration(directory, particle)
+        prepare_phantom(directory, particle)
         result = invoke_atris(
             atris_command,
             directory,
             "FTFP_BERT_HP",
-            "calibration_123456_654321.root",
+            "phantom_123456_654321.root",
             mode,
             "0",
             threads=threads,
@@ -55,7 +55,7 @@ def test_phantom_matches_shower_and_retains_per_bin_statistics(
         assert result.returncode == 0, result.stdout + result.stderr
         if mode == "phantom":
             assert "Processing event:" not in result.stdout
-        path = directory / "calibration_123456_654321.root"
+        path = directory / "phantom_123456_654321.root"
         sizes[mode] = path.stat().st_size
         with uproot.open(path) as root:
             if mode == "1":
@@ -114,14 +114,14 @@ def test_layered_phantom_scores_only_sensor_deposit_per_primary(tmp_path, atris_
     outputs = {}
     for mode in ("1", "phantom"):
         directory = tmp_path / mode
-        prepare_calibration(directory, "proton", psf=psf)
-        macro = directory / "calibration.chunk.mac"
+        prepare_phantom(directory, "proton", psf=psf)
+        macro = directory / "phantom.chunk.mac"
         macro.write_text(macro.read_text().replace(
             "/gps/ene/type Pow", "/gps/ene/type Mono\n/gps/ene/mono 1 MeV"))
         result = invoke_atris(atris_command, directory, "FTFP_BERT_HP",
-                              "calibration_123456_654321.root", mode, "0", threads="1")
+                              "phantom_123456_654321.root", mode, "0", threads="1")
         assert result.returncode == 0, result.stdout + result.stderr
-        path = directory / "calibration_123456_654321.root"
+        path = directory / "phantom_123456_654321.root"
         with uproot.open(path) as root:
             assert root["h1.1"].member("fEntries") == EVENTS
             if mode == "phantom":
@@ -147,39 +147,39 @@ def test_layered_phantom_scores_only_sensor_deposit_per_primary(tmp_path, atris_
     from atris_tools.psf import DENSITY
     unshielded.layers[1, DENSITY] = 1e-25
     directory = tmp_path / "vacuum"
-    prepare_calibration(directory, "proton", psf=unshielded)
-    macro = directory / "calibration.chunk.mac"
+    prepare_phantom(directory, "proton", psf=unshielded)
+    macro = directory / "phantom.chunk.mac"
     macro.write_text(macro.read_text().replace(
         "/gps/ene/type Pow", "/gps/ene/type Mono\n/gps/ene/mono 1 MeV"))
     result = invoke_atris(atris_command, directory, "FTFP_BERT_HP",
-                          "calibration_123456_654321.root", "phantom", "0", threads="1")
+                          "phantom_123456_654321.root", "phantom", "0", threads="1")
     assert result.returncode == 0, result.stdout + result.stderr
-    without_shield = read_phantom_statistics(directory / "calibration_123456_654321.root")
+    without_shield = read_phantom_statistics(directory / "phantom_123456_654321.root")
     assert not np.allclose(without_shield.mean_fraction, outputs["phantom"].mean_fraction, equal_nan=True)
 
 
 @pytest.mark.regression
 def test_phantom_counts_primaries_that_never_enter_water(tmp_path, atris_command):
     directory = tmp_path / "miss"
-    prepare_calibration(directory, "proton", miss=True)
+    prepare_phantom(directory, "proton", miss=True)
     result = invoke_atris(
         atris_command,
         directory,
         "FTFP_BERT_HP",
-        "calibration",
+        "phantom",
         "phantom",
         "0",
         threads="2",
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    stats = read_phantom_statistics(directory / "calibration.root")
+    stats = read_phantom_statistics(directory / "phantom.root")
     assert stats.sample_counts.sum() == EVENTS
     assert not np.any(stats.mean_fraction)
     assert not np.any(stats.squared_deviations)
     assert not np.any(stats.detected_counts)
     with pytest.raises(ValueError, match="zero counting threshold"):
-        read_phantom_statistics(directory / "calibration.root", threshold_MeV=0.001)
-    with uproot.open(directory / "calibration.root") as root:
+        read_phantom_statistics(directory / "phantom.root", threshold_MeV=0.001)
+    with uproot.open(directory / "phantom.root") as root:
         assert root["h1.1"].member("fEntries") == EVENTS
 
 
@@ -188,18 +188,18 @@ def test_phantom_output_does_not_store_records_per_primary(tmp_path, atris_comma
     sizes = []
     for events in (64, 65000):
         directory = tmp_path / str(events)
-        prepare_calibration(directory, "proton", events=events)
+        prepare_phantom(directory, "proton", events=events)
         result = invoke_atris(
             atris_command,
             directory,
             "FTFP_BERT_HP",
-            "calibration",
+            "phantom",
             "phantom",
             "0",
             threads="2",
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        path = directory / "calibration.root"
+        path = directory / "phantom.root"
         stats = read_phantom_statistics(path)
         assert stats.sample_counts.sum() == events
         assert stats.sample_counts.shape == (650,)

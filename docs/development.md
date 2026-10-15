@@ -26,10 +26,10 @@ The 3.x line should consolidate and test the workflow on `main` while
 preserving its current interfaces. Its planned work is:
 
 - establish the provenance and role of the retained phantom data;
-- report the minimal uncertainty estimates supported by the current phantom
-  calibration statistics and clearly identify unresolved bins;
+- report the minimal uncertainty estimates supported by current phantom
+  sampling statistics and clearly identify unresolved bins;
 - experiment with bounds for sparse phantom responses and variance reduction
-  for thin phantoms without making either a supported 3.x calibration mode;
+  for thin phantoms without making either a supported 3.x feature;
 - add backward-compatible ranged chunks and convergence diagnostics in stages;
 - improve installation, workflow, and numerical regression tests; and
 - continue local C++ and Python cleanup where it does not alter supported
@@ -41,7 +41,7 @@ the 3.x compatibility baseline. New metadata or diagnostics may be added when
 old files and commands remain valid. The 3.x phantom builder should provide
 minimal per-bin uncertainty estimates from its existing sampling moments and
 must identify statistically unresolved all-zero bins rather than report zero
-error. A supported error bound for sparse bins, forced-interaction calibration,
+error. A supported error bound for sparse bins, forced interactions,
 and propagation of phantom uncertainty through an ordinary atmospheric response
 calculation are deferred to 4.0. Experiments supporting those features may be
 performed during 3.x development.
@@ -101,13 +101,13 @@ The intentionally incompatible parts of the design are therefore:
   and metadata;
 - changing primary-energy sampling from the 3.x finite-bin procedure to a
   continuous log-uniform source;
-- introducing supported sparse-bin error bounds and forced-interaction
-  calibration for thin phantoms;
+- introducing supported sparse-bin error bounds and forced interactions
+  for thin phantoms;
 - supplying clearly named water and ICRU phantom families at several physical
   sizes;
 - making error-minimising adaptive sampling a supported workflow, using
   measured uncertainty and runtime rather than fixed event allocations; and
-- adding versioned products for full phantom-calibration and transport
+- adding versioned products for full response-statistics and transport
   uncertainty propagation.
 
 The branch also contains useful internal work: focused run-configuration and
@@ -186,23 +186,23 @@ the available examples, historical notes, and original exploration notebook.
 This preservation policy applies to the 3.x repository. It does not place the
 legacy phantom library in the 4.0 distribution.
 
-## Phantom calibration uncertainty (3.x)
+## Phantom response uncertainty (3.x)
 
-Phantom calibration should retain enough information to give each response bin
-a minimal sampling-uncertainty estimate without storing individual calibration
+The phantom output should retain enough information to give each response bin
+a minimal sampling-uncertainty estimate without storing individual primary
 events. Bins with observed deposits can use their existing first and second
 moments. All-zero bins must remain explicitly unresolved rather than receive a
 reported standard error of zero. These estimates describe the phantom
-calibration only; 3.x does not use them as a stopping bound or propagate them
-through an ordinary atmospheric response run.
+sampling uncertainty only; 3.x does not use them as a stopping bound or
+propagate them through an ordinary atmospheric response run.
 
 Experiments during 3.x may evaluate sparse-response bounds and forced
 interactions. Their outputs must be identified as experimental and must not
-silently replace analogue calibration products used by the supported workflow.
+silently replace results from the unbiased workflow.
 
-### Retain compact calibration statistics
+### Retain compact phantom statistics
 
-Phantom-calibration mode already accumulates the quantities needed for one
+Phantom output mode already accumulates the quantities needed for one
 scoring volume and particle-energy cell: the primary count $N$, the sum $S$ of
 deposited-energy fractions, the squared sum $Q$, and the detected-primary count
 $K$. These give the mean response, its sampling variance and standard error,
@@ -210,16 +210,16 @@ and the counting efficiency with its sampling uncertainty. Keep these
 mergeable accumulators rather than individual events or a covariance value
 calculated before all chunks have been gathered.
 
-Use ROOT as the compact scientific record for the calibration axes, particle
+Use ROOT as the compact scientific record for the response axes, particle
 codes, $N$, $S$, $Q$, $K$, and metadata. Do not add separate NPZ and JSON
 representations of the same result. Until the C++ phantom loader is deliberately
 replaced, retain the existing `_response.txt` and `_counting.txt` matrices as
 the small backward-compatible runtime inputs. They can be generated from the
-calibrated result; the ROOT record retains the statistics needed for later
+response result; the ROOT record retains the statistics needed for later
 analysis. The runtime matrix sizes therefore do not grow when uncertainty
 information is added.
 
-## Phantom calibration methods (4.0)
+## Phantom response methods (4.0)
 
 ### Define sparse-response error bounds
 
@@ -234,13 +234,13 @@ for normalization. The method must define its confidence level, assumptions,
 and behavior when $K=Q=0$. In particular, an all-zero sample cannot acquire a
 zero error merely because no response has yet been observed. Any physical cap
 or distributional assumption needed to obtain a finite upper bound must be
-recorded with the calibration result.
+recorded with the response result.
 
 When the resulting bound is below the configured absolute dose tolerance, the
 builder may retain zero as the point estimate, record the bound, and consider
 the bin sufficiently constrained. Otherwise it should keep sampling. The bound
 must remain mergeable across chunks and be reproducible from the retained
-calibration statistics.
+phantom statistics.
 
 ### Force interactions in thin phantoms
 
@@ -248,14 +248,14 @@ Thin phantoms give neutral particles such as photons and neutrons a small
 probability of interacting. An analogue simulation therefore spends most of
 its histories recording zero response, while a few interactions dominate the
 estimated mean. Evaluate Geant4's generic force-collision biasing for these
-calibrations. The [Geant4 biasing framework][g4-biasing] provides
+phantoms. The [Geant4 biasing framework][g4-biasing] provides
 `G4BOptrForceCollision`, which splits a track entering a selected volume
 into a correctly weighted uncollided branch and a branch forced to interact;
 `G4BOptnForceCommonTruncatedExp` samples the forced interaction before the
 particle exits. Geant4's `GB02` extended example provides the reference
 implementation.
 
-The phantom-calibration scorer must treat each original primary as one weighted
+The phantom scorer must treat each original primary as one weighted
 sample. Its energy-response sample is the sum of statistically weighted energy
 deposits from the biased branches and their descendants. Its counting sample is
 the statistical weight of the branch satisfying the counting criterion, not
@@ -264,8 +264,8 @@ second moments must contain these complete weighted samples. Merely attaching
 the biasing operator while leaving the current scorer unchanged would produce
 biased response tables.
 
-Keep analogue calibration available while developing this path. Validate each
-biased particle type against an analogue calibration in a geometry and energy
+Keep unbiased transport available while developing this path. Validate each
+biased particle type against an unbiased run in a geometry and energy
 range where both obtain adequate statistics. Compare response and counting
 means within their estimated uncertainties, then benchmark uncertainty per CPU
 time for a representative micrometre-scale phantom. Start with photons and
@@ -276,32 +276,32 @@ particles, which also lose energy continuously.
 
 ### Supply reference phantom families
 
-The supported calibration feature should include clearly named water and ICRU
+The supported phantom feature should include clearly named water and ICRU
 phantom families at several physical sizes. Names should state the material,
 geometry, size, and unit rather than rely on an ordinal or an unexplained label.
 Each entry should record its dimensions, composition, density, mass,
-cross-sectional area, production cut, physics list, calibration method, and
+cross-sectional area, production cut, physics list, transport method, and
 uncertainty statistics.
 
 The size range should include phantoms thick enough for direct analogue
 validation and thin phantoms that exercise the sparse-response bound and
 forced-interaction path. For every size where forced interactions are used,
-compare the result with an analogue calculation in a range where both methods
-obtain adequate statistics. Ship the ROOT calibration record and the compact
+compare the result with an unbiased calculation in a range where both methods
+obtain adequate statistics. Ship the ROOT response-statistics record and the compact
 runtime response tables under the same unambiguous phantom stem.
 
 ## Propagate phantom uncertainty (4.0)
 
-AtRIS 4.0 may propagate phantom-calibration uncertainty through an atmospheric
-response calculation without storing individual calibration events or interface
-crossings. This is distinct from uncertainty in Geant4's physics models, the
+AtRIS 4.0 may propagate uncertainty in phantom response coefficients through
+an atmospheric response calculation without storing individual primary
+events or interface crossings. This is distinct from uncertainty in Geant4's physics models, the
 atmosphere, or a later physical source spectrum. Transport sampling uncertainty
-and phantom-calibration uncertainty should remain separate quantities so that
+and phantom-response uncertainty should remain separate quantities so that
 their origins are clear.
 
-### Retain calibration covariance
+### Retain phantom covariance
 
-A calibration with several scoring volumes may retain the cross-product
+A phantom with several scoring volumes may retain the cross-product
 
 $$
 Q_{ab}=\sum_i x_{i,a}x_{i,b}
@@ -341,7 +341,7 @@ $$
 Y=\sum_j W_jr_j.
 $$
 
-With a coefficient covariance matrix $C$, its calibration variance is
+With a coefficient covariance matrix $C$, the variance from phantom uncertainty is
 
 $$
 \operatorname{Var}(Y)=\boldsymbol{W}^{\mathsf T}C\boldsymbol{W}.
@@ -368,7 +368,7 @@ and their `Sw2` values treat those correlated crossings as separate fills. To
 estimate transport sampling uncertainty, accumulate each primary history's
 total contribution to each output bin and retain its first and second moments.
 These fixed-size moments can be gathered by addition and used independently of
-the phantom-calibration covariance.
+the phantom-response covariance.
 
 Keep the established response histogram names and numerical meanings unchanged.
 Add new uncertainty products under versioned names and record the schema in

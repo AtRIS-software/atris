@@ -237,8 +237,8 @@ spectrum into the results. Such files may be retained as run inputs by
 ```
 
 IDs must be unique and contiguous from zero; rows are sorted by ID. Mass is
-in grams and area in cm². Use the area associated with the response table's
-calibration. The parser accepts numeric mass and area values without checking
+in grams and area in cm². Use the area used to derive the response table. The
+parser accepts numeric mass and area values without checking
 that they are positive; post-processing requires physically valid values.
 
 For the water sphere, the effective area is $2\pi r^2$, half its total surface

@@ -107,7 +107,7 @@ class PhantomStatistics:
             incident >= RESPONSE_ENERGY_EDGES_MEV[-1]
         ):
             raise ValueError(
-                "Calibration energies must lie inside the AtRIS response grid"
+                "Phantom energies must lie inside the AtRIS response grid"
             )
         fraction = events.ionizing_energy_MeV / incident
         count = np.histogram(incident, RESPONSE_ENERGY_EDGES_MEV)[0]
@@ -523,7 +523,7 @@ class Phantom:
             raise ValueError("Sample counts must be nonnegative integers")
         if not allow_partial and np.any(self.sample_counts <= 0):
             raise ValueError(
-                "Unsampled energy bins remain; run more calibration chunks"
+                "Unsampled energy bins remain; run more phantom chunks"
             )
         if (
             not np.all(np.isfinite(self.energy_fraction[self.sample_counts > 0]))
@@ -628,7 +628,7 @@ def prepare_phantom_batch(
     The directory must already exist. Repeating the same preparation is a
     no-op. Increasing chunks appends new seeds without changing existing jobs;
     changing the physical setup requires a directory without an existing plan.
-    No previously calculated phantom response is loaded during calibration.
+    This preparation does not load an existing response table.
     Named particles include light nuclei (deuteron, triton, He3, alpha).
     For other ground-state nuclei, use particle="ion" and a dictionary with
     integer Z, A, and charge (in elementary-charge units).
@@ -671,7 +671,7 @@ def prepare_phantom_batch(
     elif ion is not None:
         raise ValueError("Ion properties require particle='ion'")
     if (directory / "phantoms.txt").exists():
-        raise ValueError("Use a calibration directory without phantoms.txt")
+        raise ValueError("Use a phantom directory without phantoms.txt")
     config = dict(
         particle=particle,
         events_per_chunk=events_per_chunk,
@@ -689,14 +689,14 @@ def prepare_phantom_batch(
             f"/process/em/lowestElectronEnergy {tracking_floor_eV:.17e} eV\n"
             f"/process/em/lowestMuHadEnergy {tracking_floor_eV:.17e} eV\n"
         )
-    config_path = directory / "water-phantom.json"
+    config_path = directory / "phantom-run.json"
     if (directory / "chunks.txt").exists():
         if config_path.exists():
             previous = json.loads(config_path.read_text())
             requested = config.copy()
             previous.pop("chunks")
             requested.pop("chunks")
-            retained = sphere_psf(directory / "calibration.psf", transport=True)
+            retained = sphere_psf(directory / "phantom.psf", transport=True)
             expected = physical.layers.copy()
             expected[:, DETECTOR_ID] = -1
             expected[DETECTOR_LAYER, DETECTOR_ID] = PHANTOM_DETECTOR_ID
@@ -708,7 +708,7 @@ def prepare_phantom_batch(
                     config_path.write_text(json.dumps(config, indent=2) + "\n")
                 return
         raise FileExistsError(
-            "A different calibration already exists in this directory"
+            "A different phantom already exists in this directory"
         )
 
     radius_km = radius_cm / CM_PER_KM
@@ -725,11 +725,11 @@ def prepare_phantom_batch(
     layers[-2:, FIRST_ELEMENT:] = 0
     layers[-2:, FIRST_ELEMENT] = 1
     geometry = PSF.from_layers(layers, physical.materials)
-    write_psf(directory / "calibration.psf", geometry)
-    psf2gdml(directory / "calibration.psf", directory / "calibration.gdml",
+    write_psf(directory / "phantom.psf", geometry)
+    psf2gdml(directory / "phantom.psf", directory / "phantom.gdml",
              world_margin_km=WORLD_MARGIN_RADII * radius_km)
     # The source range may cover only part of the shared response grid.
-    np.savetxt(directory / "calibration.bins", RESPONSE_ENERGY_EDGES_MEV)
+    np.savetxt(directory / "phantom.bins", RESPONSE_ENERGY_EDGES_MEV)
     macro = f"""{tracking_commands}/run/setCut {production_cut_mm:.17e} mm
 /run/initialize
 {source_commands}/gps/pos/type Plane
@@ -743,7 +743,7 @@ def prepare_phantom_batch(
 /gps/ene/max {edges[-1]:.17e} MeV
 /run/beamOn {events_per_chunk}
 """
-    (directory / "calibration.chunk.mac").write_text(macro)
+    (directory / "phantom.chunk.mac").write_text(macro)
     (directory / "chunks").mkdir(exist_ok=True)
     _write_chunk_plan(directory, chunks, seed)
     config_path.write_text(json.dumps(config, indent=2) + "\n")
@@ -757,7 +757,7 @@ def _write_chunk_plan(directory, chunks, seed, entries=()):
         seeds.add(tuple(rng.integers(CHUNK_SEED_MIN, CHUNK_SEED_MAX_EXCLUSIVE, size=2)))
     plan = "".join(f"{name} {a} {b}\n" for name, a, b in entries)
     plan += "".join(
-        f"calibration {a:06d} {b:06d}\n" for a, b in sorted(seeds - previous)
+        f"phantom {a:06d} {b:06d}\n" for a, b in sorted(seeds - previous)
     )
     with atomic_text_output(directory / "chunks.txt") as output:
         output.write(plan)
@@ -788,17 +788,17 @@ def read_phantom_statistics(path, threshold_MeV=0.0):
             )
         if len(fraction.member("fSumw2")) == 0:
             raise ValueError("Phantom histogram is missing per-bin squared sums")
-        water_bin = (
+        detector_bin = (
             np.searchsorted(fraction.axes[1].edges(), PHANTOM_DETECTOR_ID, side="right")
             - 1
         )
         counts = primary.values().astype(np.int64)
-        totals = fraction.values()[:, water_bin]
-        squares = fraction.variances()[:, water_bin]
+        totals = fraction.values()[:, detector_bin]
+        squares = fraction.variances()[:, detector_bin]
         means = np.divide(totals, counts, out=np.zeros_like(totals), where=counts > 0)
         # Raw second-moment subtraction can round slightly below zero.
         deviations = np.maximum(0, squares - totals * means)
-        detected = root["h2.detected"].values()[:, water_bin].astype(np.int64)
+        detected = root["h2.detected"].values()[:, detector_bin].astype(np.int64)
     return PhantomStatistics(counts, means, deviations, detected)
 
 
@@ -807,15 +807,15 @@ def read_phantom_events(path):
     with uproot.open(path) as root:
         if "phantom_events" in root:
             arrays = root["phantom_events"].arrays(library="np")
-            # Older compacted shower files contain water rows only; the native
-            # mode names the scoring volume explicitly and can contain others.
-            water = (
+            # Older compacted shower files contain only scored-volume rows;
+            # native files identify detector volumes and can contain others.
+            detector = (
                 arrays["detector_id"] == PHANTOM_DETECTOR_ID
                 if "detector_id" in arrays
                 else slice(None)
             )
             return PhantomEvents(
-                *(arrays[name][water] for name in PhantomEvents.__dataclass_fields__)
+                *(arrays[name][detector] for name in PhantomEvents.__dataclass_fields__)
             )
         if "steps" not in root:
             raise ValueError(
@@ -837,10 +837,10 @@ def read_phantom_events(path):
         if np.any(event_id < 0) or np.any(event_id >= event_count):
             raise ValueError(f"Invalid event IDs in {path}")
         np.maximum.at(energy, event_id, steps["primary_energy_MeV"])
-        water = steps["detector_id"] == PHANTOM_DETECTOR_ID
-        event_id = event_id[water]
-        total = steps["energy_deposit_MeV"][water]
-        nonionizing = steps["nonionizing_energy_deposit_MeV"][water]
+        detector = steps["detector_id"] == PHANTOM_DETECTOR_ID
+        event_id = event_id[detector]
+        total = steps["energy_deposit_MeV"][detector]
+        nonionizing = steps["nonionizing_energy_deposit_MeV"][detector]
         deposited += np.bincount(event_id, weights=total, minlength=event_count)
         ionizing += np.bincount(
             event_id, weights=total - nonionizing, minlength=event_count
@@ -852,7 +852,7 @@ def read_phantom_events(path):
     return PhantomEvents(energy, deposited, ionizing)
 
 
-def compact_water_phantom_chunk(path):
+def compact_phantom_chunk(path):
     """Replace detailed track records with verified per-primary energy sums.
 
     Preserve histograms and metadata. The steps and interfaces ntuples are
@@ -886,7 +886,7 @@ def compact_water_phantom_chunk(path):
             },
         )
         destination.mktree(
-            "calibration_compaction",
+            "phantom_compaction",
             {
                 "discarded_ntuples": ["steps, interfaces"],
                 "retained_events": [
@@ -900,11 +900,11 @@ def compact_water_phantom_chunk(path):
     temporary.replace(path)
 
 
-def read_water_phantom_events(run_directory):
-    """Combine completed calibration chunks, keeping event IDs local to each.
+def gather_phantom_events(run_directory):
+    """Combine completed phantom chunks, keeping event IDs local to each.
 
-    Read raw or compacted chunk ROOT files. Ordinary gathering deliberately
-    omits the event records needed for event-by-event calibration.
+    Read raw or compacted chunk ROOT files when event-level post-processing
+    requires the per-primary records.
     """
     directory = Path(run_directory)
     results = []
@@ -913,7 +913,7 @@ def read_water_phantom_events(run_directory):
         if (directory / "chunks" / (name + ".COMPLETE")).is_file():
             results.append(read_phantom_events(directory / "chunks" / (name + ".root")))
     if not results:
-        raise ValueError("No completed calibration chunks")
+        raise ValueError("No completed phantom chunks")
     return PhantomEvents(
         *(
             np.concatenate([getattr(result, field) for result in results])
