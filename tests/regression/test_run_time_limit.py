@@ -10,10 +10,11 @@ import uproot
 
 from atris_tools.gather import chunk_name, read_chunk_plan
 from atris_tools.phantom_calibration import (
-    RESPONSE_ENERGY_EDGES_MEV, prepare_water_phantom, read_phantom_statistics,
+    RESPONSE_ENERGY_EDGES_MEV, prepare_phantom_batch, read_phantom_statistics,
 )
 
 from test_atris_command import atris_command
+from phantom_fixture import water_psf
 
 
 @pytest.mark.regression
@@ -22,8 +23,8 @@ def test_time_limit_saves_actual_completed_counts(tmp_path, atris_command, monke
     monkeypatch.setenv("G4FORCENUMBEROFTHREADS", str(threads))
     monkeypatch.setenv("ATRIS_TIME_LIMIT", "2")
     requested = 1_000_000
-    prepare_water_phantom(
-        tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451], radius_cm=15,
+    prepare_phantom_batch(
+        tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451], psf_path=water_psf(),
         particle="proton", events_per_chunk=requested, chunks=1,
     )
     result = subprocess.run(
@@ -69,7 +70,7 @@ def test_time_limit_saves_actual_completed_counts(tmp_path, atris_command, monke
 def test_event_ceiling_can_finish_before_time_budget(tmp_path, atris_command, monkeypatch):
     monkeypatch.setenv("G4FORCENUMBEROFTHREADS", "3")
     monkeypatch.setenv("ATRIS_TIME_LIMIT", "60")
-    prepare_water_phantom(tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451],
+    prepare_phantom_batch(tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451], psf_path=water_psf(),
                           particle="proton", events_per_chunk=16, chunks=1)
     result = subprocess.run(
         [atris_command, "FTFP_BERT_HP", "calibration_123456_654321.root", "3", "0"],
@@ -89,7 +90,7 @@ def test_optional_time_limit_validation(tmp_path, atris_command, monkeypatch, li
         monkeypatch.delenv("ATRIS_TIME_LIMIT", raising=False)
     else:
         monkeypatch.setenv("ATRIS_TIME_LIMIT", limit)
-    prepare_water_phantom(tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451],
+    prepare_phantom_batch(tmp_path, RESPONSE_ENERGY_EDGES_MEV[400:451], psf_path=water_psf(),
                           particle="proton", events_per_chunk=16, chunks=1)
     result = subprocess.run(
         [atris_command, "FTFP_BERT_HP", "calibration_123456_654321.root", "3", "0"],

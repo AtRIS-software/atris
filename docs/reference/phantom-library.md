@@ -168,6 +168,12 @@ and [response-matrix format](inputs.md#phantom-response-matrices) for the data d
 
 ## Python tools
 
+`PSF(...)`, `PSF.from_layers(...)`, `PSF.read(...)` and saving share the same
+table-format checks: dimensions, agreement with material columns, finite values,
+integer detector IDs and valid material-state codes. `psf.validate()` applies
+these checks after direct array edits and returns the object. This does not
+require full-sphere geometry; the phantom builder checks that requirement.
+
 `atris_tools.particles` provides the particle identifiers and source settings
 used by the phantom-generation tools and plot labels:
 
@@ -181,7 +187,7 @@ particle_name(1000060120)     # "C-12"
 particle_source(1000060120)   # {"particle": "ion", "ion": {"Z": 6, "A": 12, "charge": 6}}
 ```
 
-Pass `**particle_source(pdg)` to `prepare_water_phantom` in
+Pass `**particle_source(pdg)` to `prepare_phantom_batch` in
 `atris_tools.phantom_calibration`. Named particles include antiparticles and
 the light nuclei `deuteron`, `triton`, `He3`, and `alpha`. Other positive
 ground-state nuclei use an ion source; they are fully stripped unless
@@ -189,17 +195,42 @@ ground-state nuclei use an ion source; they are fully stripped unless
 change the PDG code. Excited states, hypernuclei, and generic antinuclear
 sources are outside this helper's scope.
 
-`prepare_water_phantom` writes the geometry and chunk inputs;
+`prepare_phantom_batch` writes geometry and chunk inputs from the supplied PSF;
 `read_water_phantom_events` reads completed chunks into NumPy arrays;
-`calibrate_water_phantom` calculates the fixed-grid responses and sampling
-errors. Its `Phantom.save` method writes the response and counting
-tables, `phantoms.txt`, and sampling ROOT arrays with metadata. Read that ROOT
+`Phantom.gather(name)` combines completed builder batches into fixed-grid responses
+and sampling errors. Its `Phantom.save` method writes the response and counting
+tables and sampling ROOT arrays with metadata, returning a tuple of the paths
+written: response table, counting table, sampling ROOT, then precision-state JSON
+when available. Existing files with this name are replaced. Saving never creates
+or changes `phantoms.txt`; choosing simulation inputs is a separate
+[selection and staging step](../running-atris/prepare-simulation.md#optionally-select-phantoms).
+Read that ROOT
 export with `Phantom.read_root(path)` to restore the response model,
-including counts and uncertainties. Geometry comes from the retained PSF,
+including counts and uncertainties. The object exposes `name`, `geometry` (a
+`PSF`), and `precision_settings` (`DosePrecision`) as explicit fields. Builder configuration uses
+`builder.settings` with named attributes such as `stem` and `production_cut_mm`.
+`phantom.metadata` contains supplementary provenance, including the original run
+configuration. That configuration does not control calculations on the gathered response.
+`phantom.precision()` uses `precision_settings` by default. Individual keyword
+overrides (`relative_dose_tolerance`, `absolute_dose_tolerance_Gy`,
+`confidence_factor`) affect only that calculation. Without saved settings,
+all three must be supplied. The returned dictionary contains the NumPy arrays
+`dose`, `dose_error`, `ratio`, `resolved` and `passed`.
+Detector radii, density, mass, and source radius are derived from `geometry`;
+they are not separately stored object state. The ROOT reader checks the file's
+recorded derived quantities against its retained PSF.
+Geometry comes from the retained PSF,
 not the batch configuration JSON. Partial exports retain unsampled bins as
 missing values; `allow_partial=False` requires complete coverage.
 The [notebook](../tutorials/water-phantom.ipynb)
 shows both source setups and the complete export workflow.
+
+`builder.show_schedule(batches=1, ...)` prints the preview and returns a tuple
+of `Batch` records, shared with batch execution. They expose `pdg`, `species`,
+`energy_range_MeV`, `events`, `reason`, `forecast_seconds`, and `status`.
+The status is `resume` for a pending batch and `planned` for a new selection;
+the forecast is `None` without usable timing data. Previewing does not change
+saved batch state. Adaptive execution recalculates choices after each batch.
 
 Generated tables contain short `#` headers identifying their values and ROOT
 companion; detailed scientific metadata lives in ROOT. See
@@ -214,7 +245,7 @@ in that file. `read_water_phantom_events` reads either representation.
 The `shower` output mode retains individual events for exploring counting
 thresholds. The builder uses `phantom` output mode, which stores per-bin
 statistics with a zero counting threshold; read those with
-`read_phantom_statistics` or combine them with `calibrate_water_phantom`.
+`read_phantom_statistics`; `Phantom.gather(name)` combines completed builder batches.
 
 ## Historical update: autumn 2021
 

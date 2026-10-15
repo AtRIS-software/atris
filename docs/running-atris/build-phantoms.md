@@ -1,9 +1,12 @@
 # Build a water-sphere phantom
 
 A phantom response describes how a specified object responds to incident
-particles. Its calibration has a separate run directory from the atmospheric
-simulation that uses its tables. The builder accepts an unshielded liquid-water
-sphere and calculates a response for each selected incident species.
+particles. Response generation has a separate run directory from the atmospheric
+simulation that uses its tables. The builder accepts spherical PSF layers,
+preserves their materials, and calculates the response of the innermost layer
+for each selected incident species. Outer layers provide passive shielding:
+they affect transport but are excluded from detector deposits and mass.
+This example uses a homogeneous liquid-water sphere without shielding.
 
 For a small worked example with saved results, see
 [View notebook](../tutorials/water-phantom.ipynb), located at
@@ -50,7 +53,7 @@ builder = PhantomBuilder(
     dose_atol_Gy=1e-12, confidence_factor=1.96,
 )
 print(builder)
-builder.show_schedule(batches=4, adaptive=True)
+schedule = builder.show_schedule(batches=4, adaptive=True)
 ```
 
 `builder.show_schedule(...)` prints a preview of upcoming batches with species,
@@ -60,6 +63,11 @@ from the current statistics, tracking previewed visits in memory. With
 `adaptive=True`, actual choices are recalculated after each completed batch.
 An interrupted batch appears first, marked for resumption. Once all configured
 precision targets pass, the adaptive preview has no further batches to select.
+
+The call also returns a tuple of `Batch` records. Each record exposes `species`,
+`energy_range_MeV` (a two-element NumPy array), `events`, `reason`,
+`forecast_seconds` (`None` without a timing estimate), and `status` (`planned`
+or `resume`). Both `show_schedule()` and `run()` default to one batch.
 
 The reason identifies the selection:
 
@@ -233,7 +241,14 @@ phantom = Phantom.read_root("water-sphere_sampling.root")
 counts = phantom.sample_counts
 fraction = phantom.energy_fraction
 standard_error = phantom.fraction_standard_error
+quality = phantom.precision()
+comparison = phantom.precision(relative_dose_tolerance=0.01)
 ```
+
+`precision()` uses the stored target unless individual settings are overridden.
+The comparison does not change the saved settings. Without stored settings,
+supply all three arguments: `relative_dose_tolerance`,
+`absolute_dose_tolerance_Gy`, and `confidence_factor`.
 
 The gathered phantom saves its own data. Plotting functions accept Matplotlib
 axes and return them, so figure layout, styling and saving remain familiar:
@@ -243,13 +258,19 @@ import matplotlib.pyplot as plt
 from atris_tools.phantom_diagnostics import plot_creation_diagnostics
 
 phantom = Phantom.gather("water-sphere")
-phantom.save()
+paths = phantom.save()
 figure, axes = plt.subplots(2, 2, figsize=(16, 12), sharex=True, sharey="row")
 plot_creation_diagnostics(phantom, axes=axes)
 figure.subplots_adjust(bottom=0.2, right=0.9, hspace=0.15)
 figure.savefig("water-sphere_diagnostics.png")
 plt.show()
 ```
+
+`paths` contains the response table, counting table, sampling ROOT and, when
+written, precision-state JSON paths. It can be ignored when not needed. Saving
+does not create or change `phantoms.txt`; use the separate
+[selection and staging procedure](prepare-simulation.md#optionally-select-phantoms)
+to choose phantoms for a simulation.
 
 `plot_sampling_precision(phantom, axes=axes)` draws a 2x2 map figure: relative
 and absolute dose standard errors above, incident and counted primaries per

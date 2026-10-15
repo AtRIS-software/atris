@@ -43,6 +43,15 @@ class PhantomTable:
     # Calibration builds can explicitly retain NaN for not-yet-sampled bins.
     allow_missing: bool = False
 
+    def __str__(self):
+        return "\n".join([
+            f"Phantom table: {self.quantity}",
+            "Incident PDG codes: " + ", ".join(map(str, self.pdg_codes)),
+            f"Energy grid: {RESPONSE_ENERGY_BINS} bins from {ENERGY_EDGES_MEV[0]:g} "
+            f"to {ENERGY_EDGES_MEV[-1]:g} MeV",
+            f"Missing coefficients: {np.count_nonzero(np.isnan(self.coefficients)):,}/{self.coefficients.size:,}",
+        ])
+
     def __post_init__(self):
         self.pdg_codes = np.asarray(self.pdg_codes)
         self.coefficients = np.asarray(self.coefficients, dtype=float)

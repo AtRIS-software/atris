@@ -8,19 +8,7 @@ import numpy as np
 import uproot
 from uproot.writing.identify import to_TAxis, to_TH1x, to_TH2x
 
-from .response_histograms import PRIMARY_HISTOGRAM
-
-
-ROOT_STATISTICS = (
-    "fEntries",
-    "fTsumw",
-    "fTsumw2",
-    "fTsumwx",
-    "fTsumwx2",
-    "fTsumwy",
-    "fTsumwy2",
-    "fTsumwxy",
-)
+from .response_histograms import PRIMARY_HISTOGRAM, read_root_histogram
 
 
 def _read_metadata(root_file):
@@ -44,65 +32,13 @@ def read_root_file(path):
         for name, class_name in root_file.classnames(cycle=False).items():
             if not class_name.startswith(("TH1", "TH2")):
                 continue
-            source = root_file[name]
-            variances = source.variances(flow=True)
-            histograms[name] = {
-                "class": class_name,
-                "title": source.title,
-                "values": np.asarray(source.values(flow=True), dtype=float),
-                "variances": (
-                    None
-                    if variances is None
-                    else np.asarray(variances, dtype=float)
-                ),
-                "axes": [
-                    {
-                        "edges": np.asarray(axis.edges(), dtype=float),
-                        "title": source.member(
-                            "fXaxis" if index == 0 else "fYaxis"
-                        ).member("fTitle"),
-                    }
-                    for index, axis in enumerate(source.axes)
-                ],
-                "statistics": {
-                    statistic: float(source.member(statistic))
-                    for statistic in (
-                        ROOT_STATISTICS
-                        if len(source.axes) == 2
-                        else ROOT_STATISTICS[:5]
-                    )
-                },
-            }
+            histograms[name] = read_root_histogram(root_file[name])
         metadata = _read_metadata(root_file)
     if PRIMARY_HISTOGRAM not in histograms:
         raise ValueError(
             "%s does not contain %s" % (Path(path).name, PRIMARY_HISTOGRAM)
         )
     return histograms, metadata
-
-
-def _validate_histograms(reference, current, path):
-    if current.keys() != reference.keys():
-        raise ValueError("ROOT response histogram sets differ: " + str(path))
-    for name, first in reference.items():
-        other = current[name]
-        if (
-            other["class"] != first["class"]
-            or other["title"] != first["title"]
-            or other["values"].shape != first["values"].shape
-            or len(other["axes"]) != len(first["axes"])
-        ):
-            raise ValueError("ROOT histogram differs: %s in %s" % (name, path))
-        if (other["variances"] is None) != (first["variances"] is None):
-            raise ValueError("ROOT histogram differs: %s in %s" % (name, path))
-        for first_axis, other_axis in zip(first["axes"], other["axes"]):
-            if (
-                first_axis["title"] != other_axis["title"]
-                or not np.array_equal(first_axis["edges"], other_axis["edges"])
-            ):
-                raise ValueError(
-                    "ROOT histogram axes differ: %s in %s" % (name, path)
-                )
 
 
 def combine_root_histograms(source_paths, observe=None):
@@ -114,14 +50,10 @@ def combine_root_histograms(source_paths, observe=None):
 
     for count, path in enumerate(source_paths[1:], start=2):
         current, metadata = read_root_file(path)
-        _validate_histograms(total, current, path)
+        if current.keys() != total.keys():
+            raise ValueError("ROOT response histogram sets differ: " + str(path))
         for name, histogram in current.items():
-            combined = total[name]
-            combined["values"] += histogram["values"]
-            if combined["variances"] is not None:
-                combined["variances"] += histogram["variances"]
-            for statistic, value in histogram["statistics"].items():
-                combined["statistics"][statistic] += value
+            total[name].add(histogram, "%s in %s" % (name, path))
         if metadata is not None:
             metadata_records.append(metadata)
         if observe is not None:
@@ -139,11 +71,10 @@ def combine_root_histograms(source_paths, observe=None):
     return total, combined_metadata
 
 
-def _root_axis(axis, name):
-    edges = axis["edges"]
+def _root_axis(edges, title, name):
     return to_TAxis(
         name,
-        axis["title"],
+        title,
         len(edges) - 1,
         edges[0],
         edges[-1],
@@ -152,31 +83,20 @@ def _root_axis(axis, name):
 
 
 def _writable_histogram(histogram):
-    statistics = histogram["statistics"]
-    values = histogram["values"].ravel(order="F")
-    variances = histogram["variances"]
+    variances = histogram.variances
     common = {
         "fName": None,
-        "fTitle": histogram["title"],
-        "data": values,
-        "fEntries": statistics["fEntries"],
-        "fTsumw": statistics["fTsumw"],
-        "fTsumw2": statistics["fTsumw2"],
-        "fTsumwx": statistics["fTsumwx"],
-        "fTsumwx2": statistics["fTsumwx2"],
-        "fSumw2": (
-            None if variances is None else variances.ravel(order="F")
-        ),
-        "fXaxis": _root_axis(histogram["axes"][0], "xaxis"),
+        "fTitle": histogram.title,
+        "data": histogram.values.ravel(order="F"),
+        "fSumw2": None if variances is None else variances.ravel(order="F"),
+        "fXaxis": _root_axis(histogram.axes[0], histogram.axis_titles[0], "xaxis"),
+        **histogram.statistics,
     }
-    if len(histogram["axes"]) == 1:
+    if len(histogram.axes) == 1:
         return to_TH1x(**common)
     return to_TH2x(
         **common,
-        fYaxis=_root_axis(histogram["axes"][1], "yaxis"),
-        fTsumwy=statistics["fTsumwy"],
-        fTsumwy2=statistics["fTsumwy2"],
-        fTsumwxy=statistics["fTsumwxy"],
+        fYaxis=_root_axis(histogram.axes[1], histogram.axis_titles[1], "yaxis"),
     )
 
 

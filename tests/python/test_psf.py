@@ -184,11 +184,31 @@ def test_invalid_psf_does_not_overwrite_existing_file(tmp_path, column, value):
     path = tmp_path / "simulation.psf"
     path.write_text("original contents")
     layers = np.array([[0, 1, 0, 1, 0, 1, 0, 293, 1, 1, 1, 0]], dtype=float)
+    psf = PSF.from_layers(layers, "H1000 H")
     layers[0, column] = value
 
     with pytest.raises(ValueError):
         write_psf(path, layers, materials="H1000 H", fmt="%.3e")
+    with pytest.raises(ValueError):
+        psf.save(path)
+    with pytest.raises(ValueError):
+        PSF.from_layers(layers, "H1000 H")
+    source = tmp_path / "invalid.psf"
+    source.write_text("H1000 H\n" + " ".join(map(str, layers[0])) + "\n")
+    with pytest.raises(ValueError):
+        PSF.read(source)
     assert path.read_text() == "original contents"
+
+
+@pytest.mark.parametrize("materials", ["H1000 H O", "H1000 H H", "invalid H", "H1000"])
+def test_psf_read_and_array_construction_reject_bad_material_definitions(tmp_path, materials):
+    layers = np.array([[0, 1, 0, 1, 0, 1, 0, 293, 1, 1, 1, 0]], dtype=float)
+    with pytest.raises(ValueError):
+        PSF.from_layers(layers, materials)
+    path = tmp_path / "invalid.psf"
+    path.write_text(materials + "\n" + " ".join(map(str, layers[0])) + "\n")
+    with pytest.raises(ValueError):
+        PSF.read(path)
 
 
 def test_psf_writer_rejects_material_column_mismatch(tmp_path):
@@ -206,6 +226,10 @@ def test_reads_descriptive_header_followed_by_material_definition(tmp_path):
     )
 
     assert read_psf_header(path) == ["H1000", "H"]
+    psf = PSF.read(path)
+    assert psf.validate() is psf
+    psf.save(tmp_path / "partial-angle.psf")
+    np.testing.assert_array_equal(PSF.read(tmp_path / "partial-angle.psf").layers, psf.layers)
     np.testing.assert_allclose(
         load_psf(path),
         [[0, 1, 0, 1, 0, 1, 0, 293, 1, 1, 1, 0]],
@@ -227,9 +251,11 @@ def test_reads_legacy_commented_material_definition(tmp_path):
 
 
 def test_reads_psf_rows_as_material_layers(tmp_path):
+    from atris_tools.psf2gdml import line_processor
+
     path = tmp_path / "simulation.psf"
     path.write_text(
-        "O750Si250 N O\n"
+        "O3Si1 N O\n"
         "0 1 0 1 0 1 0 293 2.7 1 1 0 0\n"
         "1 2 0 1 0 1 1 250 0.1 2 2 0.25 0.75\n"
     )
@@ -238,6 +264,10 @@ def test_reads_psf_rows_as_material_layers(tmp_path):
 
     assert [layer["state"] for layer in layers] == ["solid", "liquid"]
     assert layers[0]["fractions"] == {"O": 0.75, "Si": 0.25}
+    materials, _, _, _ = line_processor(path)
+    fractions = {item.get("ref").removeprefix("G4_"): float(item.get("n"))
+                 for item in ET.fromstring(materials[0]).findall("fraction")}
+    assert fractions == layers[0]["fractions"]
     assert layers[1]["fractions"] == {"N": 0.25, "O": 0.75}
     assert [layer["detector_id"] for layer in layers] == [0, 1]
 

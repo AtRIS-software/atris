@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .atrismacrogen import read_macro
 from .cli import (
     HelpFormatter,
     add_logging_arguments,
@@ -54,21 +55,6 @@ def process_psf(filename="simulation.psf"):
     return geometry, data.shape[0]
 
 
-def _read_macro_configuration(filename):
-    energy_edges = []
-    event_count = None
-    with open(filename) as macro:
-        for line in macro:
-            fields = line.split()
-            if not fields or fields[0].startswith("#"):
-                continue
-            if fields[0] == "/gps/hist/point":
-                energy_edges.append(float(fields[1]))
-            elif fields[0] == "/run/beamOn":
-                event_count = int(fields[1])
-    return np.asarray(energy_edges), event_count
-
-
 def _input_output_warnings(simname, histograms):
     warnings = []
 
@@ -80,7 +66,7 @@ def _input_output_warnings(simname, histograms):
     bins_path = Path(simname + ".bins")
     macro_path = Path(simname + ".mac")
 
-    output_edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
+    output_edges = histograms[PRIMARY_HISTOGRAM].axes[0]
     input_edges = None
     if bins_path.is_file():
         input_edges = np.atleast_1d(np.loadtxt(bins_path))
@@ -94,7 +80,9 @@ def _input_output_warnings(simname, histograms):
             )
 
     if macro_path.is_file():
-        macro_edges, event_count = _read_macro_configuration(macro_path)
+        settings, energy_points = read_macro(macro_path)
+        macro_edges = energy_points[:, 0]
+        event_count = int(settings["/run/beamOn"]) if "/run/beamOn" in settings else None
         if input_edges is not None and (
             macro_edges.shape != input_edges.shape
             or not np.allclose(macro_edges, input_edges)
@@ -104,7 +92,7 @@ def _input_output_warnings(simname, histograms):
                 % (simname, macro_path.name, bins_path.name)
             )
         if event_count is not None and not Path("chunks.txt").is_file():
-            primary_energy = histograms.values(PRIMARY_HISTOGRAM)
+            primary_energy = histograms[PRIMARY_HISTOGRAM].values
             recorded_events = int(np.sum(primary_energy[1:-1]))
             if recorded_events != event_count:
                 warnings.append(
@@ -121,7 +109,7 @@ def _input_output_warnings(simname, histograms):
     psf_path = Path("simulation.psf")
     if psf_path.is_file() and IONIZATION_HISTOGRAM in histograms.names():
         detector_count = load_psf(psf_path).shape[0]
-        output_detector_count = len(histograms.axes(IONIZATION_HISTOGRAM)[1]) - 1
+        output_detector_count = len(histograms[IONIZATION_HISTOGRAM].axes[1]) - 1
         if output_detector_count != detector_count:
             warnings.append(
                 "%s: %s defines %i detector layers, but %s records %i"
@@ -141,7 +129,7 @@ def _input_output_warnings(simname, histograms):
     ):
         if name not in histogram_names:
             continue
-        values = histograms.values(name)
+        values = histograms[name].values
         flow_entries = values.sum() - values[1:-1, 1:-1].sum()
         if not np.isclose(flow_entries, 0.0):
             warnings.append(
@@ -267,7 +255,7 @@ def process_run(simname):
             logger.warning("%s", warning)
         geometry, _ = process_psf()
         phantom_count = histograms.phantom_count()
-        energy_edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
+        energy_edges = histograms[PRIMARY_HISTOGRAM].axes[0]
         phantom_data = process_phantoms(phantom_count)
         logger.info(
             "Post-processing %s %s output with %i energy bins and %i phantoms",
@@ -287,7 +275,7 @@ def process_run(simname):
             for phantom_nr in range(phantom_count)
             for quantity in ("dos", "equi", "rates")
         ]
-        data = [histograms.values(name) for name in names]
+        data = [histograms[name].values for name in names]
     logger.debug("Scaling %s response data", simname)
     scaled_data = scale_data(
         data,

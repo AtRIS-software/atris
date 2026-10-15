@@ -147,6 +147,7 @@ def test_extend_plan_preserves_existing_work_and_adds_unique_chunks(
     scatter(tmp_path, chunks=2, random_seed=17)
     caplog.clear()
     original_plan = (tmp_path / "chunks.txt").read_text()
+    (tmp_path / "chunks.txt").chmod(0o640)
     original_macros = {
         species: (tmp_path / f"{species}.chunk.mac").read_text()
         for species in ("protons", "alphas")
@@ -158,6 +159,7 @@ def test_extend_plan_preserves_existing_work_and_adds_unique_chunks(
         result = extend_plan(tmp_path, chunks=1, random_seed=17)
 
     assert result == tmp_path.resolve()
+    assert (tmp_path / "chunks.txt").stat().st_mode & 0o777 == 0o640
     extended_lines = (tmp_path / "chunks.txt").read_text().splitlines()
     assert extended_lines[:4] == original_plan.splitlines()
     assert [line.split()[0] for line in extended_lines] == [

@@ -8,17 +8,20 @@ from test_atris_command import atris_command, invoke_atris
 from atris_tools.phantom_calibration import (
     PhantomEvents,
     PhantomStatistics,
-    prepare_water_phantom,
+    prepare_phantom_batch,
     read_phantom_statistics,
 )
+
+from phantom_fixture import water_psf
+from atris_tools.psf import PSF
 
 EVENTS = 64
 
 
-def prepare_calibration(directory, particle, *, miss=False, events=EVENTS):
+def prepare_calibration(directory, particle, *, miss=False, events=EVENTS, psf=None):
     directory.mkdir()
     radius = 4e-4
-    prepare_water_phantom(directory, [0.001, 10], radius_cm=radius, particle=particle,
+    prepare_phantom_batch(directory, [0.001, 10], psf_path=water_psf(radius) if psf is None else psf, particle=particle,
                           events_per_chunk=events, production_cut_mm=0.00001,
                           tracking_floor_eV=1)
     macro = directory / "calibration.chunk.mac"
@@ -101,6 +104,58 @@ def test_phantom_matches_shower_and_retains_per_bin_statistics(
                 atol=1e-14,
             )
     assert sizes["phantom"] < sizes["1"]
+
+
+@pytest.mark.regression
+def test_layered_phantom_scores_only_sensor_deposit_per_primary(tmp_path, atris_command):
+    psf = PSF(inner_radius_km=[0, 2e-9], outer_radius_km=[2e-9, 4e-9],
+              temperature_k=293, density_g_cm3=[2.7, 1.8], pressure_pa=0,
+              mass_fractions={"Al": [1, 0], "C": [0, 1]}, state="solid")
+    outputs = {}
+    for mode in ("1", "phantom"):
+        directory = tmp_path / mode
+        prepare_calibration(directory, "proton", psf=psf)
+        macro = directory / "calibration.chunk.mac"
+        macro.write_text(macro.read_text().replace(
+            "/gps/ene/type Pow", "/gps/ene/type Mono\n/gps/ene/mono 1 MeV"))
+        result = invoke_atris(atris_command, directory, "FTFP_BERT_HP",
+                              "calibration_123456_654321.root", mode, "0", threads="1")
+        assert result.returncode == 0, result.stdout + result.stderr
+        path = directory / "calibration_123456_654321.root"
+        with uproot.open(path) as root:
+            assert root["h1.1"].member("fEntries") == EVENTS
+            if mode == "phantom":
+                assert root["h2.fraction"].member("fEntries") == EVENTS
+                outputs[mode] = read_phantom_statistics(path)
+            else:
+                steps = root["steps"].arrays(library="np")
+                assert set(steps["detector_id"]) <= {0, 1, 2}
+                sensor = steps["detector_id"] == 1
+                deposited = np.bincount(steps["event_id"][sensor],
+                    weights=steps["energy_deposit_MeV"][sensor], minlength=EVENTS)
+                ionizing = np.bincount(steps["event_id"][sensor],
+                    weights=(steps["energy_deposit_MeV"] - steps["nonionizing_energy_deposit_MeV"])[sensor],
+                    minlength=EVENTS)
+                # Monoenergetic source gives the exact energy even for primaries
+                # absorbed in passive shielding, which leave no detector steps.
+                outputs[mode] = PhantomStatistics.from_events(
+                    PhantomEvents(np.ones(EVENTS), deposited, ionizing))
+    for field in PhantomStatistics.__dataclass_fields__:
+        np.testing.assert_allclose(getattr(outputs["1"], field),
+                                   getattr(outputs["phantom"], field), rtol=1e-12, atol=1e-14)
+    unshielded = PSF.from_layers(psf.layers.copy(), psf.materials)
+    from atris_tools.psf import DENSITY
+    unshielded.layers[1, DENSITY] = 1e-25
+    directory = tmp_path / "vacuum"
+    prepare_calibration(directory, "proton", psf=unshielded)
+    macro = directory / "calibration.chunk.mac"
+    macro.write_text(macro.read_text().replace(
+        "/gps/ene/type Pow", "/gps/ene/type Mono\n/gps/ene/mono 1 MeV"))
+    result = invoke_atris(atris_command, directory, "FTFP_BERT_HP",
+                          "calibration_123456_654321.root", "phantom", "0", threads="1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    without_shield = read_phantom_statistics(directory / "calibration_123456_654321.root")
+    assert not np.allclose(without_shield.mean_fraction, outputs["phantom"].mean_fraction, equal_nan=True)
 
 
 @pytest.mark.regression

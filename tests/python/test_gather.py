@@ -19,9 +19,9 @@ from atris_tools.gather import (
     log_ionization_change,
     log_chunk_progress,
     read_chunk_plan,
-    read_histogram,
     write_convergence,
 )
+from atris_tools.response_histograms import read_csv_histogram
 
 
 COLUMNS = "entries,Sw,Sw2,Sxw0,Sx2w0"
@@ -36,6 +36,7 @@ def write_histogram(
     seed_pairs=None,
     annotation=None,
     axes=(),
+    columns=COLUMNS,
 ):
     lines = [
         "#class tools::histo::h1d",
@@ -48,7 +49,7 @@ def write_histogram(
         lines.append("#annotation atris.random_seed_pairs " + seed_pairs)
     if annotation is not None:
         lines.append("#annotation " + annotation)
-    lines.append(COLUMNS)
+    lines.append(columns)
     lines.extend(",".join(str(value) for value in row) for row in rows)
     Path(path).write_text("\n".join(lines) + "\n")
 
@@ -206,7 +207,7 @@ def test_convergence_has_one_row_per_chunk_from_two_onward(
         )
         ionization_paths.append(path)
 
-    _, _, _, _, rows = combine_ionization_histograms(
+    _, rows = combine_ionization_histograms(
         tmp_path,
         ionization_paths,
         primary_snapshots,
@@ -256,13 +257,13 @@ def test_gather_histogram_sums_all_columns_and_plane_values(tmp_path):
     total = gather_histogram([first, second], destination)
 
     np.testing.assert_array_equal(
-        total,
+        total.bin_statistics,
         np.array([[11, 22, 33, 44, 55], [66, 77, 88, 99, 110]], dtype=float),
     )
-    header, columns, written = read_histogram(destination)
-    assert "#planes_Sxyw 6.5" in header
-    assert columns == COLUMNS
-    np.testing.assert_array_equal(written, total)
+    written = read_csv_histogram(destination)
+    assert "#planes_Sxyw 6.5" in written.annotations
+    assert written.columns == tuple(COLUMNS.split(","))
+    np.testing.assert_array_equal(written.bin_statistics, total.bin_statistics)
 
     first_result = destination.read_bytes()
     gather_histogram([first, second], destination)
@@ -278,13 +279,33 @@ def test_gather_histogram_combines_seed_provenance(tmp_path):
 
     gather_histogram([first, second], destination)
 
-    header, _, _ = read_histogram(destination)
+    header = read_csv_histogram(destination).annotations
     assert "#annotation atris.gathered_chunks 2" in header
     assert (
         "#annotation atris.random_seed_pairs "
         "123456:654321,111111:222222"
     ) in header
     assert "#annotation atris.random_seed_pairs_complete true" in header
+
+
+def test_gather_rectangular_histogram_keeps_every_moment_and_bin_order(tmp_path):
+    columns = "entries,Sw,Sw2,Sxw0,Sx2w0,Sxw1,Sx2w1,Sxyw"
+    rows = np.arange(1, 161, dtype=float).reshape(20, 8)
+    axes = ("#axis fixed 2 0 2", "#axis edges 0 1 2 3")
+    first, second, destination = (tmp_path / name for name in ("first.csv", "second.csv", "sum.csv"))
+    write_histogram(first, rows, axes=axes, columns=columns)
+    write_histogram(second, 2 * rows, axes=axes, columns=columns)
+    original = first.read_bytes()
+    total = gather_histogram([first, second], destination)
+    expected = (3 * rows).reshape(5, 4, 8).swapaxes(0, 1)
+    written = read_csv_histogram(destination)
+    np.testing.assert_array_equal(total.bin_statistics, expected)
+    np.testing.assert_array_equal(written.bin_statistics, expected)
+    np.testing.assert_array_equal(total.entries, expected[..., 0])
+    np.testing.assert_array_equal(total.values, expected[..., 1])
+    np.testing.assert_array_equal(total.variances, expected[..., 2])
+    assert written.columns == tuple(columns.split(","))
+    assert first.read_bytes() == original
 
 
 def test_gather_histogram_records_different_atris_annotations(tmp_path):
@@ -296,7 +317,7 @@ def test_gather_histogram_records_different_atris_annotations(tmp_path):
     destination = tmp_path / "total.csv"
     gather_histogram([first, second], destination)
 
-    header, _, _ = read_histogram(destination)
+    header = read_csv_histogram(destination).annotations
     assert "#annotation atris.quantity ionization | dose" in header
 
 
@@ -315,13 +336,13 @@ def test_incremental_gather_reads_only_new_chunks(tmp_path, monkeypatch):
     state.write_text("protons 111111 222222\n")
 
     reads = []
-    original_read_histogram = read_histogram
+    original_read_histogram = read_csv_histogram
 
     def record_read(path):
         reads.append(Path(path))
         return original_read_histogram(path)
 
-    monkeypatch.setattr("atris_tools.gather.read_histogram", record_read)
+    monkeypatch.setattr("atris_tools.gather.read_csv_histogram", record_read)
     gather_incremental_histogram(
         [("protons", "111111", "222222")],
         [
@@ -334,8 +355,9 @@ def test_incremental_gather_reads_only_new_chunks(tmp_path, monkeypatch):
     )
 
     assert reads == [destination, second]
-    header, _, total = original_read_histogram(destination)
-    np.testing.assert_array_equal(total, [[11, 22, 33, 44, 55]])
+    total = original_read_histogram(destination)
+    header = total.annotations
+    np.testing.assert_array_equal(total.bin_statistics, [[11, 22, 33, 44, 55]])
     assert "#annotation atris.gathered_chunks 2" in header
     assert (
         "#annotation atris.random_seed_pairs "
@@ -357,13 +379,13 @@ def test_incremental_gather_rebuilds_after_prior_chunk_changes(
     write_histogram(first, [[2, 4, 6, 8, 10]])
 
     reads = []
-    original_read_histogram = read_histogram
+    original_read_histogram = read_csv_histogram
 
     def record_read(path):
         reads.append(Path(path))
         return original_read_histogram(path)
 
-    monkeypatch.setattr("atris_tools.gather.read_histogram", record_read)
+    monkeypatch.setattr("atris_tools.gather.read_csv_histogram", record_read)
     gather_incremental_histogram(
         [("protons", "111111", "222222")],
         [
@@ -376,8 +398,8 @@ def test_incremental_gather_rebuilds_after_prior_chunk_changes(
     )
 
     assert reads == [first, second]
-    _, _, total = original_read_histogram(destination)
-    np.testing.assert_array_equal(total, [[12, 24, 36, 48, 60]])
+    total = original_read_histogram(destination)
+    np.testing.assert_array_equal(total.bin_statistics, [[12, 24, 36, 48, 60]])
 
 
 @pytest.mark.parametrize("difference", ["header", "shape", "columns"])
@@ -427,9 +449,9 @@ def test_gather_simulation_uses_only_completed_chunks(tmp_path, caplog):
         assert gather_simulation(tmp_path, entries, "protons") == 1
     assert "Gathering protons from 1 completed chunk..." in caplog.messages
 
-    _, _, data = read_histogram(tmp_path / "protons_h1_h1.1.csv")
+    histogram = read_csv_histogram(tmp_path / "protons_h1_h1.1.csv")
     np.testing.assert_array_equal(
-        data,
+        histogram.bin_statistics,
         np.array([[0, 0, 0, 0, 0], [3, 30, 300, 300, 3000]], dtype=float),
     )
     assert not (tmp_path / "alphas_h1_h1.1.csv").exists()

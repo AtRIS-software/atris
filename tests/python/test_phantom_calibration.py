@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict, replace
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -10,18 +11,49 @@ from atris_tools.phantom_calibration import (
     Phantom,
     PhantomStatistics,
     RESPONSE_ENERGY_EDGES_MEV,
-    calibrate_water_phantom,
     compact_water_phantom_chunk,
-    prepare_water_phantom,
+    prepare_phantom_batch,
     read_phantom_statistics,
     read_water_phantom_events,
 )
 from atris_tools.phantoms import read_phantoms, stage_phantoms
 from atris_tools.phantom_tables import PhantomTable
+from atris_tools.psf import PSF
+
+
+def water_psf(radius_cm=15):
+    return PSF(inner_radius_km=0, outer_radius_km=radius_cm / 1e5,
+               temperature_k=293, density_g_cm3=.997, pressure_pa=101325,
+               mass_fractions={"H": 2 * 1.00794 / 18.01528, "O": 15.9994 / 18.01528},
+               state="liquid")
+
+
+@pytest.mark.parametrize("energies,counts", [([], (0, 0, 0, 0)), ([1, 1, 10], (3, 2, 1, 1))])
+def test_event_and_statistics_summaries_retain_field_based_repr(energies, counts):
+    incident = np.array(energies, dtype=float)
+    deposit = np.zeros_like(incident)
+    deposit[1:2] = .5
+    events = PhantomEvents(incident, deposit, deposit)
+    statistics = PhantomStatistics.from_events(events)
+    primaries, sampled, repeated, detected = counts
+    assert f"Phantom events: {primaries} primaries" in str(events)
+    assert f"Positive ionizing deposits: {detected}" in str(events)
+    if primaries:
+        assert "Incident kinetic energy: 1 to 10 MeV" in str(events)
+    else:
+        assert "Incident kinetic energy:" not in str(events)
+    summary = str(statistics)
+    assert f"Primaries: {primaries}" in summary
+    assert f"Sampled energy bins: {sampled}/650" in summary
+    assert f"Bins with at least two primaries: {repeated}" in summary
+    assert f"Counted primaries: {detected}" in summary
+    assert "array(" not in summary
+    assert repr(events).startswith("PhantomEvents(incident_energy_MeV=array(")
+    assert repr(statistics).startswith("PhantomStatistics(sample_counts=array(")
 
 
 def test_geometry_keeps_source_and_water_inside_termination_shells(tmp_path):
-    prepare_water_phantom(tmp_path, [1, 10, 100], radius_cm=4, chunks=2)
+    prepare_phantom_batch(tmp_path, [1, 10, 100], psf_path=water_psf(4), chunks=2)
     gdml = ET.parse(tmp_path / "calibration.gdml")
     spheres = {s.attrib["name"]: s.attrib for s in gdml.findall("./solids/sphere")}
     assert float(spheres["solid1"]["rmax"]) == pytest.approx(4 / 1e5)
@@ -39,13 +71,13 @@ def test_geometry_keeps_source_and_water_inside_termination_shells(tmp_path):
 def test_repreparing_same_setup_preserves_results_but_changed_setup_is_rejected(
     tmp_path,
 ):
-    prepare_water_phantom(tmp_path, [1, 10])
+    prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf())
     result = tmp_path / "chunks" / "existing.root"
     result.write_bytes(b"results")
     original = (tmp_path / "calibration.gdml").read_text()
-    prepare_water_phantom(tmp_path, [1, 10])
+    prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf())
     with pytest.raises(FileExistsError):
-        prepare_water_phantom(tmp_path, [1, 10], radius_cm=5)
+        prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf(5))
     assert result.read_bytes() == b"results"
     assert (tmp_path / "calibration.gdml").read_text() == original
 
@@ -62,19 +94,19 @@ def test_prepare_uses_psf_material_settings_without_json_geometry(tmp_path):
     write_psf(source, sphere)
     run = tmp_path / "run"
     run.mkdir()
-    prepare_water_phantom(run, [1, 10], psf_path=source)
+    prepare_phantom_batch(run, [1, 10], psf_path=source)
     expected = sphere.layers.copy()
     expected[:, DETECTOR_ID] = 1
     np.testing.assert_array_equal(load_psf(run / "calibration.psf")[:1], expected)
     config = json.loads((run / "water-phantom.json").read_text())
     assert "radius_cm" not in config
     assert "density_g_cm3" not in config
-    prepare_water_phantom(run, [1, 10], psf_path=source)
+    prepare_phantom_batch(run, [1, 10], psf_path=source)
     changed = sphere.layers.copy()
     changed[:, TEMPERATURE] += 1
     write_psf(source, PSF.from_layers(changed, sphere.materials))
     with pytest.raises(FileExistsError):
-        prepare_water_phantom(run, [1, 10], psf_path=source)
+        prepare_phantom_batch(run, [1, 10], psf_path=source)
 
 
 def test_event_sums_include_secondaries_zero_deposits_and_local_chunk_ids(tmp_path):
@@ -120,13 +152,13 @@ def test_event_sums_include_secondaries_zero_deposits_and_local_chunk_ids(tmp_pa
 
 
 def test_incomplete_chunks_are_not_read(tmp_path):
-    prepare_water_phantom(tmp_path, [1, 10])
+    prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf())
     with pytest.raises(ValueError, match="No completed"):
         read_water_phantom_events(tmp_path)
 
 
 def test_native_phantom_mode_selects_water_and_keeps_zero_events(tmp_path):
-    prepare_water_phantom(tmp_path, [1, 100], chunks=1)
+    prepare_phantom_batch(tmp_path, [1, 100], psf_path=water_psf(), chunks=1)
     entry = (tmp_path / "chunks.txt").read_text().split()
     name = "_".join(entry)
     with uproot.recreate(tmp_path / "chunks" / (name + ".root")) as root:
@@ -162,34 +194,34 @@ def test_native_phantom_mode_selects_water_and_keeps_zero_events(tmp_path):
 @pytest.mark.parametrize("edges", [[0, 1], [1, 1], [1, np.nan], [1, np.inf]])
 def test_invalid_energy_edges_are_rejected_before_writing(tmp_path, edges):
     with pytest.raises(ValueError):
-        prepare_water_phantom(tmp_path, edges)
+        prepare_phantom_batch(tmp_path, edges, psf_path=water_psf())
     assert not (tmp_path / "chunks.txt").exists()
 
 
 def test_increasing_chunk_count_appends_without_changing_existing_jobs(tmp_path):
-    prepare_water_phantom(tmp_path, [1, 10], chunks=2)
+    prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf(), chunks=2)
     original = (tmp_path / "chunks.txt").read_text()
     macro = (tmp_path / "calibration.chunk.mac").read_text()
-    prepare_water_phantom(tmp_path, [1, 10], chunks=4)
+    prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf(), chunks=4)
     expanded = (tmp_path / "chunks.txt").read_text()
     assert expanded.startswith(original)
     assert len(set(expanded.splitlines())) == 4
     assert (tmp_path / "calibration.chunk.mac").read_text() == macro
-    prepare_water_phantom(tmp_path, [1, 10], chunks=2)
+    prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf(), chunks=2)
     assert (tmp_path / "chunks.txt").read_text() == expanded
 
 
 def test_ion_source_sets_isotope_charge_and_ground_state(tmp_path):
     ion = {"Z": 6, "A": 12, "charge": 6}
-    prepare_water_phantom(tmp_path, [12, 120], particle="ion", ion=ion)
+    prepare_phantom_batch(tmp_path, [12, 120], psf_path=water_psf(), particle="ion", ion=ion)
     macro = (tmp_path / "calibration.chunk.mac").read_text()
     assert "/gps/particle ion\n/gps/ion 6 12 6 0\n" in macro
     assert f"/gps/ene/min {12.0:.17e} MeV" in macro
     assert json.loads((tmp_path / "water-phantom.json").read_text())["ion"] == ion
-    prepare_water_phantom(tmp_path, [12, 120], particle="ion", ion=ion)
+    prepare_phantom_batch(tmp_path, [12, 120], psf_path=water_psf(), particle="ion", ion=ion)
     with pytest.raises(FileExistsError):
-        prepare_water_phantom(
-            tmp_path, [12, 120], particle="ion", ion={"Z": 6, "A": 13, "charge": 6}
+        prepare_phantom_batch(
+            tmp_path, [12, 120], psf_path=water_psf(), particle="ion", ion={"Z": 6, "A": 13, "charge": 6}
         )
 
 
@@ -204,7 +236,7 @@ def test_ion_source_sets_isotope_charge_and_ground_state(tmp_path):
 )
 def test_invalid_ion_setup_is_rejected_before_writing(tmp_path, particle, ion):
     with pytest.raises(ValueError):
-        prepare_water_phantom(tmp_path, [1, 10], particle=particle, ion=ion)
+        prepare_phantom_batch(tmp_path, [1, 10], psf_path=water_psf(), particle=particle, ion=ion)
     assert not (tmp_path / "chunks.txt").exists()
 
 
@@ -225,9 +257,9 @@ def calibration(tmp_path, monkeypatch):
     monkeypatch.setattr(
         module,
         "read_ntuple",
-        lambda *args: np.empty(
-            0, dtype=[("atris_version", "U1"), ("physics_list", "U1")]
-        ),
+        lambda *args: np.array(
+            [("test", "FTFP_BERT_HP")],
+            dtype=[("atris_version", "U4"), ("physics_list", "U12")]),
     )
     from atris_tools.psf import DETECTOR_ID, PSF, write_psf
     sphere = PSF(inner_radius_km=[0], outer_radius_km=[15 / 1e5],
@@ -235,16 +267,21 @@ def calibration(tmp_path, monkeypatch):
         mass_fractions={"H": 2 * 1.00794 / 18.01528, "O": 15.9994 / 18.01528},
         solid_composition="H112O888", state="liquid")
     sphere.layers[:, DETECTOR_ID] = 1
-    write_psf(tmp_path / "calibration.psf", sphere)
-    config = {"production_cut_mm": 0.1}
-    (tmp_path / "water-phantom.json").write_text(json.dumps(config))
-    (tmp_path / "chunks.txt").write_text("calibration 111111 222222\n")
-    (tmp_path / "chunks").mkdir()
-    (tmp_path / "chunks/calibration_111111_222222.COMPLETE").touch()
-    return calibrate_water_phantom({22: tmp_path, 2212: tmp_path})
+    from atris_tools.phantom_builder import PhantomBuilder
+    builder = PhantomBuilder(sphere, [22, 2212], directory=tmp_path, name="water-sphere")
+    records = []
+    for index, code in enumerate((22, 2212)):
+        directory = tmp_path / "batches" / f"batch-{index:06d}"
+        directory.mkdir(parents=True)
+        (directory / "chunks.txt").write_text(f"calibration {111111 + index} {222222 + index}\n")
+        (directory / "chunks").mkdir()
+        (directory / "chunks" / f"calibration_{111111 + index}_{222222 + index}.COMPLETE").touch()
+        records.append(dict(pdg=code, directory=str(directory.relative_to(tmp_path))))
+    (tmp_path / "batches.json").write_text(json.dumps(records))
+    return Phantom.gather("water-sphere", directory=builder.directory)
 
 
-def test_export_preserves_zero_events_statistics_units_and_selection(
+def test_export_preserves_zero_events_statistics_units_and_explicit_selection(
     calibration, tmp_path
 ):
     np.testing.assert_allclose(calibration.energy_fraction, 0.5)
@@ -277,12 +314,19 @@ def test_export_preserves_zero_events_statistics_units_and_selection(
         np.testing.assert_allclose(statistics["counting_standard_error"], 0.5)
     retained = Phantom.read_root(tmp_path / "water-sphere_sampling.root")
     metadata = retained.metadata
-    assert "H112O888" in retained.metadata["geometry_psf"]
-    assert retained.metadata["validity"]["scoring_detector_ids"] == [1]
-    assert retained.metadata["validity"]["termination_detector_ids"] == [0, 2]
+    assert "H112O888" in retained.geometry.materials
+    with uproot.open(tmp_path / "water-sphere_sampling.root") as root:
+        exported = json.loads(str(root["metadata"]))
+    assert exported["validity"]["scoring_detector_ids"] == [1]
+    assert exported["validity"]["termination_detector_ids"] == [0, 2]
     assert not (tmp_path / "water-sphere_calibration.json").exists()
-    assert metadata["physics_list"] == "not recorded"
-    assert metadata["variance_ddof"] == 1
+    assert metadata["physics_list"] == "FTFP_BERT_HP"
+    assert exported["variance_ddof"] == 1
+    assert "radius_cm" not in metadata
+    assert "precision_settings" not in metadata
+    assert not (tmp_path / "phantoms.txt").exists()
+    (tmp_path / "phantoms.txt").write_text(
+        f"0 water-sphere {calibration.mass_g:.17e} {calibration.area_cm2:.17e}\n")
     metadata = read_phantoms(tmp_path)[0]
     assert metadata["area"] == pytest.approx(2 * np.pi * 15**2)
     assert metadata["mass"] == pytest.approx(4 / 3 * np.pi * 15**3 * 0.997)
@@ -297,6 +341,31 @@ def test_export_rejects_unsampled_bins_without_creating_files(calibration, tmp_p
     with pytest.raises(ValueError, match="Unsampled"):
         calibration.save(tmp_path / "export", allow_partial=False)
     assert not (tmp_path / "export").exists()
+
+
+@pytest.mark.parametrize("existing_selection", [False, True])
+@pytest.mark.parametrize("with_precision", [False, True])
+def test_save_preserves_selection_and_returns_only_written_paths(
+    calibration, tmp_path, existing_selection, with_precision
+):
+    selection = tmp_path / "phantoms.txt"
+    original = b"# Keep both selected phantoms.\n0 first 1 2\n1 second 3 4\n"
+    if existing_selection:
+        selection.write_bytes(original)
+    if not with_precision:
+        calibration.precision_settings = None
+    paths = calibration.save(tmp_path)
+    suffixes = ("response.txt", "counting.txt", "sampling.root")
+    if with_precision:
+        suffixes += ("sampling-state.json",)
+    assert paths == tuple(tmp_path / f"water-sphere_{suffix}" for suffix in suffixes)
+    assert all(path.is_file() for path in paths)
+    other_paths = calibration.save(tmp_path, name="another")
+    assert all(path.is_file() for path in paths + other_paths)
+    if existing_selection:
+        assert selection.read_bytes() == original
+    else:
+        assert not selection.exists()
 
 
 def test_sampling_root_round_trip_preserves_arrays_and_metadata(calibration, tmp_path):
@@ -320,6 +389,96 @@ def test_sampling_root_round_trip_preserves_arrays_and_metadata(calibration, tmp
     assert not list(tmp_path.glob("*.npz"))
 
 
+def test_core_state_does_not_depend_on_metadata(calibration, tmp_path):
+    calibration.metadata.clear()
+    assert "Precision complete:" in str(calibration)
+    calibration.save(tmp_path)
+    restored = Phantom.read_root(tmp_path / "water-sphere_sampling.root")
+    assert restored.metadata == {}
+    assert restored.precision_settings == calibration.precision_settings
+    np.testing.assert_array_equal(restored.geometry.layers, calibration.geometry.layers)
+    assert str(restored) == str(calibration)
+
+
+def test_precision_record_is_independent_of_run_provenance(calibration, tmp_path):
+    from dataclasses import FrozenInstanceError, replace
+    with pytest.raises(FrozenInstanceError):
+        calibration.precision_settings.relative_dose_tolerance = .1
+    calibration.precision_settings = replace(calibration.precision_settings, relative_dose_tolerance=.1)
+    calibration.save(tmp_path)
+    restored = Phantom.read_root(tmp_path / "water-sphere_sampling.root")
+    assert restored.precision_settings.relative_dose_tolerance == .1
+    assert restored.metadata["sampling_settings"]["relative_dose_tolerance"] == .05
+
+
+def test_precision_defaults_and_overrides_do_not_change_saved_target(calibration):
+    saved = calibration.precision_settings
+    explicit = calibration.precision(**asdict(saved))
+    default = calibration.precision()
+    overridden = calibration.precision(relative_dose_tolerance=.1)
+    expected = calibration.precision(**asdict(replace(saved, relative_dose_tolerance=.1)))
+    for key in explicit:
+        np.testing.assert_array_equal(default[key], explicit[key])
+        np.testing.assert_array_equal(overridden[key], expected[key])
+    assert calibration.precision_settings is saved
+
+
+def test_precision_without_saved_target_requires_complete_explicit_settings(calibration):
+    saved = calibration.precision_settings
+    expected = calibration.precision()
+    calibration.precision_settings = None
+    for kwargs in ({}, {"relative_dose_tolerance": .1}):
+        with pytest.raises(ValueError, match="Without stored precision settings"):
+            calibration.precision(**kwargs)
+    actual = calibration.precision(**asdict(saved))
+    for key in expected:
+        np.testing.assert_array_equal(actual[key], expected[key])
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"relative_dose_tolerance": 0}, {"absolute_dose_tolerance_Gy": -1},
+    {"confidence_factor": float("nan")}, {"confidence_factor": float("inf")},
+])
+def test_precision_rejects_invalid_overrides(calibration, kwargs):
+    with pytest.raises(ValueError, match="finite and positive"):
+        calibration.precision(**kwargs)
+
+
+def test_geometry_is_the_only_source_of_mass_and_radius(calibration, tmp_path):
+    from atris_tools.psf import DENSITY, OUTER_RADIUS
+    original_mass = calibration.mass_g
+    calibration.geometry.layers[0, DENSITY] *= 2
+    assert calibration.mass_g == pytest.approx(2 * original_mass)
+    calibration.geometry.layers[0, OUTER_RADIUS] *= 2
+    assert calibration.radius_cm == pytest.approx(30)
+    assert calibration.mass_g == pytest.approx(16 * original_mass)
+    calibration.save(tmp_path)
+    restored = Phantom.read_root(tmp_path / "water-sphere_sampling.root")
+    assert restored.mass_g == calibration.mass_g
+
+
+def test_root_rejects_mass_inconsistent_with_geometry(calibration, tmp_path):
+    calibration.save(tmp_path)
+    path = tmp_path / "water-sphere_sampling.root"
+    with uproot.open(path) as root:
+        metadata = json.loads(str(root["metadata"]))
+    metadata["mass_g"] *= 2
+    with uproot.update(path) as root:
+        root["metadata"] = json.dumps(metadata)
+    with pytest.raises(ValueError, match="mass_g differs from its PSF geometry"):
+        Phantom.read_root(path)
+
+
+def test_notebook_gather_print_save_interface(calibration, tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    name = "water-sphere"
+    phantom = Phantom.gather(name)
+    print(phantom)
+    phantom.save()
+    assert capsys.readouterr().out.startswith(name + ": radius ")
+    assert Phantom.read_root(tmp_path / f"{name}_sampling.root").name == name
+
+
 def test_sampling_root_reads_previous_tolerance_spelling(calibration, tmp_path):
     calibration.save(tmp_path)
     path = tmp_path / "water-sphere_sampling.root"
@@ -331,8 +490,8 @@ def test_sampling_root_reads_previous_tolerance_spelling(calibration, tmp_path):
         root["metadata"] = json.dumps(metadata)
     original = path.read_bytes()
     phantom = Phantom.read_root(path)
-    assert phantom.metadata["precision_settings"]["relative_dose_tolerance"] == .05
-    assert "relative_tolerance" not in phantom.metadata["precision_settings"]
+    assert phantom.precision_settings.relative_dose_tolerance == .05
+    assert not hasattr(phantom.precision_settings, "relative_tolerance")
     assert "Precision complete:" in str(phantom)
     assert path.read_bytes() == original
 
@@ -394,7 +553,7 @@ def test_incremental_statistics_match_all_events_including_zero_deposits():
             getattr(incremental, name), getattr(together, name), atol=1e-14
         )
     response = Phantom.from_statistics(
-        {22: incremental}, radius_cm=4e-4, density_g_cm3=0.997
+        {22: incremental}, name="water-sphere", geometry=water_psf(4e-4)
     )
     np.testing.assert_array_equal(response.sample_counts, 4)
     np.testing.assert_allclose(response.counting_efficiency, 0.75)

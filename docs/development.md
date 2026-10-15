@@ -4,6 +4,151 @@ Version 3.0 added scatter-gather support and placed the existing Python scripts
 in a small package. Structural work should not change scientific or numerical
 behaviour unless that change is explicitly documented and validated.
 
+## Release plan
+
+The boundary between 3.x and 4.0 is backward compatibility, not the amount of
+work in a release. Development belongs in 3.x when existing run directories,
+commands, input files, output products, and numerical definitions continue to
+work. Version 4.0 is reserved for changes that require users or downstream
+tools to migrate. Breaking an interface solely to make the implementation
+cleaner is not a reason to begin 4.0.
+
+A central scientific-computing goal is adaptive sampling based on error
+minimisation. AtRIS should measure uncertainty and computation cost, then direct
+new primary histories to the species and energy ranges where they are expected
+to reduce the selected result uncertainty most efficiently. Adaptation must
+preserve unbiased estimators, mergeable outputs, and enough exploration to
+avoid treating an unsampled or rarely interacting region as a known zero.
+
+### Version 3.x
+
+The 3.x line should consolidate and test the workflow on `main` while
+preserving its current interfaces. Its planned work is:
+
+- establish the provenance and role of the retained phantom data;
+- report the minimal uncertainty estimates supported by the current phantom
+  calibration statistics and clearly identify unresolved bins;
+- experiment with bounds for sparse phantom responses and variance reduction
+  for thin phantoms without making either a supported 3.x calibration mode;
+- add backward-compatible ranged chunks and convergence diagnostics in stages;
+- improve installation, workflow, and numerical regression tests; and
+- continue local C++ and Python cleanup where it does not alter supported
+  interfaces or scientific results.
+
+The current positional executable interface, numbered runtime phantom files,
+`phantoms.txt` schema, source sampling, and established output products remain
+the 3.x compatibility baseline. New metadata or diagnostics may be added when
+old files and commands remain valid. The 3.x phantom builder should provide
+minimal per-bin uncertainty estimates from its existing sampling moments and
+must identify statistically unresolved all-zero bins rather than report zero
+error. A supported error bound for sparse bins, forced-interaction calibration,
+and propagation of phantom uncertainty through an ordinary atmospheric response
+calculation are deferred to 4.0. Experiments supporting those features may be
+performed during 3.x development.
+
+### Version 4.0
+
+The `run-configuration` branch contains an alternative configuration and
+output design. It must remain separate from `main` until a 4.0 integration is
+started. The branch is development material rather than a release candidate;
+before use it must be reconciled with all later 3.x work on `main`.
+
+AtRIS 4.0 should be controlled by the `.mac` command stream. The selected
+macro, together with the scientific files it names, should be a complete and
+persistent description of the simulation. Positional executable arguments,
+filename stems, and directory contents should not act as additional hidden
+configuration channels. Python tools may prepare, compose, and validate macros,
+while the executable consumes the resulting Geant4 command stream.
+
+Use existing Geant4 macro commands wherever they express the required setting.
+This includes the established `/control/`, `/run/`, `/gps/`, `/random/`, and
+available `/analysis/` command families. Add an `/atris/` command only for an
+AtRIS-specific concept that Geant4 does not already expose. Do not wrap a
+standard Geant4 command merely to give it an AtRIS spelling.
+
+The 4.0 work should also remove arbitrary restrictions inherited from the
+original implementation. In particular, particle species, input basenames,
+macro filenames, output names, and phantom response channels should not be
+fixed where Geant4 or the scientific model permits a general value. Physical
+constraints and format invariants should remain explicit and validated; the
+goal is to remove historical coupling, not useful checks.
+
+No legacy phantom tables, plots, variance files, or historical notebook outputs
+should be included in the 4.0 distribution. If they remain useful for
+reproducibility or comparison, they may be published as a separately versioned
+archive with their provenance and applicable AtRIS versions. The 4.0 phantom
+library should contain only the new, clearly named and validated reference
+families.
+
+No other legacy feature should enter 4.0 by default. Before inclusion, evaluate
+its scientific purpose, present use, overlap with the macro-controlled design,
+data-model and output implications, and available regression coverage. Record
+one decision for each inherited command, alias, file format, naming convention,
+and behavior: retain, redesign, distribute separately, or remove. Compatibility
+with 3.x is evidence to consider, not by itself a reason to preserve a feature.
+
+The intentionally incompatible parts of the design are therefore:
+
+- replacing `AtRIS <physics-list> <simulation-name> <mode> <phantom-count>`
+  with `AtRIS <macro-file>`;
+- making self-contained Geant4 macros authoritative for geometry, energy bins,
+  output destination, physics list, output mode and format, random seeds,
+  source settings, and phantom response tables;
+- replacing inferred, numbered phantom inputs with named response channels and
+  explicit response factors, and changing `phantoms.txt` accordingly;
+- defining output products once in the AtRIS output layer and writing either
+  CSV or ROOT through Geant4's analysis manager, with a common logical schema
+  and metadata;
+- changing primary-energy sampling from the 3.x finite-bin procedure to a
+  continuous log-uniform source;
+- introducing supported sparse-bin error bounds and forced-interaction
+  calibration for thin phantoms;
+- supplying clearly named water and ICRU phantom families at several physical
+  sizes;
+- making error-minimising adaptive sampling a supported workflow, using
+  measured uncertainty and runtime rather than fixed event allocations; and
+- adding versioned products for full phantom-calibration and transport
+  uncertainty propagation.
+
+The branch also contains useful internal work: focused run-configuration and
+phantom-response classes, the `AnalysisOutput` split, clearer initialization
+and failure handling, common metadata writers, and additional regression
+examples. These changes support the 4.0 design but do not independently require
+a major version. They should be reviewed and carried forward only with the
+interfaces they serve, rather than merged piecemeal into 3.x.
+
+### Version 4.0 migration gate
+
+Before 4.0 is merged, the incompatible contracts must be defined together and
+tested as one workflow. At minimum, the release needs:
+
+- a migration guide from the positional executable call and 3.x macros to the
+  macro-only interface;
+- an audit of every custom macro command, replacing it with the corresponding
+  standard Geant4 command where one exists and documenting why each remaining
+  `/atris/` command is project-specific;
+- a documented conversion from numbered phantom inputs and the 3.x
+  `phantoms.txt` format to named response channels;
+- an inventory of legacy features and data with an explicit retain, redesign,
+  separate-distribution, or removal decision for each item;
+- versioned CSV and ROOT schemas, with readers for supported 3.x results where
+  practical and explicit errors where conversion would lose information;
+- numerical comparisons that isolate the effect of continuous log-uniform
+  source sampling from unrelated code changes;
+- validated water and ICRU phantom families at several sizes, including
+  analogue comparisons for the forced-interaction results;
+- numerical tests showing that adaptive allocations remain unbiased and reduce
+  the selected uncertainty more efficiently than the comparison fixed
+  allocation;
+- scatter, run, gather, post-process, and plot tests using the new macros and
+  both output backends; and
+- updated tutorials and reference pages delivered with the implementation,
+  rather than describing either interface as current before the code changes.
+
+The branch should be integrated only after these migration requirements and
+the retained 3.x behavior have regression coverage. There is no requirement to
+start 4.0 merely because the branch exists.
+
 ## C++ conventions
 
 AtRIS aims to follow Geant4's [example coding guidelines][g4-example-style] and
@@ -31,22 +176,29 @@ The remaining goals are:
   workflows.
 - Protect existing scientific behaviour with numerical regression tests.
 
-## Phantom data
+## Phantom data in 3.x
 
 The `phantoms/` library still contains historical response tables, variance
 tables, plots, and other data whose provenance and continuing role need to be
 established before removal. Preserve the source data while resolving that
 history. The [phantom library reference](reference/phantom-library.md) contains
 the available examples, historical notes, and original exploration notebook.
+This preservation policy applies to the 3.x repository. It does not place the
+legacy phantom library in the 4.0 distribution.
 
-## Future development: propagate phantom uncertainty
+## Phantom calibration uncertainty (3.x)
 
-AtRIS should propagate the sampling uncertainty of a calibrated phantom through
-an atmospheric response calculation without storing individual calibration
-events or interface crossings. This is distinct from uncertainty in Geant4's
-physics models, the atmosphere, or a later physical source spectrum. Transport
-sampling uncertainty and phantom-calibration uncertainty should remain separate
-quantities so that their origins are clear.
+Phantom calibration should retain enough information to give each response bin
+a minimal sampling-uncertainty estimate without storing individual calibration
+events. Bins with observed deposits can use their existing first and second
+moments. All-zero bins must remain explicitly unresolved rather than receive a
+reported standard error of zero. These estimates describe the phantom
+calibration only; 3.x does not use them as a stopping bound or propagate them
+through an ordinary atmospheric response run.
+
+Experiments during 3.x may evaluate sparse-response bounds and forced
+interactions. Their outputs must be identified as experimental and must not
+silently replace analogue calibration products used by the supported workflow.
 
 ### Retain compact calibration statistics
 
@@ -58,46 +210,39 @@ and the counting efficiency with its sampling uncertainty. Keep these
 mergeable accumulators rather than individual events or a covariance value
 calculated before all chunks have been gathered.
 
-A calibration with several scoring volumes may also retain the cross-product
-
-$$
-Q_{ab}=\sum_i x_{i,a}x_{i,b}
-$$
-
-for each required pair of volumes $a$ and $b$. Together with $N$, $S_a$, and
-$S_b$, this gives the sample covariance after gathering. Store only one
-triangle because $Q_{ab}=Q_{ba}$, and create cross-products only for explicitly
-related detector channels. This avoids quadratic growth for geometries whose
-volumes do not need a joint uncertainty estimate.
-
 Use ROOT as the compact scientific record for the calibration axes, particle
-codes, accumulators, metadata, and optional cross-products. Do not add separate
-NPZ and JSON representations of the same result. Until the C++ phantom loader
-is deliberately replaced, retain the existing `_response.txt` and
-`_counting.txt` matrices as the small backward-compatible runtime inputs. They
-can be generated from the calibrated result; the ROOT record retains the
-statistics needed for later analysis. The runtime matrix sizes therefore do
-not grow when uncertainty information is added.
+codes, $N$, $S$, $Q$, $K$, and metadata. Do not add separate NPZ and JSON
+representations of the same result. Until the C++ phantom loader is deliberately
+replaced, retain the existing `_response.txt` and `_counting.txt` matrices as
+the small backward-compatible runtime inputs. They can be generated from the
+calibrated result; the ROOT record retains the statistics needed for later
+analysis. The runtime matrix sizes therefore do not grow when uncertainty
+information is added.
 
-### Resolve zero-deposit calibration bins
+## Phantom calibration methods (4.0)
+
+### Define sparse-response error bounds
 
 Model a phantom response as $R=IY$, where $I$ records whether a primary made a
 positive ionizing-energy deposit and $Y$ is the deposited fraction conditional
 on a positive deposit. Then $E[R]=P(I=1)E[Y]$. This two-part formulation avoids
-interpreting an all-zero sample as having zero uncertainty. Use an exact
-binomial upper confidence limit for $P(I=1)$ and a physical upper bound on $Y$
-defined separately for each particle species, energy bin, phantom material,
-and geometry.
+interpreting an all-zero sample as having zero uncertainty.
 
-When the resulting upper bound on $E[R]$ is below the configured absolute dose
-tolerance, the builder may retain zero as the point estimate, record the upper
-limit, and consider the bin sufficiently constrained. Otherwise it should keep
-sampling. The existing primary count, positive-deposit count, and deposited-
-fraction moments are sufficient, so this change belongs in the Python builder
-and calibration analysis. Propagating the recorded limit through an ordinary
-AtRIS simulation is separate later work.
+The supported 4.0 convergence criterion should use the positive-deposit count
+$K$ and squared-deposit accumulator $Q$, together with $N$ and $S$ where needed
+for normalization. The method must define its confidence level, assumptions,
+and behavior when $K=Q=0$. In particular, an all-zero sample cannot acquire a
+zero error merely because no response has yet been observed. Any physical cap
+or distributional assumption needed to obtain a finite upper bound must be
+recorded with the calibration result.
 
-### Accelerate small-phantom calibration
+When the resulting bound is below the configured absolute dose tolerance, the
+builder may retain zero as the point estimate, record the bound, and consider
+the bin sufficiently constrained. Otherwise it should keep sampling. The bound
+must remain mergeable across chunks and be reproducible from the retained
+calibration statistics.
+
+### Force interactions in thin phantoms
 
 Thin phantoms give neutral particles such as photons and neutrons a small
 probability of interacting. An analogue simulation therefore spends most of
@@ -128,6 +273,45 @@ neutrons; do not assume that forcing a discrete collision benefits charged
 particles, which also lose energy continuously.
 
 [g4-biasing]: https://geant4.web.cern.ch/documentation/dev/bfad_html/ForApplicationDevelopers/Fundamentals/biasing.html
+
+### Supply reference phantom families
+
+The supported calibration feature should include clearly named water and ICRU
+phantom families at several physical sizes. Names should state the material,
+geometry, size, and unit rather than rely on an ordinal or an unexplained label.
+Each entry should record its dimensions, composition, density, mass,
+cross-sectional area, production cut, physics list, calibration method, and
+uncertainty statistics.
+
+The size range should include phantoms thick enough for direct analogue
+validation and thin phantoms that exercise the sparse-response bound and
+forced-interaction path. For every size where forced interactions are used,
+compare the result with an analogue calculation in a range where both methods
+obtain adequate statistics. Ship the ROOT calibration record and the compact
+runtime response tables under the same unambiguous phantom stem.
+
+## Propagate phantom uncertainty (4.0)
+
+AtRIS 4.0 may propagate phantom-calibration uncertainty through an atmospheric
+response calculation without storing individual calibration events or interface
+crossings. This is distinct from uncertainty in Geant4's physics models, the
+atmosphere, or a later physical source spectrum. Transport sampling uncertainty
+and phantom-calibration uncertainty should remain separate quantities so that
+their origins are clear.
+
+### Retain calibration covariance
+
+A calibration with several scoring volumes may retain the cross-product
+
+$$
+Q_{ab}=\sum_i x_{i,a}x_{i,b}
+$$
+
+for each required pair of volumes $a$ and $b$. Together with $N$, $S_a$, and
+$S_b$, this gives the sample covariance after gathering. Store only one
+triangle because $Q_{ab}=Q_{ba}$, and create cross-products only for explicitly
+related detector channels. This avoids quadratic growth for geometries whose
+volumes do not need a joint uncertainty estimate.
 
 ### Retain response sensitivities
 
@@ -188,22 +372,49 @@ the phantom-calibration covariance.
 
 Keep the established response histogram names and numerical meanings unchanged.
 Add new uncertainty products under versioned names and record the schema in
-their ROOT metadata. Existing phantom tables and response files must remain
-readable; when the additional statistics are absent, the tools should report
-that the corresponding uncertainty is unavailable rather than infer it from
-crossing-level `Sw2` values.
+their ROOT metadata. Whether 4.0 directly reads a 3.x phantom or response file
+is decided by the legacy-feature review rather than assumed. If a supported
+conversion cannot preserve the required information, keep the old data and its
+reader in the separate 3.x archive instead of weakening the 4.0 schema.
 
-## Simulation preparation interface
+## Simulation preparation interface (4.0)
 
-Physics-list and output-mode choices currently reach the simulation through
+On `main`, physics-list and output-mode choices reach the simulation through
 `atris-run` arguments. This splits the simulation definition between preparation
 and launch, leaving users to repeat those choices when starting or resuming a
-job.
+job. This remains the supported 3.x interface.
 
-A future revision should move these choices into the input-generation step,
-save them with the prepared inputs, and have the runner read them from there.
-Thread counts, worker assignments, and scheduler limits would remain execution
-settings.
+The `run-configuration` branch moves these choices into self-contained species
+macros and changes the executable to accept one macro-file argument. Geometry,
+energy bins, output naming and format, random seeds, source settings, and
+phantom response channels are also explicit macro commands. Thread counts,
+worker assignments, deadlines, and scheduler limits remain execution settings.
+Because adopting this design replaces the executable and prepared-input
+contracts, it is deferred to 4.0.
+
+The macro should be authoritative rather than one of several equivalent ways
+to configure a run. It may use `/control/execute` to compose other macros, but
+AtRIS should not require a particular filename or include hierarchy. The
+Python tools may generate wrapper, species, or chunk macros for convenience;
+those files should resolve to the same command stream that the executable
+receives.
+
+The generated macros should use Geant4's own commands directly for source
+particles and distributions, initialization and event processing, random
+seeds, threading, macro composition, and analysis settings wherever the linked
+Geant4 version provides them. Custom AtRIS commands should be limited to
+AtRIS-owned data and calculations, such as its energy-bin input, response
+channels, and output products when no equivalent Geant4 command exists. This
+keeps the C++ control layer small and lets an experienced Geant4 user understand
+and modify a prepared run using familiar commands.
+
+Historical restrictions should be removed as this interface is introduced.
+The executable should not infer related files from one simulation prefix,
+restrict ordinary runs to proton and alpha naming conventions, require
+numbered phantom aliases, or assume exactly two kinds of phantom response.
+Inputs and response calculations should instead be named explicitly in the
+macro. Similar restrictions should be retained only when they express a real
+Geant4, file-format, or scientific invariant.
 
 The name `atris-generate-macros` also needs reconsideration. The command already
 prepares geometry copies and energy bins as well as macros, and would then
@@ -211,7 +422,13 @@ define more of the simulation configuration. Its name should describe preparing
 simulation inputs rather than generating one particular file format. The
 replacement name and configuration format are still to be decided.
 
-## Future development: adaptive energy-range chunks
+## Adaptive sampling by error minimisation
+
+Backward-compatible ranged chunks and convergence diagnostics may be developed
+in 3.x. They provide the mechanism and measurements needed for later adaptive
+sampling. A supported planner that automatically allocates additional work is
+a 4.0 feature because it depends on a defined uncertainty model, persistent
+macro-controlled inputs, and versioned statistical output.
 
 The current chunk plan repeats the same source-energy distribution with new
 random seeds. All chunks of a species share one chunk macro and identical
@@ -280,7 +497,7 @@ Changing the source direction or position distribution would not be safe with
 the present response products because those dimensions are averaged out rather
 than retained in the response matrix.
 
-### Choosing valuable follow-up chunks
+### Choose follow-up chunks by error reduction
 
 Range-aware chunks provide the mechanism for adaptive simulation but do not by
 themselves decide where to spend more computation. An initial pilot should
@@ -294,12 +511,23 @@ tools could then report:
 - contribution to uncertainty after convolution with one or more supplied
   physical spectra.
 
-A follow-up priority can be defined as the predicted reduction in the selected
-final uncertainty divided by the predicted additional runtime. The supplied
-physical spectra would influence only the allocation of future histories; they
-would not be folded into or otherwise specialize the gathered response matrix.
-Konstantin's later convolution with measured spectra would therefore remain
-possible.
+A follow-up priority should be the predicted reduction in the selected final
+uncertainty divided by the predicted additional runtime. This is an
+error-minimisation policy, not merely a rule that adds histories to bins with
+few samples. The supplied physical spectra would influence only the allocation
+of future histories; they would not be folded into or otherwise specialize the
+gathered response matrix. Konstantin's later convolution with measured spectra
+would therefore remain possible.
+
+Use an established adaptive-stratified-sampling rule, such as a cost-aware,
+batched form of MC-UCB, rather than designing a new allocation algorithm. Keep
+the rule as a small policy that receives per-range statistics and returns the
+range or ranges for the next chunks. Chunk creation, execution, gathering, and
+recording adaptive decisions remain responsibilities of the existing tools.
+Neighbour-informed initialization may be an optional policy, but must not be
+required by the core allocator or replace direct samples in the final response.
+Avoid adding a general adaptive-sampling framework when the published
+allocation rule and an AtRIS-specific adapter are sufficient.
 
 The planner must retain a minimum exploration allocation. A sparse energy bin
 that has not yet produced an interaction is not evidence that its true response
@@ -316,7 +544,30 @@ should cover overlapping ranges, disjoint ranges, unsampled gaps, incompatible
 edges, and equivalence between a full-range aggregate and the same raw
 histories divided among ranged chunks.
 
-## Simulation output
+## Simulation output interface (4.0)
+
+AtRIS should own one format-independent definition of its histograms, ntuples,
+axes, units, uncertainty fields, and run metadata. Its output class should book
+and fill those products through Geant4's analysis manager. The `.mac` file
+selects `csv` or `root`; the backend determines whether the products appear as
+several CSV files or objects in one ROOT file. Filename extensions should
+reflect that selection, not provide a second way to configure it.
+
+CSV and ROOT should contain the same logical scientific products and metadata
+where their Geant4 representations permit it. AtRIS should not maintain a
+hand-written scientific writer for one format and a separate Geant4 writer for
+the other. Format-specific code belongs at the I/O boundary. Python readers
+should convert both representations into the same histogram and table data
+models before gathering, post-processing, or plotting.
+
+Output modes may still select how much data is recorded, such as aggregate
+responses, interface crossings, or transport steps. They should select products
+within the common writer rather than select unrelated writing implementations.
+Tests must compare CSV and ROOT at the level of axes, units, metadata, entries,
+and numerical accumulators, allowing only documented backend representation
+differences.
+
+## Current simulation output (3.x)
 
 The simulation filename selects Geant4's analysis backend; CSV is the default
 when no extension is supplied. Mode 0 adds the `interfaces` ntuple and mode 1

@@ -8,11 +8,22 @@ import pytest
 
 import atris_tools.psf2gdml as psf2gdml_module
 import atris_tools.atrismacrogen as macrogen_module
-from atris_tools.atrismacrogen import macroGenManager
+from atris_tools.atrismacrogen import macroGenManager, read_macro
 from atris_tools.psf2gdml import psf2gdml
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
+
+
+@pytest.mark.parametrize("points", ["", "/gps/hist/point 1 0\n/gps/hist/point 10 1 # weight\n"])
+def test_read_macro_preserves_points_and_last_setting(tmp_path, points):
+    path = tmp_path / "simulation.mac"
+    path.write_text("# comment\n/run/beamOn 1\n" + points + "/run/beamOn 20 # events\n")
+    settings, energy_points = read_macro(path)
+    assert settings == {"/run/beamOn": "20"}
+    np.testing.assert_array_equal(
+        energy_points, np.array([[1, 0], [10, 1]]) if points else np.empty((0, 2))
+    )
 
 
 def prepare_run(path):

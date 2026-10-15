@@ -13,6 +13,22 @@ from atris_tools.phantom_tables import (
 ARCHIVE = Path(__file__).parents[2] / "phantoms"
 
 
+@pytest.mark.parametrize("counting", [False, True])
+def test_table_summary_retains_field_based_repr(counting):
+    values = np.zeros((2, 650))
+    values[0, 0] = np.nan
+    table = PhantomTable(np.array([22, 2212]), values,
+                         quantity=COUNTING_EFFICIENCY if counting else "energy_fraction",
+                         allow_missing=True)
+    summary = str(table)
+    assert f"Phantom table: {table.quantity}" in summary
+    assert "Incident PDG codes: 22, 2212" in summary
+    assert "Energy grid: 650 bins from 1e-06 to 1e+07 MeV" in summary
+    assert "Missing coefficients: 1/1,300" in summary
+    assert "array(" not in summary
+    assert repr(table).startswith("PhantomTable(pdg_codes=array(")
+
+
 def test_radiation_values_are_unchanged_regardless_of_unit_comment(tmp_path):
     fractions = np.vstack([np.linspace(0, 1, 650), np.linspace(2, 0, 650)])
     table = PhantomTable(np.array([22, 2212]), fractions)

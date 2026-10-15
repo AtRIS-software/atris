@@ -4,6 +4,7 @@ import pytest
 
 from atris_tools.phantom_calibration import Phantom, PhantomStatistics
 from atris_tools.phantom_diagnostics import plot_creation_diagnostics, plot_sampling_precision
+from atris_tools.psf import PSF
 
 
 @pytest.fixture
@@ -13,7 +14,10 @@ def phantom():
                                 np.full(650, .1), np.full(650, 5))
         for code in (22, 1000260560)
     }
-    return Phantom.from_statistics(statistics, radius_cm=15, density_g_cm3=.997)
+    geometry = PSF(inner_radius_km=0, outer_radius_km=15 / 1e5,
+                   temperature_k=293, density_g_cm3=.997, pressure_pa=101325,
+                   mass_fractions={"H": 2 * 1.00794 / 18.01528, "O": 15.9994 / 18.01528}, state="liquid")
+    return Phantom.from_statistics(statistics, name="water-sphere", geometry=geometry)
 
 
 @pytest.mark.parametrize("plot,shape", [

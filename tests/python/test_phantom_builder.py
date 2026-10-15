@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from atris_tools.phantom_builder import PhantomBuilder
+from atris_tools.phantom_builder import Batch, PhantomBuilder
 from atris_tools.phantom_calibration import Phantom, PhantomStatistics
 from atris_tools.psf import PSF, write_psf
 
@@ -36,8 +36,8 @@ def test_species_specific_pilots_round_trip(tmp_path):
     response = Phantom.gather(directory=builder.directory)
     first = reopened._select([], response, 3, True)
     second = reopened._select([{"pdg": 22}], response, 3, True)
-    assert first[3] == 500000
-    assert second[3] == 100000
+    assert first.events == 500000
+    assert second.events == 100000
     assert "photon 5.000e+05" in str(reopened)
 
 
@@ -54,7 +54,7 @@ def test_prepare_defaults_to_current_folder(tmp_path, monkeypatch):
     builder = PhantomBuilder(psf=psf, pdg_codes=["photon"], name="example")
     assert builder.directory == tmp_path
     assert (tmp_path / "phantom-build.json").exists()
-    assert builder.settings["stem"] == "example"
+    assert builder.settings.stem == "example"
     assert not (tmp_path / "example.psf").exists()
     assert (tmp_path / "simulation.psf").exists()
     assert Phantom.gather().metadata == Phantom.gather(directory=tmp_path).metadata
@@ -64,27 +64,21 @@ def test_prepare_defaults_to_current_folder(tmp_path, monkeypatch):
         Phantom.gather("other")
 
 
-def test_run_logs_full_current_folder(build, monkeypatch, caplog):
-    monkeypatch.chdir(build.directory)
-    monkeypatch.setattr(PhantomBuilder, "_select", lambda *args: None)
-    caplog.set_level("INFO", logger="atris_tools.phantom_builder")
-    build.run()
-    assert f"Running phantom sampling in folder {build.directory}" in caplog.text
-
-
 def test_show_schedule_after_preparation_is_read_only(build, capsys):
     before = {path.relative_to(build.directory): path.read_bytes()
               for path in build.directory.rglob("*") if path.is_file()}
-    assert build.show_schedule(batches=4, threads=3) is None
+    schedule = build.show_schedule(batches=4, threads=3)
+    assert isinstance(schedule, tuple)
+    assert all(isinstance(batch, Batch) for batch in schedule)
+    assert [batch.species for batch in schedule] == ["photon", "proton", "photon", "proton"]
+    assert all(batch.events == 1300 and batch.status == "planned" for batch in schedule)
+    np.testing.assert_array_equal(schedule[0].energy_range_MeV, [1e-6, 1e7])
     output = capsys.readouterr().out
     rows = [line.split() for line in output.splitlines()[2:]]
     assert [row[1] for row in rows] == ["photon", "proton", "photon", "proton"]
     assert all(row[4] == "1.300e+03" and float(row[2]) < float(row[3]) for row in rows)
     assert output.count("initial coverage") == 2
     assert output.count("batch count") == 2
-    assert "user requested" not in output
-    assert "threads" not in output
-    assert "Later adaptive" not in output
     build.show_schedule(batches=8, adaptive=True, threads=3)
     output = capsys.readouterr().out
     assert "Schedule preview: 8 batches" in output
@@ -94,7 +88,7 @@ def test_show_schedule_after_preparation_is_read_only(build, capsys):
              for path in build.directory.rglob("*") if path.is_file()}
     assert after == before
     build.show_schedule()
-    assert "Schedule preview: 2 batches" in capsys.readouterr().out
+    assert "Schedule preview: 1 batches" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("kwargs", [{"batches": 0}, {"threads": 0}, {"batches": 1.5}])
@@ -143,14 +137,14 @@ def test_adaptive_selection_explains_reason(build, monkeypatch, count, error,
     monkeypatch.setattr(PhantomBuilder, "precision", lambda *args: quality)
     response = SimpleNamespace(sample_counts=np.full(shape, count))
     records = [dict(pdg=code, first_decade=0, decades=13)
-               for code in build.settings["pdg_codes"]]
+               for code in build.settings.pdg_codes]
     if timed:
         records.append(dict(pdg=22, first_decade=0, decades=1, threads=2,
                             fit_timing=True, events=1300, wall_seconds=10))
     if periodic:
         records.append(records[1].copy())
     selected = build._select(records, response, threads=2, adaptive=True)
-    assert selected[4] == reason
+    assert selected.reason == reason
 
 
 def test_prepare_accepts_psf_object(tmp_path):
@@ -176,7 +170,7 @@ def test_tracking_floor_retained_in_new_batch(build, tmp_path, monkeypatch):
     monkeypatch.setattr(PhantomBuilder, "_execute", stop_before_transport)
     with pytest.raises(RuntimeError, match="prepared input"):
         builder.run()
-    assert PhantomBuilder.open(builder.directory).settings["tracking_floor_eV"] == 1
+    assert PhantomBuilder.open(builder.directory).settings.tracking_floor_eV == 1
     macro = (builder.directory / builder._batches()[0]["directory"] / "calibration.chunk.mac").read_text()
     for command in ("/process/em/lowestElectronEnergy", "/process/em/lowestMuHadEnergy"):
         line = next(line for line in macro.splitlines() if line.startswith(command))
@@ -192,8 +186,8 @@ def test_tracking_floor_validation(build, tmp_path, floor):
 
 def test_prepare_psf_idempotent_and_preserves_micrometre_radius(build):
     assert build.radius_cm == pytest.approx(.0004)
-    assert "radius_cm" not in build.settings
-    assert "density_g_cm3" not in build.settings
+    assert not hasattr(build.settings, "radius_cm")
+    assert not hasattr(build.settings, "density_g_cm3")
     reopened = PhantomBuilder(build.directory / "simulation.psf", [22, 2212], directory=build.directory)
     assert reopened.settings == build.settings
     with pytest.raises(FileExistsError):
@@ -201,13 +195,25 @@ def test_prepare_psf_idempotent_and_preserves_micrometre_radius(build):
     assert build._batches() == []
 
 
+def test_gather_reads_geometry_once(build, monkeypatch):
+    read = PSF.read.__func__
+    calls = []
+    def counted_read(cls, path):
+        calls.append(path)
+        return read(cls, path)
+    monkeypatch.setattr(PSF, "read", classmethod(counted_read))
+    response = Phantom.gather(directory=build.directory)
+    assert response.radius_cm == pytest.approx(.0004)
+    assert len(calls) == 1
+
+
 def test_prepare_accepts_species_names(tmp_path):
     path = tmp_path / "water.psf"
     water_psf(path)
     names = ["photon", 2212, (26, 56), ("nickel", 58), "Fe-56", "iron-56", ("Fe", 56)]
     calibration = PhantomBuilder(path, names, directory=tmp_path / "run")
-    assert calibration.settings["pdg_codes"] == [22, 2212, 1000260560, 1000280580]
-    reopened = PhantomBuilder(path, calibration.settings["pdg_codes"],
+    assert calibration.settings.pdg_codes == [22, 2212, 1000260560, 1000280580]
+    reopened = PhantomBuilder(path, calibration.settings.pdg_codes,
                                      directory=tmp_path / "run")
     assert reopened.settings == calibration.settings
 
@@ -218,24 +224,25 @@ def test_name_controls_saved_filenames(tmp_path):
     builder = PhantomBuilder(path, ["photon"], directory=tmp_path / "run", name="example")
     assert "Phantom sampling: example" in str(builder)
     phantom = Phantom.gather(directory=builder.directory)
+    assert str(phantom).startswith("example: radius ")
     phantom.save(tmp_path / "export", allow_partial=True)
-    assert (tmp_path / "export/example_sampling.root").exists()
+    assert str(Phantom.read_root(tmp_path / "export/example_sampling.root")).startswith("example: radius ")
     phantom.save(tmp_path / "renamed", name="another", allow_partial=True)
     assert (tmp_path / "renamed/another_sampling.root").exists()
-    assert Phantom.read_root(tmp_path / "renamed/another_sampling.root").metadata["phantom"] == "another"
+    assert Phantom.read_root(tmp_path / "renamed/another_sampling.root").name == "another"
 
 
 def test_relative_dose_tolerance_reads_existing_run_without_rewriting(build):
     path = build.directory / "phantom-build.json"
-    previous = dict(build.settings)
+    previous = build.settings.to_dict()
     previous["relative_tolerance"] = previous.pop("relative_dose_tolerance")
     path.write_text(json.dumps(previous))
     original = path.read_bytes()
     reopened = PhantomBuilder.open(build.directory)
-    assert reopened.settings["relative_dose_tolerance"] == .05
-    assert "relative_tolerance" not in reopened.settings
+    assert reopened.settings.precision.relative_dose_tolerance == .05
+    assert not hasattr(reopened.settings, "relative_tolerance")
     phantom = Phantom.gather(directory=build.directory)
-    assert phantom.metadata["precision_settings"]["relative_dose_tolerance"] == .05
+    assert phantom.precision_settings.relative_dose_tolerance == .05
     assert path.read_bytes() == original
 
 
@@ -245,12 +252,12 @@ def test_relative_dose_tolerance_parameter(tmp_path):
     builder = PhantomBuilder(path, ["photon"], directory=tmp_path / "run",
                                      dose_rtol=.02, dose_atol_Gy=2e-12)
     phantom = Phantom.gather(directory=builder.directory)
-    assert phantom.metadata["precision_settings"]["relative_dose_tolerance"] == .02
-    assert phantom.metadata["precision_settings"]["absolute_dose_tolerance_Gy"] == 2e-12
+    assert phantom.precision_settings.relative_dose_tolerance == .02
+    assert phantom.precision_settings.absolute_dose_tolerance_Gy == 2e-12
     assert "Relative dose tolerance: 2.0%" in str(builder)
 
 
-def test_rejects_changed_geometry_and_nonwater(tmp_path, build):
+def test_rejects_changed_geometry_and_preserves_nonwater_material(tmp_path, build):
     with (build.directory / "simulation.psf").open("a") as output:
         output.write("# changed\n")
     with pytest.raises(ValueError, match="PSF changed"):
@@ -262,8 +269,47 @@ def test_rejects_changed_geometry_and_nonwater(tmp_path, build):
                     density_g_cm3=2.7, pressure_pa=0, mass_fractions={"Al": 1},
                     solid_composition="Al1000", state="solid")
     write_psf(path, psf)
-    with pytest.raises(ValueError, match="liquid H2O"):
-        PhantomBuilder(path, [22], directory=tmp_path / "aluminium")
+    aluminium = PhantomBuilder(path, [22], directory=tmp_path / "aluminium", name="aluminium")
+    phantom = Phantom.gather("aluminium", directory=aluminium.directory)
+    assert phantom.density_g_cm3 == 2.7
+    np.testing.assert_array_equal(phantom.geometry.layers, psf.layers)
+    phantom.save(aluminium.directory)
+    restored = Phantom.read_root(aluminium.directory / "aluminium_sampling.root")
+    np.testing.assert_array_equal(restored.geometry.layers, psf.layers)
+    assert restored.geometry.materials == psf.materials
+    assert "geometry_psf" not in restored.metadata
+
+
+def test_layered_psf_preserves_shielding_and_uses_sensor_mass(tmp_path):
+    from atris_tools.phantom_calibration import prepare_phantom_batch
+    from atris_tools.psf import DETECTOR_ID, load_psf
+    psf = PSF(inner_radius_km=[0, 1e-5], outer_radius_km=[1e-5, 2e-5],
+              temperature_k=[290, 310], density_g_cm3=[2.7, 1.8], pressure_pa=0,
+              mass_fractions={"Al": [1, 0], "C": [0, 1]}, state="solid")
+    builder = PhantomBuilder(psf, [22], directory=tmp_path / "layered", name="layered")
+    phantom = Phantom.gather("layered", directory=builder.directory)
+    assert phantom.radius_cm == pytest.approx(1)
+    assert phantom.source_radius_cm == pytest.approx(2)
+    assert phantom.mass_g == pytest.approx(4 * np.pi / 3 * 2.7)
+    assert phantom.area_cm2 == pytest.approx(2 * np.pi * 2**2)
+    phantom.save(builder.directory)
+    restored = Phantom.read_root(builder.directory / "layered_sampling.root")
+    assert restored.mass_g == phantom.mass_g
+    assert restored.area_cm2 == phantom.area_cm2
+    assert restored.source_radius_cm == phantom.source_radius_cm
+    batch = tmp_path / "batch"
+    batch.mkdir()
+    prepare_phantom_batch(batch, [1, 10], psf_path=psf)
+    expected = psf.layers.copy()
+    expected[:, DETECTOR_ID] = [1, -1]
+    np.testing.assert_array_equal(load_psf(batch / "calibration.psf")[:-2], expected)
+    import xml.etree.ElementTree as ET
+    gdml = ET.parse(batch / "calibration.gdml")
+    volumes = gdml.findall("./structure/volume")
+    assert len({volume.attrib["name"] for volume in volumes}) == len(volumes)
+    assert gdml.find("./structure/volume[@name='volume-1']/auxiliary") is None
+    assert len(gdml.findall(".//auxiliary")) == 3
+    prepare_phantom_batch(batch, [1, 10], psf_path=psf)
 
 
 def test_missing_and_zero_response_are_unresolved(build):
@@ -328,7 +374,7 @@ def test_adaptive_forecast_uses_completed_counts_and_budget(build, monkeypatch,
     monkeypatch.setattr(PhantomBuilder, "precision", lambda *args: quality)
     response = SimpleNamespace(sample_counts=np.full(shape, 100))
     records = [dict(pdg=code, first_decade=0, decades=13)
-               for code in build.settings["pdg_codes"]]
+               for code in build.settings.pdg_codes]
     records.extend([
         dict(pdg=22, first_decade=0, decades=1, threads=3, fit_timing=True,
              events=100_000_000, completed_events=1000, event_loop_seconds=10, wall_seconds=12),
@@ -337,8 +383,9 @@ def test_adaptive_forecast_uses_completed_counts_and_budget(build, monkeypatch,
         records[1].copy(),
     ])
     selected = build._select(records, response, threads=3, adaptive=True, time_limit_s=time_limit_s)
-    assert selected[:5] == (22, 1, 1, events, "precision")
-    assert selected[5] == pytest.approx(forecast)
+    assert (selected.pdg, selected.first_decade, selected.decades,
+            selected.events, selected.reason) == (22, 1, 1, events, "precision")
+    assert selected.forecast_seconds == pytest.approx(forecast)
 
 
 @pytest.mark.parametrize("threads,width,fit,completed,duration", [
@@ -354,14 +401,14 @@ def test_adaptive_ignores_unmatched_or_unusable_timings(build, monkeypatch,
         passed=passed, resolved=np.ones(shape, dtype=bool),
         dose_error=np.ones(shape), ratio=np.full(shape, 2.0)))
     records = [dict(pdg=code, first_decade=0, decades=13)
-               for code in build.settings["pdg_codes"]]
+               for code in build.settings.pdg_codes]
     records.append(dict(pdg=22, first_decade=0, decades=width, threads=threads,
                         fit_timing=fit, events=1000, completed_events=completed,
                         event_loop_seconds=duration, wall_seconds=12))
     selected = build._select(records, SimpleNamespace(sample_counts=np.full(shape, 100)),
                              threads=3, adaptive=True, time_limit_s=1)
-    assert selected[4] == "timing pilot"
-    assert selected[5] is None
+    assert selected.reason == "timing pilot"
+    assert selected.forecast_seconds is None
 
 
 @pytest.mark.parametrize("time_limit", [0, -1, float("nan"), float("inf")])
@@ -415,10 +462,15 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
         if field.name == "metadata":
             for key, value in original.items():
                 assert saved[key] == value
+        elif field.name == "geometry":
+            np.testing.assert_array_equal(saved.layers, original.layers)
+            assert saved.materials == original.materials
+        elif field.name == "precision_settings":
+            assert saved == original
         else:
             np.testing.assert_array_equal(saved, original)
     inputs = (build.directory / before[0]["directory"] / "chunks.txt").read_bytes()
-    build.show_schedule(batches=4, adaptive=True)
+    schedule = build.show_schedule(batches=4, adaptive=True)
     preview = capsys.readouterr().out
     assert "Schedule preview: 4 batches" in preview
     assert "timing pilot" in preview
@@ -432,7 +484,9 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
     assert pending["decades"] == 1
     assert pending["reason"] == "timing pilot"
     build._chunk(pending).with_suffix(".COMPLETE").unlink()
-    build.show_schedule(batches=4, adaptive=True)
+    schedule = build.show_schedule(batches=4, adaptive=True)
+    assert schedule[0].status == "resume"
+    assert schedule[0].events == pending["events"]
     preview = capsys.readouterr().out
     assert "resume" in preview
     assert f"{pending['events']:.3e}" in preview
@@ -454,7 +508,7 @@ def test_lock_prevents_duplicate_builder_and_releases(build):
         pass
 
 
-def test_gather_and_save_are_separate_and_preserve_all_fields(build, monkeypatch):
+def test_gather_and_save_have_no_extra_output_side_effects(build, monkeypatch):
     response = Phantom.gather(directory=build.directory)
     assert not (build.directory / "export").exists()
     monkeypatch.chdir(build.directory)
@@ -465,18 +519,6 @@ def test_gather_and_save_are_separate_and_preserve_all_fields(build, monkeypatch
     assert state["resolved_bins"] == 0
     assert not state["precision_complete"]
     assert not state["counting_drives_sampling"]
-    retained = Phantom.read_root(build.directory / "water-sphere_sampling.root")
-    for field in fields(Phantom):
-        original = getattr(response, field.name)
-        restored = getattr(retained, field.name)
-        if field.name == "metadata":
-            for key, value in original.items():
-                assert restored[key] == value
-        else:
-            np.testing.assert_array_equal(restored, original)
-    assert retained.metadata["geometry_psf"] == (build.directory / "simulation.psf").read_text()
-    assert retained.metadata["precision_settings"]["relative_dose_tolerance"] == build.settings["relative_dose_tolerance"]
-    assert retained.metadata["sampling_settings"] == build.settings
     assert not (build.directory / "water-sphere_sampling.npz").exists()
 
 

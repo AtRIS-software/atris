@@ -1,12 +1,12 @@
-"""Prepare a water-sphere calibration and merge its per-bin statistics.
+"""Prepare spherical phantom transport and merge its per-bin statistics.
 
-The calibration irradiates the sphere's projected disk with a parallel beam.
+The source irradiates the sphere's projected disk with a parallel beam.
 Rotational symmetry makes this equivalent to isotropic irradiation of an
 unshielded sphere. It is not an angular average for a nonspherical detector.
 """
 
-from dataclasses import dataclass, field
-import hashlib
+from dataclasses import asdict, astuple, dataclass, field, fields
+from io import StringIO
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -22,66 +22,50 @@ from .phantoms import RESPONSE_ENERGY_BINS
 from .psf import (
     PSF, write_psf, load_psf, read_psf_header, DETECTOR_ID,
     INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END,
-    DENSITY, STATE, FIRST_ELEMENT,
+    DENSITY, PRESSURE, STATE, FIRST_ELEMENT,
 )
 from .psf2gdml import psf2gdml
 
-WATER_DETECTOR_ID = 1
+PHANTOM_DETECTOR_ID = 1
+DETECTOR_LAYER = 0
 PHOTON_PDG = pdg_code("photon")
 RESPONSE_ENERGY_EDGES_MEV = ENERGY_EDGES_MEV
 CM_PER_KM = 1e5
 JOULES_PER_MEV = 1.602176634e-13
 KG_PER_GRAM = 1e-3
-LIQUID_STATE = 2
-HYDROGEN_MOLAR_MASS = 1.00794
-OXYGEN_MOLAR_MASS = 15.9994
-WATER_MOLAR_MASS = 2 * HYDROGEN_MOLAR_MASS + OXYGEN_MOLAR_MASS
-WATER_MASS_FRACTIONS = {
-    "H": 2 * HYDROGEN_MOLAR_MASS / WATER_MOLAR_MASS,
-    "O": OXYGEN_MOLAR_MASS / WATER_MOLAR_MASS,
-}
-WATER_COMPOSITION_ID = "H112O888"
 SPHERE_ANGLE_TOLERANCE = 1e-10
-WATER_FRACTION_TOLERANCE = 1e-6
 ROOT_STATISTICS_RTOL = 1e-14
 ROOT_ENERGY_GRID_RTOL = 1e-12
-DEFAULT_TEMPERATURE_K = 293
-DEFAULT_PRESSURE_PA = 101325
 VACUUM_DENSITY_G_CM3 = 1e-25
-# Distances are multiples of the water radius. The beam starts just outside
-# the water; two enclosing shells terminate escaped tracks in detectors 0/2.
+# Distances are multiples of the sphere radius. The beam starts just outside
+# the sphere; two enclosing shells terminate escaped tracks in detectors 0/2.
 SOURCE_DISTANCE_RADII = 1.1
 TRANSPORT_INNER_RADII = (0, 2, 2.2)
 TRANSPORT_OUTER_RADII = (1, 2.1, 2.3)
-TRANSPORT_DETECTOR_IDS = (WATER_DETECTOR_ID, 0, 2)
+TRANSPORT_DETECTOR_IDS = (PHANTOM_DETECTOR_ID, 0, 2)
 WORLD_MARGIN_RADII = 1.7
 CHUNK_SEED_MIN = 31
 CHUNK_SEED_MAX_EXCLUSIVE = 1_000_000
 
 
-def water_sphere_psf(path, *, calibration=False):
-    """Read the physical water layer, keeping its PSF material settings intact."""
-    psf = path if isinstance(path, PSF) else PSF.from_layers(load_psf(path), " ".join(read_psf_header(path)))
-    if calibration:
-        layers = psf.layers[psf.layers[:, DETECTOR_ID] == WATER_DETECTOR_ID]
+def sphere_psf(path, *, transport=False):
+    """Read spherical physical layers, preserving the supplied PSF materials."""
+    psf = path if isinstance(path, PSF) else PSF.read(path)
+    if transport:
+        layers = psf.layers[~np.isin(psf.layers[:, DETECTOR_ID], TRANSPORT_DETECTOR_IDS[1:])]
     else:
         layers = psf.layers
-    if len(layers) != 1:
-        raise ValueError("The water-sphere builder requires one unshielded PSF layer")
-    layer = layers[0]
-    if not np.isfinite(layer).all() or layer[INNER_RADIUS] != 0 or layer[OUTER_RADIUS] <= 0:
-        raise ValueError("The PSF must describe a finite sphere starting at radius zero")
-    if not np.allclose(layer[[PHI_START, PHI_END, THETA_START, THETA_END]],
+    if not len(layers) or not np.isfinite(layers).all():
+        raise ValueError("The PSF must contain finite spherical layers")
+    if np.any(layers[:, INNER_RADIUS] < 0) or np.any(layers[:, OUTER_RADIUS] <= layers[:, INNER_RADIUS]) or np.any(
+        layers[1:, INNER_RADIUS] < layers[:-1, OUTER_RADIUS]
+    ):
+        raise ValueError("PSF layers must be ordered without overlap and have positive thickness")
+    if not np.allclose(layers[:, [PHI_START, PHI_END, THETA_START, THETA_END]],
                        [0, 2 * np.pi, 0, np.pi], rtol=0, atol=SPHERE_ANGLE_TOLERANCE):
         raise ValueError("The PSF must cover a complete sphere")
-    fractions = dict(zip(psf.materials.split()[1:], layer[FIRST_ELEMENT:]))
-    if layer[STATE] != LIQUID_STATE or set(fractions) != set(WATER_MASS_FRACTIONS) or any(
-        not np.isclose(fractions[key], value, rtol=0, atol=WATER_FRACTION_TOLERANCE)
-        for key, value in WATER_MASS_FRACTIONS.items()
-    ):
-        raise ValueError("This builder supports liquid H2O only, with explicit H/O mass fractions")
-    if layer[DENSITY] <= 0:
-        raise ValueError("Water density must be positive")
+    if np.any(layers[:, DENSITY] <= 0):
+        raise ValueError("Phantom density must be positive")
     return PSF.from_layers(layers.copy(), psf.materials)
 
 
@@ -97,6 +81,15 @@ class PhantomStatistics:
     mean_fraction: np.ndarray
     squared_deviations: np.ndarray
     detected_counts: np.ndarray
+
+    def __str__(self):
+        return "\n".join([
+            "Phantom statistics",
+            f"Primaries: {self.sample_counts.sum():,}",
+            f"Sampled energy bins: {np.count_nonzero(self.sample_counts):,}/{self.sample_counts.size:,}",
+            f"Bins with at least two primaries: {np.count_nonzero(self.sample_counts > 1):,}",
+            f"Counted primaries: {self.detected_counts.sum():,}",
+        ])
 
     @classmethod
     def empty(cls):
@@ -162,9 +155,46 @@ def _read_dose_settings(settings):
     return settings
 
 
+@dataclass(frozen=True)
+class DosePrecision:
+    relative_dose_tolerance: float
+    absolute_dose_tolerance_Gy: float
+    confidence_factor: float
+
+    def __post_init__(self):
+        if not all(np.isfinite(value) and value > 0 for value in (
+            self.relative_dose_tolerance, self.absolute_dose_tolerance_Gy, self.confidence_factor
+        )):
+            raise ValueError("Dose precision settings must be finite and positive")
+
+
+@dataclass(frozen=True)
+class SamplingSettings:
+    stem: str
+    pdg_codes: list[int]
+    pilot_events: int | dict[str, int]
+    production_cut_mm: float
+    seed: int
+    physics_list: str
+    psf_sha256: str
+    precision: DosePrecision
+    tracking_floor_eV: float | None = None
+
+    @classmethod
+    def from_dict(cls, data):
+        data = _read_dose_settings(data)
+        precision = DosePrecision(**{item.name: data.pop(item.name) for item in fields(DosePrecision)})
+        return cls(**data, precision=precision)
+
+    def to_dict(self):
+        data = asdict(self)
+        data.update(data.pop("precision"))
+        return data
+
+
 @dataclass
 class Phantom:
-    """Sampled water-sphere responses on the AtRIS grid, one row per PDG code.
+    """Sampled sphere responses on the AtRIS grid, one row per PDG code.
 
     Energy fractions are per intercepted primary, including its secondaries.
     Missing samples remain NaN and cannot be exported as measured zeroes.
@@ -175,10 +205,11 @@ class Phantom:
     counting_efficiency: np.ndarray
     sample_counts: np.ndarray
     fraction_standard_error: np.ndarray
-    radius_cm: float
-    density_g_cm3: float
     threshold_MeV: float
     metadata: dict = field(default_factory=dict)
+    name: str = field(kw_only=True)
+    geometry: PSF = field(kw_only=True)
+    precision_settings: DosePrecision | None = field(default=None, kw_only=True)
 
     @classmethod
     def gather(cls, name=None, *, directory="."):
@@ -191,43 +222,39 @@ class Phantom:
 
         builder = PhantomBuilder.open(directory)
         settings = builder.settings
-        if name is not None and name != settings["stem"]:
-            raise ValueError(f"Sampling folder contains phantom {settings['stem']!r}, not {name!r}")
-        statistics = {code: PhantomStatistics.empty() for code in settings["pdg_codes"]}
+        if name is not None and name != settings.stem:
+            raise ValueError(f"Sampling folder contains phantom {settings.stem!r}, not {name!r}")
+        statistics = {code: PhantomStatistics.empty() for code in settings.pdg_codes}
         versions = set()
         for batch in builder._batches():
             chunk = builder._chunk(batch)
             if chunk.with_suffix(".COMPLETE").is_file():
                 metadata = read_ntuple(chunk.with_suffix(".root"), "metadata",
                                        ("atris_version", "physics_list"))
-                if set(metadata["physics_list"]) != {settings["physics_list"]}:
+                if set(metadata["physics_list"]) != {settings.physics_list}:
                     raise ValueError("Completed chunk physics list differs from the prepared build")
                 versions.update(metadata["atris_version"])
                 statistics[batch["pdg"]] += read_phantom_statistics(chunk.with_suffix(".root"))
         return cls.from_statistics(
-            statistics, radius_cm=builder.radius_cm,
-            density_g_cm3=builder.density_g_cm3,
-            metadata=dict(physics_list=settings["physics_list"],
-                          production_cut_mm=settings["production_cut_mm"],
+            statistics, geometry=builder.geometry,
+            name=settings.stem,
+            precision_settings=settings.precision,
+            metadata=dict(physics_list=settings.physics_list,
+                          production_cut_mm=settings.production_cut_mm,
                           atris_version=", ".join(sorted(versions)) or "not recorded",
-                          geometry_psf=(builder.directory / "simulation.psf").read_text(),
-                          geometry_psf_role="physical",
-                          precision_settings={key: settings[key] for key in (
-                              "relative_dose_tolerance", "absolute_dose_tolerance_Gy", "confidence_factor")},
-                          sampling_settings=dict(settings),
-                          generator="atris_tools.phantom_builder", psf_sha256=settings["psf_sha256"]),
+                          generator="atris_tools.phantom_builder", psf_sha256=settings.psf_sha256,
+                          sampling_settings=settings.to_dict()),
         )
 
     def __str__(self):
         lines = [
-            f"Water-sphere response: radius {self.radius_cm:g} cm, density {self.density_g_cm3:g} g/cm^3",
+            f"{self.name}: radius {self.radius_cm:g} cm, density {self.density_g_cm3:g} g/cm^3",
             f"Incident species: {len(self.pdg_codes)}",
             f"Primaries retained: {self.sample_counts.sum():,}",
             f"Sampled bins: {np.count_nonzero(self.sample_counts):,}/{self.sample_counts.size:,}",
         ]
-        settings = self.metadata.get("precision_settings")
-        if settings:
-            quality = self.precision(**settings)
+        if self.precision_settings is not None:
+            quality = self.precision()
             lines.extend([
                 f"Resolved energy bins: {quality['resolved'].sum():,}",
                 f"Passing energy bins: {quality['passed'].sum():,}",
@@ -235,20 +262,31 @@ class Phantom:
             ])
         return "\n".join(lines)
 
-    def precision(self, *, relative_dose_tolerance, absolute_dose_tolerance_Gy, confidence_factor):
-        """Compare confidence-scaled dose errors with the configured target."""
+    def precision(self, *, relative_dose_tolerance=None, absolute_dose_tolerance_Gy=None,
+                  confidence_factor=None):
+        """Use stored targets unless overridden, without changing those settings."""
+        parameters = (relative_dose_tolerance, absolute_dose_tolerance_Gy, confidence_factor)
+        if self.precision_settings is not None:
+            parameters = tuple(default if value is None else value for default, value
+                               in zip(astuple(self.precision_settings), parameters))
+        if any(value is None for value in parameters):
+            raise ValueError("Without stored precision settings, supply relative_dose_tolerance, "
+                             "absolute_dose_tolerance_Gy and confidence_factor")
+        settings = DosePrecision(*parameters)
         factor = self.dose_per_fraction_Gy
         dose = self.energy_fraction * factor
         error = self.fraction_standard_error * factor
         resolved = (self.sample_counts > 1) & np.isfinite(error) & (dose > 0)
-        target = np.maximum(absolute_dose_tolerance_Gy, relative_dose_tolerance * np.abs(dose))
-        ratio = confidence_factor * error / target
+        target = np.maximum(settings.absolute_dose_tolerance_Gy,
+                            settings.relative_dose_tolerance * np.abs(dose))
+        ratio = settings.confidence_factor * error / target
         passed = resolved & (ratio <= 1)
         return dict(dose=dose, dose_error=error, ratio=ratio, resolved=resolved, passed=passed)
 
     @classmethod
     def from_statistics(
-        cls, statistics, *, radius_cm, density_g_cm3, threshold_MeV=0.0, metadata=None
+        cls, statistics, *, name, geometry, threshold_MeV=0.0, metadata=None,
+        precision_settings=None,
     ):
         """Build response rows from a PDG-to-statistics mapping, preserving order."""
         counts = np.array([s.sample_counts for s in statistics.values()])
@@ -273,20 +311,37 @@ class Phantom:
             efficiency,
             counts,
             error,
-            radius_cm,
-            density_g_cm3,
             threshold_MeV,
             metadata or {},
+            name=name,
+            geometry=geometry,
+            precision_settings=precision_settings,
         )
 
     @property
+    def radius_cm(self):
+        return float(self.geometry.layers[DETECTOR_LAYER, OUTER_RADIUS] * CM_PER_KM)
+
+    @property
+    def inner_radius_cm(self):
+        return float(self.geometry.layers[DETECTOR_LAYER, INNER_RADIUS] * CM_PER_KM)
+
+    @property
+    def density_g_cm3(self):
+        return float(self.geometry.layers[DETECTOR_LAYER, DENSITY])
+
+    @property
+    def source_radius_cm(self):
+        return float(self.geometry.layers[-1, OUTER_RADIUS] * CM_PER_KM)
+
+    @property
     def mass_g(self):
-        return 4 / 3 * np.pi * self.radius_cm**3 * self.density_g_cm3
+        return 4 / 3 * np.pi * (self.radius_cm**3 - self.inner_radius_cm**3) * self.density_g_cm3
 
     @property
     def area_cm2(self):
         """Area for AtRIS's two-direction interface-crossing normalization."""
-        return 2 * np.pi * self.radius_cm**2
+        return 2 * np.pi * self.source_radius_cm**2
 
     @property
     def dose_per_fraction_Gy(self):
@@ -333,9 +388,12 @@ class Phantom:
             arrays = root["sampling"].arrays(library="np")
             edges = root["energy_bins"].arrays(library="np")
             metadata = json.loads(str(root["metadata"]))
-        for key in ("precision_settings", "sampling_settings"):
-            if metadata.get(key):
-                metadata[key] = _read_dose_settings(metadata[key])
+        precision = metadata.pop("precision_settings", None)
+        geometry = metadata.pop("geometry_psf", None)
+        geometry_role = metadata.pop("geometry_psf_role", None)
+        if not geometry or geometry_role not in ("physical", "transport"):
+            raise ValueError("Sampling ROOT must contain its physical or transport PSF geometry")
+        geometry = sphere_psf(PSF.read(StringIO(geometry)), transport=geometry_role == "transport")
         if not np.array_equal(edges["lower_MeV"], RESPONSE_ENERGY_EDGES_MEV[:-1]) or not np.array_equal(
             edges["upper_MeV"], RESPONSE_ENERGY_EDGES_MEV[1:]
         ):
@@ -348,8 +406,18 @@ class Phantom:
             raise ValueError("Sampling ROOT must contain unique species and 650 bins per row")
         response = cls(codes, arrays["energy_fraction"], arrays["counting_efficiency"],
                        arrays["sample_counts"], arrays["fraction_standard_error"],
-                       metadata["radius_cm"], metadata["density_g_cm3"],
-                       metadata["counting_threshold_MeV"], metadata)
+                       metadata["counting_threshold_MeV"], metadata, name=metadata["phantom"],
+                       geometry=geometry,
+                       precision_settings=DosePrecision(**_read_dose_settings(precision)) if precision else None)
+        for key in ("radius_cm", "density_g_cm3", "mass_g", "atris_effective_area_cm2"):
+            value = response.area_cm2 if key == "atris_effective_area_cm2" else getattr(response, key)
+            if not np.isclose(value, metadata[key], rtol=ROOT_STATISTICS_RTOL, atol=0):
+                raise ValueError(f"Sampling ROOT {key} differs from its PSF geometry")
+        if not np.isclose(response.source_radius_cm, metadata["source"]["radius_cm"],
+                          rtol=ROOT_STATISTICS_RTOL, atol=0):
+            raise ValueError("Sampling ROOT source radius differs from its PSF geometry")
+        for key in response._export_metadata(response.name):
+            metadata.pop(key, None)
         counts = response.sample_counts
         detected = arrays["detected_counts"]
         if np.any(counts < 0) or np.any(detected < 0) or np.any(detected > counts):
@@ -389,13 +457,41 @@ class Phantom:
                 root["metadata"] = json.dumps(metadata, allow_nan=False)
             staged.replace(path)
 
+    def _export_metadata(self, name):
+        stream = StringIO()
+        self.geometry.save(stream)
+        geometry = stream.getvalue()
+        return {
+            "schema": "atris.phantom.v1", "phantom": name,
+            "validity": dict(geometry="spherical", scoring_detector_ids=[PHANTOM_DETECTOR_ID],
+                termination_detector_ids=[0, 2], missing_species="unscored", energy_extrapolation=False),
+            "radius_cm": self.radius_cm, "detector_inner_radius_cm": self.inner_radius_cm,
+            "detector_layer_index": DETECTOR_LAYER, "density_g_cm3": self.density_g_cm3,
+            "mass_g": self.mass_g, "projected_area_cm2": np.pi * self.source_radius_cm**2,
+            "atris_effective_area_cm2": self.area_cm2,
+            "effective_area_rule": "2*pi*source_radius_cm^2",
+            "source": dict(shape="disk", radius_cm=self.source_radius_cm,
+                centre_cm=[0, 0, -SOURCE_DISTANCE_RADII * self.source_radius_cm], direction=[0, 0, 1],
+                energy_sampling="log_uniform"),
+            "incident_energy": "total_kinetic_energy", "scored_deposit": "ionizing; primary_and_secondaries",
+            "normalization": "per_incident_primary", "counting_threshold_MeV": self.threshold_MeV,
+            "counting_definition": "P(W_ion > threshold)", "response_definition": "mean(W_ion/K)",
+            "sampling_status": "partial" if np.any(self.sample_counts == 0) else "sampled",
+            "sampling_file": f"{name}_sampling.root", "variance_ddof": 1,
+            "uncertainty": "standard_error_of_mean", "geometry_psf": geometry,
+            "geometry_psf_role": "physical",
+            "precision_settings": asdict(self.precision_settings) if self.precision_settings else None,
+        }
+
     def save(
         self, directory=".", *, name=None, allow_partial=True, **savetxt_kwargs
     ):
-        """Save response/counting tables, sampling data and a phantom selection.
+        """Save response/counting tables and sampling data; return their paths.
 
         Files are identified by the phantom name in the destination folder.
-        phantoms.txt selects this phantom for use in a simulation.
+        The simulation selection in phantoms.txt is never created or changed.
+        Return a tuple of Paths: response, counting, sampling ROOT, then the
+        precision-state JSON if written. Existing named result files are replaced.
         Keyword arguments such as fmt are passed to numpy.savetxt for the two
         response matrices. Sampling information is retained in a ROOT file.
         Partial results are saved by default, with NaN marking unsampled bins.
@@ -404,8 +500,7 @@ class Phantom:
         """
         directory = Path(directory)
         if name is None:
-            name = self.metadata.get("phantom", self.metadata.get("sampling_settings", {}).get(
-                "stem", "water-sphere"))
+            name = self.name
         codes = np.asarray(self.pdg_codes)
         if (
             codes.ndim != 1
@@ -452,47 +547,22 @@ class Phantom:
         if {"header", "comments", "delimiter", "footer"} & savetxt_kwargs.keys():
             raise ValueError("The phantom header and whitespace layout are fixed")
         directory.mkdir(parents=True, exist_ok=True)
-        metadata = {
-            "schema": "atris.phantom.v1",
-            "phantom": name,
-            "validity": dict(geometry="sphere", homogeneous=True, shielding=False,
-                material="liquid_water", scoring_detector_ids=[WATER_DETECTOR_ID],
-                termination_detector_ids=[0, 2], missing_species="unscored",
-                energy_extrapolation=False),
-            "radius_cm": self.radius_cm,
-            "density_g_cm3": self.density_g_cm3,
-            "mass_g": self.mass_g,
-            "projected_area_cm2": np.pi * self.radius_cm**2,
-            "atris_effective_area_cm2": self.area_cm2,
-            "effective_area_rule": "2*pi*r^2",
-            "source": dict(shape="disk", radius_cm=self.radius_cm,
-                centre_cm=[0, 0, -SOURCE_DISTANCE_RADII * self.radius_cm], direction=[0, 0, 1],
-                energy_sampling="log_uniform"),
-            "incident_energy": "total_kinetic_energy",
-            "scored_deposit": "ionizing; primary_and_secondaries",
-            "normalization": "per_incident_primary",
-            "counting_threshold_MeV": self.threshold_MeV,
-            "counting_definition": "P(W_ion > threshold)",
-            "response_definition": "mean(W_ion/K)",
-            "sampling_status": "partial" if np.any(self.sample_counts == 0) else "sampled",
-            "sampling_file": f"{name}_sampling.root",
-            "variance_ddof": 1,
-            "uncertainty": "standard_error_of_mean",
-        }
+        metadata = self._export_metadata(name)
         metadata.update(
             {key: value for key, value in self.metadata.items() if key not in metadata}
         )
-        metadata.setdefault("geometry_psf", None)
-        metadata.setdefault("geometry_psf_role", None)
         table_metadata = {key: metadata[key] for key in (
             "phantom", "sampling_file", "sampling_status", "radius_cm", "density_g_cm3",
             "mass_g", "atris_effective_area_cm2", "counting_threshold_MeV",
             "response_definition", "counting_definition",
         )}
+        response_path = directory / f"{name}_response.txt"
+        counting_path = directory / f"{name}_counting.txt"
+        sampling_path = directory / f"{name}_sampling.root"
         PhantomTable(
             codes, self.energy_fraction, metadata=table_metadata, allow_missing=allow_partial
         ).write(
-            directory / f"{name}_response.txt",
+            response_path,
             **savetxt_kwargs,
         )
         PhantomTable(
@@ -502,18 +572,16 @@ class Phantom:
             table_metadata,
             allow_missing=allow_partial,
         ).write(
-            directory / f"{name}_counting.txt",
+            counting_path,
             **savetxt_kwargs,
         )
-        (directory / "phantoms.txt").write_text(
-            "# ID stem mass_g area_cm2\n"
-            f"0 {name} {self.mass_g:.17e} {self.area_cm2:.17e}\n"
-        )
-        self._write_sampling_root(directory / f"{name}_sampling.root", metadata)
-        settings = self.metadata.get("precision_settings")
-        if settings:
-            quality = self.precision(**settings)
-            with atomic_text_output(directory / f"{name}_sampling-state.json") as output:
+        self._write_sampling_root(sampling_path, metadata)
+        paths = [response_path, counting_path, sampling_path]
+        if self.precision_settings is not None:
+            settings = asdict(self.precision_settings)
+            quality = self.precision()
+            state_path = directory / f"{name}_sampling-state.json"
+            with atomic_text_output(state_path) as output:
                 output.write(json.dumps(dict(
                     total_bins=int(self.sample_counts.size),
                     sampled_bins=int(np.count_nonzero(self.sample_counts)),
@@ -521,104 +589,8 @@ class Phantom:
                     passing_bins=int(quality["passed"].sum()),
                     precision_complete=bool(quality["passed"].all()),
                     **settings, counting_drives_sampling=False), indent=2, allow_nan=False) + "\n")
-
-
-def calibrate_water_phantom(runs_by_pdg, *, threshold_MeV=0.0):
-    """Read completed runs and estimate responses on the fixed AtRIS grid.
-
-    runs_by_pdg maps each particle's PDG code to its calibration directory.
-    All runs must use the same sphere and production cut. Rows retain the
-    mapping's order; place photons first when writing for the current reader.
-    """
-    if not np.isfinite(threshold_MeV) or threshold_MeV < 0:
-        raise ValueError("The counting threshold must be finite and nonnegative")
-    if not runs_by_pdg:
-        raise ValueError("Supply at least one calibration run")
-    geometry = None
-    statistics = {}
-    metadata = {}
-    physics_lists, atris_versions, geant4_versions = set(), set(), set()
-    for pdg, directory in runs_by_pdg.items():
-        directory = Path(directory)
-        config = json.loads((directory / "water-phantom.json").read_text())
-        if "particle" in config:
-            source_pdg = (
-                ion_pdg(config["ion"]["Z"], config["ion"]["A"])
-                if config["particle"] == "ion"
-                else pdg_code(config["particle"])
-            )
-            if pdg != source_pdg:
-                raise ValueError(f"PDG {pdg} does not match source PDG {source_pdg}")
-        layer = water_sphere_psf(directory / "calibration.psf", calibration=True).layers[0]
-        settings = (float(layer[OUTER_RADIUS] * CM_PER_KM), float(layer[DENSITY]),
-                    config.get("production_cut_mm"), config.get("tracking_floor_eV"),
-                    tuple(layer), " ".join(read_psf_header(directory / "calibration.psf")))
-        if geometry is not None and settings != geometry:
-            raise ValueError(
-                "Calibration runs must use the same sphere and production cut"
-            )
-        geometry = settings
-        metadata[f"pdg_{pdg}_source"] = config.get("particle", "not recorded")
-        if "ion" in config:
-            metadata[f"pdg_{pdg}_ion"] = (
-                f"Z={config['ion']['Z']}, A={config['ion']['A']}, charge={config['ion']['charge']} e; ground state"
-            )
-        source_edges = config.get("energy_edges_MeV")
-        metadata[f"pdg_{pdg}_source_energy_range_MeV"] = (
-            f"{source_edges[0]:g} to {source_edges[-1]:g}"
-            if source_edges
-            else "not recorded"
-        )
-        completed = []
-        statistics[pdg] = PhantomStatistics.empty()
-        if (directory / "chunks.txt").exists():
-            for entry in read_chunk_plan(directory):
-                name = chunk_name(entry)
-                if not (directory / "chunks" / (name + ".COMPLETE")).is_file():
-                    continue
-                completed.append(f"{entry[1]} {entry[2]}")
-                statistics[pdg] += read_phantom_statistics(
-                    directory / "chunks" / (name + ".root"), threshold_MeV
-                )
-                records = read_ntuple(
-                    directory / "chunks" / (name + ".root"),
-                    "metadata",
-                    ("atris_version", "physics_list"),
-                )
-                atris_versions.update(records["atris_version"])
-                physics_lists.update(records["physics_list"])
-                log = directory / "chunks" / (name + ".log")
-                if log.exists():
-                    geant4_versions.update(
-                        line.partition("Geant4 version Name:")[2].strip()
-                        for line in log.read_text().splitlines()
-                        if "Geant4 version Name:" in line
-                    )
-        metadata[f"pdg_{pdg}_completed_chunk_seed_pairs"] = (
-            "; ".join(completed) or "not recorded"
-        )
-        if not completed:
-            raise ValueError(f"No completed calibration chunks in {directory}")
-    metadata.update(
-        geometry_psf=(directory / "calibration.psf").read_text(),
-        geometry_psf_role="transport",
-        production_cut_mm=geometry[2] if geometry[2] is not None else "not recorded",
-        electron_muon_hadron_tracking_floor_eV=(
-            geometry[3] if geometry[3] is not None else "Geant4 defaults; no override"
-        ),
-        physics_list=", ".join(sorted(physics_lists)) or "not recorded",
-        atris_version=", ".join(sorted(atris_versions)) or "not recorded",
-        geant4_version=", ".join(sorted(geant4_versions)) or "not recorded",
-        generator="atris_tools.phantom_calibration; prepare_water_phantom / calibrate_water_phantom",
-        generator_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-    )
-    return Phantom.from_statistics(
-        statistics,
-        radius_cm=geometry[0],
-        density_g_cm3=geometry[1],
-        threshold_MeV=threshold_MeV,
-        metadata=metadata,
-    )
+            paths.append(state_path)
+        return tuple(paths)
 
 
 @dataclass
@@ -629,13 +601,20 @@ class PhantomEvents:
     deposited_energy_MeV: np.ndarray
     ionizing_energy_MeV: np.ndarray
 
+    def __str__(self):
+        lines = [f"Phantom events: {self.incident_energy_MeV.size:,} primaries"]
+        if self.incident_energy_MeV.size:
+            lines.append(f"Incident kinetic energy: {self.incident_energy_MeV.min():g} "
+                         f"to {self.incident_energy_MeV.max():g} MeV")
+        lines.append(f"Positive ionizing deposits: {np.count_nonzero(self.ionizing_energy_MeV > 0):,}")
+        return "\n".join(lines)
 
-def prepare_water_phantom(
+
+def prepare_phantom_batch(
     run_directory,
     energy_edges_MeV,
     *,
-    radius_cm=15.0,
-    density_g_cm3=0.997,
+    psf_path,
     particle="proton",
     events_per_chunk=4000,
     chunks=3,
@@ -643,7 +622,6 @@ def prepare_water_phantom(
     production_cut_mm=0.1,
     tracking_floor_eV=None,
     ion=None,
-    psf_path=None,
 ):
     """Write GDML, a log-uniform source macro, and an atris-run chunk plan.
 
@@ -656,10 +634,8 @@ def prepare_water_phantom(
     integer Z, A, and charge (in elementary-charge units).
     """
     directory = Path(run_directory)
-    physical = water_sphere_psf(psf_path) if psf_path is not None else None
-    if physical is not None:
-        radius_cm = float(physical.layers[0, OUTER_RADIUS] * CM_PER_KM)
-        density_g_cm3 = float(physical.layers[0, DENSITY])
+    physical = sphere_psf(psf_path)
+    radius_cm = float(physical.layers[-1, OUTER_RADIUS] * CM_PER_KM)
     edges = np.asarray(energy_edges_MeV, dtype=float)
     if (
         edges.ndim != 1
@@ -670,9 +646,9 @@ def prepare_water_phantom(
     ):
         raise ValueError("Energy edges must be finite, positive, and increasing")
     if not all(
-        np.isfinite(x) and x > 0 for x in (radius_cm, density_g_cm3, production_cut_mm)
+        np.isfinite(x) and x > 0 for x in (radius_cm, production_cut_mm)
     ):
-        raise ValueError("Radius, density, and production cut must be positive")
+        raise ValueError("Radius and production cut must be positive")
     if chunks < 1 or events_per_chunk < 1:
         raise ValueError("Chunks and events per chunk must be positive")
     if tracking_floor_eV is not None and (
@@ -720,13 +696,11 @@ def prepare_water_phantom(
             requested = config.copy()
             previous.pop("chunks")
             requested.pop("chunks")
-            retained = water_sphere_psf(directory / "calibration.psf", calibration=True)
-            same_geometry = (retained.layers[0, OUTER_RADIUS] == radius_cm / CM_PER_KM
-                             and retained.layers[0, DENSITY] == density_g_cm3)
-            if physical is not None:
-                expected = physical.layers.copy()
-                expected[:, DETECTOR_ID] = WATER_DETECTOR_ID
-                same_geometry = retained.materials == physical.materials and np.array_equal(retained.layers, expected)
+            retained = sphere_psf(directory / "calibration.psf", transport=True)
+            expected = physical.layers.copy()
+            expected[:, DETECTOR_ID] = -1
+            expected[DETECTOR_LAYER, DETECTOR_ID] = PHANTOM_DETECTOR_ID
+            same_geometry = retained.materials == physical.materials and np.array_equal(retained.layers, expected)
             if previous == requested and same_geometry:
                 entries = read_chunk_plan(directory)
                 if chunks > len(entries):
@@ -738,25 +712,19 @@ def prepare_water_phantom(
         )
 
     radius_km = radius_cm / CM_PER_KM
-    geometry = PSF(
-        inner_radius_km=np.array(TRANSPORT_INNER_RADII) * radius_km,
-        outer_radius_km=np.array(TRANSPORT_OUTER_RADII) * radius_km,
-        temperature_k=DEFAULT_TEMPERATURE_K,
-        density_g_cm3=[density_g_cm3, VACUUM_DENSITY_G_CM3, VACUUM_DENSITY_G_CM3],
-        pressure_pa=[DEFAULT_PRESSURE_PA, 0, 0], state=["liquid", "gas", "gas"],
-        mass_fractions={"H": [WATER_MASS_FRACTIONS["H"], 1, 1],
-                        "O": [WATER_MASS_FRACTIONS["O"], 0, 0]},
-        solid_composition=WATER_COMPOSITION_ID,
-    )
-    # IDs 0 and 2 terminate tracks outside the source; ID 1 scores the water.
-    geometry.layers[:, DETECTOR_ID] = TRANSPORT_DETECTOR_IDS
-    if physical is not None:
-        geometry.layers[0] = physical.layers[0]
-        geometry.layers[0, DETECTOR_ID] = WATER_DETECTOR_ID
-        geometry.materials = physical.materials
-        geometry.layers[1:, FIRST_ELEMENT:] = 0
-        hydrogen = read_psf_header(psf_path)[1:].index("H")
-        geometry.layers[1:, FIRST_ELEMENT + hydrogen] = 1
+    # The physical layer is unchanged; IDs 0/2 are vacuum termination shells.
+    layers = np.concatenate((physical.layers.copy(), np.repeat(physical.layers[-1:], 2, axis=0)))
+    layers[:-2, DETECTOR_ID] = -1
+    layers[DETECTOR_LAYER, DETECTOR_ID] = PHANTOM_DETECTOR_ID
+    layers[-2:, INNER_RADIUS] = np.array(TRANSPORT_INNER_RADII[1:]) * radius_km
+    layers[-2:, OUTER_RADIUS] = np.array(TRANSPORT_OUTER_RADII[1:]) * radius_km
+    layers[-2:, DETECTOR_ID] = TRANSPORT_DETECTOR_IDS[1:]
+    layers[-2:, DENSITY] = VACUUM_DENSITY_G_CM3
+    layers[-2:, PRESSURE] = 0
+    layers[-2:, STATE] = 0
+    layers[-2:, FIRST_ELEMENT:] = 0
+    layers[-2:, FIRST_ELEMENT] = 1
+    geometry = PSF.from_layers(layers, physical.materials)
     write_psf(directory / "calibration.psf", geometry)
     psf2gdml(directory / "calibration.psf", directory / "calibration.gdml",
              world_margin_km=WORLD_MARGIN_RADII * radius_km)
@@ -821,7 +789,7 @@ def read_phantom_statistics(path, threshold_MeV=0.0):
         if len(fraction.member("fSumw2")) == 0:
             raise ValueError("Phantom histogram is missing per-bin squared sums")
         water_bin = (
-            np.searchsorted(fraction.axes[1].edges(), WATER_DETECTOR_ID, side="right")
+            np.searchsorted(fraction.axes[1].edges(), PHANTOM_DETECTOR_ID, side="right")
             - 1
         )
         counts = primary.values().astype(np.int64)
@@ -842,7 +810,7 @@ def read_phantom_events(path):
             # Older compacted shower files contain water rows only; the native
             # mode names the scoring volume explicitly and can contain others.
             water = (
-                arrays["detector_id"] == WATER_DETECTOR_ID
+                arrays["detector_id"] == PHANTOM_DETECTOR_ID
                 if "detector_id" in arrays
                 else slice(None)
             )
@@ -869,7 +837,7 @@ def read_phantom_events(path):
         if np.any(event_id < 0) or np.any(event_id >= event_count):
             raise ValueError(f"Invalid event IDs in {path}")
         np.maximum.at(energy, event_id, steps["primary_energy_MeV"])
-        water = steps["detector_id"] == WATER_DETECTOR_ID
+        water = steps["detector_id"] == PHANTOM_DETECTOR_ID
         event_id = event_id[water]
         total = steps["energy_deposit_MeV"][water]
         nonionizing = steps["nonionizing_energy_deposit_MeV"][water]

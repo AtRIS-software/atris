@@ -18,7 +18,8 @@ seeds and native chunk output; appended batch records; and refreshed named files
 in the run directory: `<name>_response.txt`, `<name>_counting.txt`,
 `<name>_sampling.root`, `<name>_diagnostics.png`,
 `<name>_sampling-precision.png`, and `<name>_sampling-state.json`.
-`phantoms.txt` selects the named phantom for a simulation.
+The command does not create or change `phantoms.txt`. Select completed tables
+explicitly using [phantom selection and staging](../../running-atris/prepare-simulation.md#optionally-select-phantoms).
 
 Batch records store the requested event ceiling as `events` and the actual
 completed primary count as `completed_events`. Time-shortened batches contribute
@@ -50,7 +51,7 @@ usage: atris-build-phantom [-h] [--version] [--batches BATCHES] [--adaptive]
                            [--postprocess-only]
                            run_directory
 
-Run or inspect a prepared water-sphere phantom build.
+Run or inspect a prepared spherical phantom build.
 
 positional arguments:
   run_directory

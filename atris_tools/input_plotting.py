@@ -9,6 +9,7 @@ from matplotlib.colors import LogNorm
 from matplotlib.ticker import FixedLocator
 import numpy as np
 
+from .atrismacrogen import read_macro
 from .phantoms import read_phantoms
 from .psf import read_psf_layers
 from .phantom_tables import PhantomTable, ENERGY_EDGES_MEV, ENERGY_CENTRES_MEV
@@ -69,23 +70,6 @@ def _particle_groups(particle_codes):
         group = 1 if abs(code) >= ION_PDG_BASE else 0
         groups[group].append(index)
     return groups
-
-
-def read_macro(filename):
-    settings = {}
-    energy_points = []
-    with Path(filename).open() as macro:
-        for line in macro:
-            fields = line.split()
-            if not fields or fields[0].startswith("#"):
-                continue
-            command = fields[0]
-            values = fields[1:]
-            if command == "/gps/hist/point":
-                energy_points.append((float(values[0]), float(values[1])))
-            else:
-                settings[command] = " ".join(values)
-    return settings, np.asarray(energy_points)
 
 
 def read_layers(filename):
@@ -225,29 +209,25 @@ def setup_shell_axis(axis):
     axis.minorticks_on()
 
 
-def _setting(settings, command, default="not set"):
-    return settings.get(command, default)
-
-
 def _source_summary(settings, layers, energy_count):
     position = " ".join(
         part
         for part in (
-            _setting(settings, "/gps/pos/type"),
-            _setting(settings, "/gps/pos/shape", ""),
+            settings.get("/gps/pos/type", "not set"),
+            settings.get("/gps/pos/shape", ""),
         )
         if part
     )
-    radius = _setting(settings, "/gps/pos/radius")
-    direction = _setting(settings, "/gps/ang/type")
+    radius = settings.get("/gps/pos/radius", "not set")
+    direction = settings.get("/gps/ang/type", "not set")
     if position == "Surface Sphere" and direction == "cos":
         direction = "inward cosine law"
     theta = "%s to %s" % (
-        _setting(settings, "/gps/ang/mintheta"),
-        _setting(settings, "/gps/ang/maxtheta"),
+        settings.get("/gps/ang/mintheta", "not set"),
+        settings.get("/gps/ang/maxtheta", "not set"),
     )
     lines = [
-        "Particle: " + _setting(settings, "/gps/particle"),
+        "Particle: " + settings.get("/gps/particle", "not set"),
         "Position: " + position,
     ]
 
@@ -283,12 +263,12 @@ def _source_summary(settings, layers, energy_count):
         (
             "Direction: " + direction,
             "Incidence angle: " + theta,
-            "Particles per event: " + _setting(settings, "/gps/number"),
-            "Events: " + _setting(settings, "/run/beamOn"),
-            "Threads in macro: " + _setting(settings, "/run/numberOfThreads"),
+            "Particles per event: " + settings.get("/gps/number", "not set"),
+            "Events: " + settings.get("/run/beamOn", "not set"),
+            "Threads in macro: " + settings.get("/run/numberOfThreads", "not set"),
             "Secondary production range cut: "
-            + _setting(settings, "/run/setCut"),
-            "Random seeds: " + _setting(settings, "/random/setSeeds"),
+            + settings.get("/run/setCut", "not set"),
+            "Random seeds: " + settings.get("/random/setSeeds", "not set"),
         )
     )
     return "\n".join(lines)
@@ -479,11 +459,6 @@ def plot_species_inputs(simname):
     figure.savefig(filename)
     plt.close(figure)
     return filename
-
-
-def read_phantom_table(filename, *, counting=False):
-    table = PhantomTable.read(filename, counting=counting)
-    return table.pdg_codes, table.coefficients
 
 
 def plot_phantom_inputs(phantom_id, phantom_name, *, tables=None):

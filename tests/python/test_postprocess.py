@@ -8,16 +8,56 @@ import pytest
 import uproot
 
 from atris_tools import postprocess
+from atris_tools.root_histograms import read_root_file, write_root_histograms
 from atris_tools.response_histograms import (
     PRIMARY_HISTOGRAM,
     TOTAL_DEPOSITION_HISTOGRAM,
     ResponseHistogramReader,
+    Histogram,
     csv_histogram_axes,
     read_csv_histogram,
 )
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
+
+
+@pytest.mark.parametrize("squared_weights", [False, True])
+def test_histogram_keeps_available_csv_uncertainties(tmp_path, squared_weights):
+    (tmp_path / "protons_h1_h1.1.csv").write_text(
+        "#axis edges 1 10\nentries,Sw\n0,0\n2,2\n0,0\n")
+    path = tmp_path / "protons_h2_h2.ion.csv"
+    header = "#axis edges 1 10\n#axis edges 0 1\n#annotation atris.unit MeV\n"
+    path.write_text(header + ("entries,Sw,Sw2\n" if squared_weights else "entries,Sw\n")
+                    + ("2,3,5\n" if squared_weights else "2,3\n") * 9)
+    with ResponseHistogramReader(tmp_path / "protons") as histograms:
+        histogram = histograms["h2.ion"]
+        assert isinstance(histogram, Histogram)
+        np.testing.assert_array_equal(histogram.values, np.full((3, 3), 3))
+        assert histogram.annotations == tuple(header.splitlines())
+        summary = str(histogram)
+        assert "Value shape: (3, 3)" in summary
+        assert "Axis 0: 1 bin from 1 to 10" in summary
+        assert "Values include underflow and overflow bins" in summary
+        assert "Squared-weight sums: " + ("available" if squared_weights else "unavailable") in summary
+        assert repr(histogram).startswith("Histogram(values=array(")
+        if squared_weights:
+            np.testing.assert_array_equal(histogram.variances, np.full((3, 3), 5))
+        else:
+            assert histogram.variances is None
+
+
+def test_histogram_rejects_inconsistent_arrays_and_incompatible_addition():
+    axes = [np.array([1, 10])]
+    with pytest.raises(ValueError, match="values do not match"):
+        Histogram(np.ones(2), axes)
+    with pytest.raises(ValueError, match="squared-weight sums"):
+        Histogram(np.ones(3), axes, variances=np.ones(2))
+    first = Histogram(np.ones(3), axes)
+    other = Histogram(np.ones(3), [np.array([1, 20])])
+    with pytest.raises(ValueError, match="axes differ"):
+        first.add(other, "test")
+    np.testing.assert_array_equal(first.values, np.ones(3))
 
 
 def write_root_response(path, include_total_deposition=True):
@@ -37,6 +77,34 @@ def write_root_response(path, include_total_deposition=True):
                 energy_edges,
                 detector_edges,
             )
+
+
+def test_histogram_root_roundtrip_preserves_labels_and_bin_statistics(tmp_path):
+    source = tmp_path / "source.root"
+    write_root_response(source)
+    original, metadata = read_root_file(source)
+    assert original["h2.ion"].variances is None
+    original["h2.ion"].variances = np.full_like(original["h2.ion"].values, 7)
+    original["h2.ion"].title = "Ionizing energy"
+    original["h2.ion"].axis_titles = ("Energy (MeV)", "Detector ID")
+    destination = tmp_path / "roundtrip.root"
+    write_root_histograms(destination, original, metadata)
+    restored, _ = read_root_file(destination)
+    for name, first in original.items():
+        second = restored[name]
+        assert second.title == first.title
+        assert second.axis_titles == first.axis_titles
+        if name == "h2.ion":
+            assert "Histogram: Ionizing energy" in str(second)
+            assert "Energy (MeV): 2 bins from 1 to 100" in str(second)
+        assert second.statistics == first.statistics
+        np.testing.assert_array_equal(second.values, first.values)
+        if first.variances is None:
+            assert second.variances is None
+        else:
+            np.testing.assert_array_equal(second.variances, first.variances)
+        for first_axis, second_axis in zip(first.axes, second.axes):
+            np.testing.assert_array_equal(second_axis, first_axis)
 
 
 def test_csv_histogram_axes_reads_edge_and_fixed_axes(tmp_path):
@@ -63,8 +131,11 @@ def test_read_csv_histogram_accepts_variable_length_annotations(tmp_path):
         "2,3.5\n"
     )
 
-    _, _, data = read_csv_histogram(histogram)
-    np.testing.assert_allclose(data, [[2, 3.5]])
+    data = read_csv_histogram(histogram)
+    np.testing.assert_allclose(data.bin_statistics, [[2, 3.5]])
+    assert data.axes == []
+    assert "Bin edges unavailable" in str(data)
+    assert "flow bins" not in str(data)
 
 
 def test_input_output_warnings_report_mismatched_run_files(tmp_path, monkeypatch):
@@ -93,6 +164,7 @@ def test_input_output_warnings_report_mismatched_run_files(tmp_path, monkeypatch
         "#axis edges 1 10 100\n"
         "#axis edges -0.5 0.5 1.5 2.5\n"
         "entries,Sw\n"
+        + "0,0\n" * 20
     )
     (tmp_path / "phantoms.txt").write_text("0  test  1.0  2.0\n")
     monkeypatch.chdir(tmp_path)
@@ -249,18 +321,18 @@ def test_postprocess_reads_root_response_histograms(tmp_path, monkeypatch):
     with ResponseHistogramReader("protons") as histograms:
         assert histograms.phantom_count() == 0
         np.testing.assert_array_equal(
-            histograms.axes(PRIMARY_HISTOGRAM)[0],
+            histograms[PRIMARY_HISTOGRAM].axes[0],
             [1.0, 10.0, 100.0],
         )
         np.testing.assert_array_equal(
-            histograms.values(PRIMARY_HISTOGRAM)[1:-1], [4.0, 4.0]
+            histograms[PRIMARY_HISTOGRAM].values[1:-1], [4.0, 4.0]
         )
         np.testing.assert_array_equal(
-            histograms.values("h2.ion")[1:-1, 1:-1],
+            histograms["h2.ion"].values[1:-1, 1:-1],
             np.arange(1.0, 9.0).reshape(2, 4),
         )
         np.testing.assert_array_equal(
-            histograms.values(TOTAL_DEPOSITION_HISTOGRAM)[1:-1, 1:-1],
+            histograms[TOTAL_DEPOSITION_HISTOGRAM].values[1:-1, 1:-1],
             2 * np.arange(1.0, 9.0).reshape(2, 4),
         )
 

@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import numpy as np
 
+from .atrismacrogen import read_macro
+from .gather import read_chunk_plan
 from .cli import (
     HelpFormatter,
     add_logging_arguments,
@@ -24,7 +26,6 @@ from .input_plotting import (
     model_shell_edges,
     plot_inputs,
     read_layers,
-    read_macro,
     setup_shell_axis,
     shell_coordinates,
 )
@@ -188,13 +189,7 @@ def _add_uncertainty_fits(
 
 def _planned_chunks(simname):
     """Return the number of planned chunks for one particle species."""
-    count = 0
-    with open("chunks.txt") as plan:
-        for line in plan:
-            fields = line.split()
-            if fields and fields[0] == simname:
-                count += 1
-    return count
+    return sum(species == simname for species, _, _ in read_chunk_plan(Path(".")))
 
 
 def _add_response_plot(
@@ -544,7 +539,7 @@ def plot_run(simname):
     try:
         if output_format is not None:
             with ResponseHistogramReader(simname) as histograms:
-                energy_edges = histograms.axes(PRIMARY_HISTOGRAM)[0]
+                energy_edges = histograms[PRIMARY_HISTOGRAM].axes[0]
         else:
             energy_edges = np.atleast_1d(np.loadtxt(simname + ".bins"))
     except Exception as error:
@@ -563,22 +558,20 @@ def plot_run(simname):
     if Path(simname + ".ioni").is_file():
         try:
             with ResponseHistogramReader(simname) as histograms:
-                direction_axes = histograms.axes("h2.dir")
-                position_axes = histograms.axes("h2.pos")
-                primary_energy = histograms.values(PRIMARY_HISTOGRAM)
-                direction = histograms.values("h2.dir")
-                position = histograms.values("h2.pos")
+                direction = histograms["h2.dir"]
+                position = histograms["h2.pos"]
+                primary_energy = histograms[PRIMARY_HISTOGRAM].values
             detector_ids, ionization = _read_response(simname + ".ioni")
             filename = simname + ".png"
             _save_generic_plot(
                 primary_energy,
                 configured_energy,
-                direction,
-                position,
+                direction.values,
+                position.values,
                 ionization,
                 energy_edges,
-                direction_axes,
-                position_axes,
+                direction.axes,
+                position.axes,
                 detector_ids,
                 layers,
                 species,

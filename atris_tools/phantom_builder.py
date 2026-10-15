@@ -1,8 +1,8 @@
-"""Prepare, refine, and inspect a PSF-defined water-sphere calibration."""
+"""Prepare, refine, and inspect a PSF-defined spherical phantom."""
 
 import argparse
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -25,8 +25,8 @@ from .gather import atomic_text_output, chunk_name, read_chunk_plan
 from .particles import particle_source, particle_name, pdg_code
 from .phantom_calibration import (
     Phantom, RESPONSE_ENERGY_EDGES_MEV,
-    prepare_water_phantom, water_sphere_psf, read_phantom_statistics,
-    CM_PER_KM, PHOTON_PDG, _read_dose_settings,
+    prepare_phantom_batch, sphere_psf, read_phantom_statistics,
+    CM_PER_KM, PHOTON_PDG, DETECTOR_LAYER, DosePrecision, SamplingSettings,
 )
 from .psf import PSF, OUTER_RADIUS, DENSITY
 
@@ -57,6 +57,38 @@ def _save_json(path, value):
         output.write(json.dumps(value, indent=2, allow_nan=False) + "\n")
 
 
+@dataclass(frozen=True)
+class Batch:
+    """One sampling choice shared by schedule preview and batch execution."""
+
+    pdg: int
+    first_decade: int
+    decades: int
+    events: int
+    reason: str
+    forecast_seconds: float | None = None
+    status: str = "planned"
+
+    @property
+    def species(self):
+        return particle_name(self.pdg)
+
+    @property
+    def energy_range_MeV(self):
+        start = BINS_PER_DECADE * self.first_decade
+        return RESPONSE_ENERGY_EDGES_MEV[[start, start + BINS_PER_DECADE * self.decades]]
+
+    @classmethod
+    def from_record(cls, record, *, status="planned"):
+        return cls(record["pdg"], record["first_decade"], record["decades"],
+                   record["events"], record["reason"], record.get("forecast_seconds"), status)
+
+    def to_record(self):
+        record = asdict(self)
+        del record["status"]
+        return record
+
+
 @dataclass(init=False)
 class PhantomBuilder:
     """A persistent calibration run, independent of a notebook session.
@@ -66,19 +98,20 @@ class PhantomBuilder:
     """
 
     directory: Path
-    settings: dict
+    settings: SamplingSettings
+    geometry: PSF
 
     def __str__(self):
-        species = ", ".join(particle_name(code) for code in self.settings["pdg_codes"])
+        species = ", ".join(particle_name(code) for code in self.settings.pdg_codes)
         return "\n".join([
-            f"Phantom sampling: {self.settings['stem']}",
+            f"Phantom sampling: {self.settings.stem}",
             f"Species: {species}",
             "Primaries per pilot: " + ", ".join(
                 f"{particle_name(code)} {self._pilot_events(code):.3e}"
-                for code in self.settings["pdg_codes"]),
-            f"Production cut: {self.settings['production_cut_mm']:g} mm",
-            f"Relative dose tolerance: {self.settings['relative_dose_tolerance']:.1%}",
-            f"Absolute dose tolerance: {self.settings['absolute_dose_tolerance_Gy']:.1e} Gy",
+                for code in self.settings.pdg_codes),
+            f"Production cut: {self.settings.production_cut_mm:g} mm",
+            f"Relative dose tolerance: {self.settings.precision.relative_dose_tolerance:.1%}",
+            f"Absolute dose tolerance: {self.settings.precision.absolute_dose_tolerance_Gy:.1e} Gy",
         ])
 
     def __init__(self, psf, pdg_codes, *, directory=".", name="water-sphere",
@@ -90,7 +123,7 @@ class PhantomBuilder:
         pilot_events is a common count or a mapping of species to counts.
         """
         directory = Path(directory).expanduser().resolve()
-        water_sphere_psf(psf)
+        geometry = sphere_psf(psf)
         if isinstance(psf, PSF):
             output = StringIO()
             psf.save(output)
@@ -117,20 +150,15 @@ class PhantomBuilder:
             raise ValueError("Pilot events must be positive integers")
         if not isinstance(seed, int) or seed < 0:
             raise ValueError("Seed must be a nonnegative integer")
-        if not all(np.isfinite(x) and x > 0 for x in (
-            production_cut_mm, dose_rtol, dose_atol_Gy, confidence_factor
-        )):
-            raise ValueError("Cuts and precision settings must be finite and positive")
-        settings = dict(stem=name, pdg_codes=codes,
+        if not np.isfinite(production_cut_mm) or production_cut_mm <= 0:
+            raise ValueError("Production cut must be finite and positive")
+        if tracking_floor_eV is not None and (not np.isfinite(tracking_floor_eV) or tracking_floor_eV < 0):
+            raise ValueError("tracking_floor_eV must be finite and nonnegative")
+        settings = SamplingSettings(stem=name, pdg_codes=codes,
                         pilot_events=pilot_events, production_cut_mm=production_cut_mm, seed=seed,
-                        relative_dose_tolerance=dose_rtol,
-                        absolute_dose_tolerance_Gy=dose_atol_Gy,
-                        confidence_factor=confidence_factor, physics_list=physics_list,
-                        psf_sha256=hashlib.sha256(psf_bytes).hexdigest())
-        if tracking_floor_eV is not None:
-            if not np.isfinite(tracking_floor_eV) or tracking_floor_eV < 0:
-                raise ValueError("tracking_floor_eV must be finite and nonnegative")
-            settings["tracking_floor_eV"] = tracking_floor_eV
+                        precision=DosePrecision(dose_rtol, dose_atol_Gy, confidence_factor),
+                        physics_list=physics_list, psf_sha256=hashlib.sha256(psf_bytes).hexdigest(),
+                        tracking_floor_eV=tracking_floor_eV)
         directory.mkdir(parents=True, exist_ok=True)
         config = directory / "phantom-build.json"
         if config.exists():
@@ -138,6 +166,7 @@ class PhantomBuilder:
             if build.settings != settings:
                 raise FileExistsError("Different build settings require a new run directory")
             self.directory, self.settings = build.directory, build.settings
+            self.geometry = build.geometry
             return
         if (directory / "batches.json").exists() or (directory / "batches").exists():
             raise FileExistsError("Existing batch records require their original build configuration")
@@ -146,17 +175,21 @@ class PhantomBuilder:
             raise FileExistsError("A different simulation.psf already exists")
         if not (directory / "simulation.psf").exists():
             (directory / "simulation.psf").write_bytes(psf_bytes)
-        _save_json(config, settings)
+        _save_json(config, settings.to_dict())
         _save_json(directory / "batches.json", [])
         self.directory, self.settings = directory, settings
+        self.geometry = geometry
 
     @classmethod
     def open(cls, directory):
         directory = Path(directory).expanduser().resolve()
-        settings = _read_dose_settings(json.loads((directory / "phantom-build.json").read_text()))
+        settings = SamplingSettings.from_dict(json.loads((directory / "phantom-build.json").read_text()))
         build = cls.__new__(cls)
         build.directory, build.settings = directory, settings
-        build._geometry()
+        contents = (directory / "simulation.psf").read_bytes()
+        if hashlib.sha256(contents).hexdigest() != settings.psf_sha256:
+            raise ValueError("The PSF changed after preparation; use a new run directory")
+        build.geometry = sphere_psf(PSF.read(StringIO(contents.decode("utf-8"))))
         return build
 
     @contextmanager
@@ -176,18 +209,11 @@ class PhantomBuilder:
 
     @property
     def radius_cm(self):
-        return self._geometry()[0]
+        return float(self.geometry.layers[DETECTOR_LAYER, OUTER_RADIUS] * CM_PER_KM)
 
     @property
     def density_g_cm3(self):
-        return self._geometry()[1]
-
-    def _geometry(self):
-        path = self.directory / "simulation.psf"
-        if hashlib.sha256(path.read_bytes()).hexdigest() != self.settings["psf_sha256"]:
-            raise ValueError("The PSF changed after preparation; use a new run directory")
-        layer = water_sphere_psf(path).layers[0]
-        return float(layer[OUTER_RADIUS] * CM_PER_KM), float(layer[DENSITY])
+        return float(self.geometry.layers[DETECTOR_LAYER, DENSITY])
 
     def _chunk(self, batch):
         directory = self.directory / batch["directory"]
@@ -196,18 +222,16 @@ class PhantomBuilder:
     def precision(self, response=None):
         """Energy-only precision; empirical zeros remain unresolved, not complete."""
         response = Phantom.gather(directory=self.directory) if response is None else response
-        return response.precision(**{key: self.settings[key] for key in (
-            "relative_dose_tolerance", "absolute_dose_tolerance_Gy", "confidence_factor")})
+        return response.precision(**asdict(self.settings.precision))
 
-    def show_schedule(self, *, batches=None, adaptive=False, threads=1, time_limit_s=None):
-        """Preview batches without writing inputs or running transport.
+    def show_schedule(self, *, batches=1, adaptive=False, threads=1, time_limit_s=None):
+        """Print a preview and return a tuple of Batch records, without running.
 
-        The default count covers the configured species once. All selections use
+        The default count is one batch, as for run(). All selections use
         the current statistics, with previewed visits tracked only in memory.
         Actual adaptive choices are recalculated after each completed batch.
         Interrupted batches appear first.
         """
-        batches = len(self.settings["pdg_codes"]) if batches is None else batches
         if not isinstance(batches, int) or batches < 1 or not isinstance(threads, int) or threads < 1:
             raise ValueError("Batch and thread counts must be positive integers")
         if time_limit_s is not None and (not np.isfinite(time_limit_s) or time_limit_s <= 0):
@@ -216,50 +240,43 @@ class PhantomBuilder:
         pending = next((batch for batch in records
                         if not self._chunk(batch).with_suffix(".COMPLETE").exists()), None)
         response = Phantom.gather(directory=self.directory)
-        entries = []
+        schedule = []
+        rows = [("Batch", "Species", "K min (MeV)", "K max (MeV)", "Primaries", "Reason", "Status")]
         for _ in range(batches):
             if pending is not None:
-                batch = pending
+                batch = Batch.from_record(pending, status="resume")
                 pending = None
-                status = "resume"
             else:
-                selection = self._select(records, response, threads, adaptive, time_limit_s)
-                if selection is None:
+                batch = self._select(records, response, threads, adaptive, time_limit_s)
+                if batch is None:
                     break
-                code, decade, width, events, reason, forecast = selection
-                batch = dict(pdg=code, first_decade=decade, decades=width,
-                             events=events, reason=reason, forecast_seconds=forecast)
-                records.append(batch)
-                status = "planned"
-            start = BINS_PER_DECADE * batch["first_decade"]
-            stop = start + BINS_PER_DECADE * batch["decades"]
-            entries.append((
-                str(len(entries) + 1), particle_name(batch["pdg"]),
-                f"{RESPONSE_ENERGY_EDGES_MEV[start]:.3e}",
-                f"{RESPONSE_ENERGY_EDGES_MEV[stop]:.3e}",
-                f"{batch['events']:.3e}", batch["reason"], status,
+                records.append(batch.to_record())
+            schedule.append(batch)
+            lower, upper = batch.energy_range_MeV
+            rows.append((
+                str(len(schedule)), batch.species, f"{lower:.3e}", f"{upper:.3e}",
+                f"{batch.events:.3e}", batch.reason, batch.status,
             ))
-        rows = [("Batch", "Species", "K min (MeV)", "K max (MeV)", "Primaries", "Reason", "Status"),
-                *entries]
         widths = [max(len(row[column]) for row in rows) for column in range(len(rows[0]))]
-        print(f"Schedule preview: {len(entries)} batches")
+        print(f"Schedule preview: {len(schedule)} batches")
         for row in rows:
             print("  ".join(value.ljust(width) for value, width in zip(row, widths)))
         if adaptive:
             print("Preview uses current statistics; actual choices are recalculated after each batch.")
+        return tuple(schedule)
 
     def _pilot_events(self, code):
-        events = self.settings["pilot_events"]
+        events = self.settings.pilot_events
         return events[str(code)] if isinstance(events, dict) else events
 
     def _select(self, batches, response, threads, adaptive, time_limit_s=None):
-        codes = self.settings["pdg_codes"]
+        codes = self.settings.pdg_codes
         for code in codes:
             if not any(batch["pdg"] == code for batch in batches):
-                return code, 0, ENERGY_DECADES, self._pilot_events(code), "initial coverage", None
+                return Batch(code, 0, ENERGY_DECADES, self._pilot_events(code), "initial coverage")
         if not adaptive:
             code = codes[len(batches) % len(codes)]
-            return code, 0, ENERGY_DECADES, self._pilot_events(code), "batch count", None
+            return Batch(code, 0, ENERGY_DECADES, self._pilot_events(code), "batch count")
         quality = self.precision(response)
         if quality["passed"].all():
             return None
@@ -321,7 +338,7 @@ class PhantomBuilder:
             reason = "timing pilot"
         else:
             reason = "coverage" if coverage else "precision"
-        return code, decade, width, events, reason, expected
+        return Batch(code, decade, width, events, reason, expected)
 
     def run(self, *, batches=1, adaptive=False, threads=1, time_limit_s=None):
         """Run a bounded number of batches, resuming a pending batch first."""
@@ -347,20 +364,17 @@ class PhantomBuilder:
                     selection = self._select(records, Phantom.gather(directory=self.directory), threads, adaptive, time_limit_s)
                     if selection is None:
                         break
-                    code, decade, width, events, reason, forecast = selection
                     relative = f"batches/batch-{len(records):06d}"
                     directory = self.directory / relative
                     directory.mkdir(parents=True, exist_ok=False)
-                    edges = RESPONSE_ENERGY_EDGES_MEV[[BINS_PER_DECADE * decade, BINS_PER_DECADE * (decade + width)]]
-                    prepare_water_phantom(directory, edges, **particle_source(code),
+                    prepare_phantom_batch(directory, selection.energy_range_MeV,
+                        **particle_source(selection.pdg),
                         psf_path=self.directory / "simulation.psf",
-                        events_per_chunk=events, chunks=1, seed=self.settings["seed"] + len(records),
-                        production_cut_mm=self.settings["production_cut_mm"],
-                        tracking_floor_eV=self.settings.get("tracking_floor_eV", 0))
-                    pending = dict(directory=relative, pdg=code, first_decade=decade, decades=width,
-                                   events=events, reason=reason, forecast_seconds=forecast)
+                        events_per_chunk=selection.events, chunks=1, seed=self.settings.seed + len(records),
+                        production_cut_mm=self.settings.production_cut_mm,
+                        tracking_floor_eV=self.settings.tracking_floor_eV if self.settings.tracking_floor_eV is not None else 0)
+                    pending = dict(directory=relative, **selection.to_record())
                     records.append(pending)
-                    _save_json(self.directory / "batches.json", records)
                 pending["time_limit_seconds"] = time_limit_s
                 _save_json(self.directory / "batches.json", records)
                 self._execute(pending, threads)
@@ -385,19 +399,18 @@ class PhantomBuilder:
             environment["ATRIS_TIME_LIMIT"] = str(batch["time_limit_seconds"])
         batch["threads"] = threads
         batch["started_utc"] = datetime.now(timezone.utc).isoformat()
-        start_bin = BINS_PER_DECADE * batch["first_decade"]
-        stop_bin = start_bin + BINS_PER_DECADE * batch["decades"]
+        lower, upper = Batch.from_record(batch).energy_range_MeV
         purpose = BATCH_PURPOSES.get(batch["reason"], f"continue sampling ({batch['reason']})")
         logger.info(
             "Simulating up to %.3e primaries of %s (PDG %s) with kinetic energies "
             "from %.3e to %.3e MeV to %s.",
             batch["events"], particle_name(batch["pdg"]), batch["pdg"],
-            RESPONSE_ENERGY_EDGES_MEV[start_bin], RESPONSE_ENERGY_EDGES_MEV[stop_bin], purpose,
+            lower, upper, purpose,
         )
         start = previous = time.time()
         interrupted_clock = False
         process = subprocess.Popen(["atris-run", str(directory), "--mode", "phantom",
-                                    "--physics-list", self.settings["physics_list"]],
+                                    "--physics-list", self.settings.physics_list],
                                    env=environment, start_new_session=True)
         try:
             while process.poll() is None:
@@ -434,7 +447,7 @@ class PhantomBuilder:
                                and np.isfinite(duration) and duration > 0)
 
 def main():
-    parser = argparse.ArgumentParser(description="Run or inspect a prepared water-sphere phantom build.", formatter_class=HelpFormatter)
+    parser = argparse.ArgumentParser(description="Run or inspect a prepared spherical phantom build.", formatter_class=HelpFormatter)
     add_version_argument(parser)
     parser.add_argument("run_directory", type=Path)
     parser.add_argument("--batches", type=int, default=1, help="Maximum new/resumed batches to run (default: 1).")
@@ -454,7 +467,7 @@ def main():
         phantom = Phantom.gather(directory=build.directory)
         output = build.directory
         phantom.save(output)
-        name = build.settings["stem"]
+        name = build.settings.stem
         for plot, filename in ((plot_creation_diagnostics, f"{name}_diagnostics.png"),
                                (plot_sampling_precision, f"{name}_sampling-precision.png")):
             axes = plot(phantom)

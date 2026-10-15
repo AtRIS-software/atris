@@ -1,6 +1,7 @@
 """Read and write AtRIS Planet Specification Format files."""
 
 from pathlib import Path
+from contextlib import nullcontext
 from os import PathLike
 from dataclasses import dataclass
 import re
@@ -128,6 +129,12 @@ class PSF:
         layers[:, FIRST_ELEMENT:] = fractions
         self.layers = layers
         self.materials = " ".join([solid_composition, *elements])
+        self.validate()
+
+    @classmethod
+    def read(cls, path):
+        """Read a PSF file or a seekable text stream."""
+        return cls.from_layers(load_psf(path), " ".join(read_psf_header(path)))
 
     @classmethod
     def from_layers(cls, layers, materials):
@@ -135,7 +142,24 @@ class PSF:
         psf = cls.__new__(cls)
         psf.layers = np.asarray(layers, dtype=float)
         psf.materials = materials
-        return psf
+        return psf.validate()
+
+    def validate(self):
+        """Check the table format without imposing a particular physical geometry."""
+        fields = self.materials.split()
+        if len(fields) < 2 or len(set(fields[1:])) != len(fields) - 1:
+            raise ValueError("Specify a compact solid composition and unique material columns")
+        _compact_fractions(fields[0])
+        data = self.layers
+        if data.ndim != 2 or data.shape[0] == 0 or data.shape[1] != FIRST_ELEMENT + len(fields) - 1:
+            raise ValueError("PSF table must have one row per layer and columns for each fixed field and element")
+        if not np.isfinite(data).all():
+            raise ValueError("PSF values must be finite")
+        if not np.equal(data[:, DETECTOR_ID], np.floor(data[:, DETECTOR_ID])).all():
+            raise ValueError("PSF detector IDs must be integers")
+        if not np.isin(data[:, STATE], [0, 1, 2]).all():
+            raise ValueError("PSF material states must be 0 (gas), 1 (solid), or 2 (liquid)")
+        return self
 
     def __str__(self):
         elements = self.materials.split()[1:]
@@ -186,23 +210,13 @@ def write_psf(path, layers, *, materials=None, **kwargs):
     if isinstance(layers, PSF):
         if materials is not None and materials != layers.materials:
             raise ValueError("Material definition conflicts with the PSF's column order")
-        materials = layers.materials
-        layers = layers.layers
-    if materials is None:
-        raise ValueError("A numeric layer array requires a material definition")
-    fields = materials.split()
-    if len(fields) < 2:
-        raise ValueError("Specify a compact solid composition and material columns")
-    _compact_fractions(fields[0])
-    data = np.asarray(layers, dtype=float)
-    if data.ndim != 2 or data.shape[0] == 0 or data.shape[1] != FIRST_ELEMENT + len(fields) - 1:
-        raise ValueError("PSF table must have one row per layer and columns for each fixed field and element")
-    if not np.isfinite(data).all():
-        raise ValueError("PSF values must be finite")
-    if not np.equal(data[:, DETECTOR_ID], np.floor(data[:, DETECTOR_ID])).all():
-        raise ValueError("PSF detector IDs must be integers")
-    if not np.isin(data[:, STATE], [0, 1, 2]).all():
-        raise ValueError("PSF material states must be 0 (gas), 1 (solid), or 2 (liquid)")
+        psf = layers.validate()
+    else:
+        if materials is None:
+            raise ValueError("A numeric layer array requires a material definition")
+        psf = PSF.from_layers(layers, materials)
+    fields = psf.materials.split()
+    data = psf.layers
 
     header = (
         "# AtRIS Planet Specification Format (PSF)\n"
@@ -222,7 +236,9 @@ def write_psf(path, layers, *, materials=None, **kwargs):
 
 def _locate_table(path):
     legacy_header = None
-    with Path(path).open() as psf_file:
+    if hasattr(path, "seek"):
+        path.seek(0)
+    with nullcontext(path) if hasattr(path, "read") else Path(path).open() as psf_file:
         for line_number, line in enumerate(psf_file):
             text = line.strip()
             if not text:
@@ -253,6 +269,8 @@ def read_psf_header(path):
 def load_psf(path):
     """Return the numeric PSF table, skipping its descriptive and material headers."""
     _, data_start = _locate_table(path)
+    if hasattr(path, "seek"):
+        path.seek(0)
     return np.atleast_2d(np.loadtxt(path, skiprows=data_start))
 
 
@@ -268,14 +286,9 @@ def _compact_fractions(formula):
 
 def read_psf_layers(path):
     """Return PSF rows as plotting-ready spherical material layers."""
-    header = read_psf_header(path)
-    data = load_psf(path)
-    expected_columns = FIRST_ELEMENT + len(header) - 1
-    if data.shape[1] != expected_columns:
-        raise ValueError(
-            "%s has %i columns; expected %i from its material definition"
-            % (Path(path).name, data.shape[1], expected_columns)
-        )
+    psf = PSF.read(path)
+    header = psf.materials.split()
+    data = psf.layers
 
     compact_fractions = _compact_fractions(header[0])
     material_names = header[1:]

@@ -94,7 +94,7 @@ def pdg_code(name):
 
 
 def particle_source(pdg, *, charge=None):
-    """Return keyword arguments for prepare_water_phantom for this PDG code.
+    """Return Geant4 particle-source keyword arguments for this PDG code.
 
     Named light nuclei use their Geant4 names. Other positive ground-state
     nuclei use /gps/ion, fully stripped unless charge is supplied explicitly.

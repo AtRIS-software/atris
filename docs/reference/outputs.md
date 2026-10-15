@@ -47,8 +47,8 @@ ROOT's squared sums are not themselves sample variances. Raw-moment subtraction
 has floating-point cancellation when the variance is very small.
 
 `read_phantom_statistics` in `atris_tools.phantom_calibration` reads these
-statistics and also accepts older event-record chunks. `calibrate_water_phantom`
-combines completed chunks and exports tables with sampling uncertainties.
+statistics and also accepts older event-record chunks. `Phantom.gather(name)`
+combines completed builder batches; `phantom.save()` writes the tables and sampling uncertainties.
 New phantom-mode files contain histograms and run metadata, not per-primary,
 interface-crossing, or transport-step records. The grid fixes their array sizes,
 regardless of how many primaries a chunk simulates. Changing the zero counting
@@ -157,20 +157,25 @@ The counting threshold does not gate the energy response. Variances use
 denominator $N-1$, and standard errors are $\sqrt{s^2/N}$. A zero estimated
 counting error does not rule out rare events.
 
-The `validity` object records sphere geometry, homogeneity, shielding, material,
-scoring and termination IDs, and whether energy extrapolation is supported.
+The `validity` object records spherical geometry, scoring and termination IDs,
+and whether energy extrapolation is supported. The retained physical PSF records
+the layers and their material settings.
 The [water-sphere table](phantom-library.md#water-sphere-calibrations) gives the
 key properties of the four calibration runs. In calibration geometry,
-detector ID 1 is the scoring water volume. IDs 0 and 2 are vacuum termination
+detector ID 1 scores the innermost physical layer. Outer physical layers are
+passive shielding and have no sensitive detector attached. IDs 0 and 2 are vacuum termination
 shells: deposits there do not contribute. These are calibration IDs, not the
 phantom IDs assigned when loading tables into another atmospheric run. A
-physical one-layer PSF may have a different input detector ID; transport assigns
-the calibration IDs when adding shells.
+physical PSF may have different input detector IDs; transport assigns the scoring
+ID to the innermost layer when adding termination shells.
 
-The response applies to the recorded unshielded homogeneous water sphere and
-its radius, density, and material settings. The projected-disk beam can represent
-incoming directions because of spherical symmetry; it does not establish a
-response for shielded or nonspherical objects. Only the stored PDG rows and
+The response applies to the recorded spherical layers and material settings.
+Detector mass and density refer only to the innermost layer. The source disk
+covers the outer radius of the full PSF, including shielding, and response means
+include primaries that never reach the detector. The effective area is
+$2\pi R_\mathrm{source}^2$, not the detector's projected area. The projected-disk
+beam can represent incoming directions because of spherical symmetry. It does
+not describe a different surrounding geometry or a nonspherical object. Only the stored PDG rows and
 kinetic-energy bins are calibrated. Missing species are not zero responses,
 and the file does not justify extrapolation beyond its grid. NaN estimates and
 finite estimates with inadequate precision remain incomplete sampling results.
@@ -397,6 +402,19 @@ inspects canonical `protons` and `alphas` products in the selected directory;
 it does not automatically collect per-chunk particle ntuples. See
 [Scatter/gather files](chunks.md) for logs, completion markers, gathered-state
 files, and the convergence CSV schema.
+
+The Python `ResponseHistogramReader` returns a `Histogram` through
+`histograms[name]` for both CSV and ROOT. Its `values` and `axes` arrays include
+flow-bin values and ordinary bin edges respectively. `variances` contains the
+recorded per-bin squared-weight sums, or `None` when unavailable; it is not the
+standard error of a mean. ROOT labels and accumulated statistics, and CSV header
+annotations, remain attached to the object. CSV primary values are entry counts,
+so weighted-fill uncertainties are not assigned to those counts.
+CSV gathering uses this same model. `bin_statistics` retains every recorded
+column in axis order, with the columns identified by `columns`; `entries` exposes
+the per-bin fill counts. These fields are unavailable in ROOT where they were
+not recorded. Gathering adds compatible histogram statistics without inventing
+missing moments or converting between the two formats.
 
 Implementation: `src/PrimaryGeneratorAction.cc`, `src/HistoManager.cc`,
 `src/SensitiveDetector.cc`, `include/NtupleSchema.hh`, and

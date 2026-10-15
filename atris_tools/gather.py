@@ -20,10 +20,9 @@ from .postprocess import process_psf
 from .response_histograms import (
     IONIZATION_HISTOGRAM,
     PRIMARY_HISTOGRAM,
-    csv_histogram_axes,
+    ATRIS_ANNOTATION_PREFIX,
     read_csv_histogram,
     response_output_format,
-    table_histogram_values,
 )
 from .root_histograms import (
     combine_root_histograms,
@@ -31,11 +30,9 @@ from .root_histograms import (
 )
 
 
-PLANE_SUM_PREFIX = "#planes_Sxyw "
 SEED_PAIRS_PREFIX = "#annotation atris.random_seed_pairs "
 GATHERED_CHUNKS_PREFIX = "#annotation atris.gathered_chunks "
 SEED_PAIRS_COMPLETE_PREFIX = "#annotation atris.random_seed_pairs_complete "
-ATRIS_ANNOTATION_PREFIX = "#annotation atris."
 ETA_COMPLETION_WINDOW = 20
 CHANGE_FRACTION = 0.1
 CONVERGENCE_COLUMNS = (
@@ -182,18 +179,6 @@ def log_chunk_progress(run_directory, entries, simulations):
         )
 
 
-def read_histogram(path):
-    return read_csv_histogram(path)
-
-
-def comparable_header(header):
-    return [
-        line
-        for line in header
-        if not line.startswith((PLANE_SUM_PREFIX, ATRIS_ANNOTATION_PREFIX))
-    ]
-
-
 def merge_provenance(headers):
     """Combine AtRIS annotations without making them gather constraints."""
     represented_chunks = 0
@@ -230,25 +215,13 @@ def merge_provenance(headers):
         "#annotation %s %s" % (key, " | ".join(values))
         for key, values in sorted(annotations.items())
     ]
-    if not has_provenance:
-        insertion = next(
-            (
-                index
-                for index, line in enumerate(output_header)
-                if line.startswith("#bin_number ")
-            ),
-            len(output_header),
+    if has_provenance:
+        merged_annotations.append(GATHERED_CHUNKS_PREFIX + str(represented_chunks))
+        if seed_pairs:
+            merged_annotations.append(SEED_PAIRS_PREFIX + ",".join(seed_pairs))
+        merged_annotations.append(
+            SEED_PAIRS_COMPLETE_PREFIX + str(len(seed_pairs) == represented_chunks).lower()
         )
-        output_header[insertion:insertion] = merged_annotations
-        return output_header
-
-    merged_annotations.append(GATHERED_CHUNKS_PREFIX + str(represented_chunks))
-    if seed_pairs:
-        merged_annotations.append(SEED_PAIRS_PREFIX + ",".join(seed_pairs))
-    merged_annotations.append(
-        SEED_PAIRS_COMPLETE_PREFIX
-        + str(len(seed_pairs) == represented_chunks).lower()
-    )
     insertion = next(
         (
             index
@@ -261,26 +234,10 @@ def merge_provenance(headers):
     return output_header
 
 
-def plane_sum(header):
-    for line in header:
-        if line.startswith(PLANE_SUM_PREFIX):
-            return float(line[len(PLANE_SUM_PREFIX):])
-    return None
-
-
-def write_histogram(path, header, columns, data, total_plane_sum):
-    output_header = list(header)
-    if total_plane_sum is not None:
-        for index, line in enumerate(output_header):
-            if line.startswith(PLANE_SUM_PREFIX):
-                output_header[index] = PLANE_SUM_PREFIX + "%.17g" % total_plane_sum
-
+def write_histogram(path, histogram):
+    """Atomically write the CSV representation of a histogram."""
     with atomic_text_output(path) as output:
-        for line in output_header:
-            output.write(line + "\n")
-        output.write(columns + "\n")
-        formats = ["%.0f"] + ["%.17e"] * (data.shape[1] - 1)
-        np.savetxt(output, data, delimiter=",", fmt=formats)
+        histogram.write_csv(output)
 
 
 def write_gathered_chunks(path, entries):
@@ -292,38 +249,28 @@ def write_gathered_chunks(path, entries):
 
 def combine_histograms(source_paths, snapshot_counts=(), observe=None):
     snapshot_counts = set(snapshot_counts)
-    first_header, first_columns, total = read_histogram(source_paths[0])
-    headers = [first_header]
-    total_plane_sum = plane_sum(first_header)
-    snapshots = {1: total.copy()} if 1 in snapshot_counts else {}
+    total = read_csv_histogram(source_paths[0])
+    headers = [total.annotations]
+    snapshots = {1: total.entries.copy()} if 1 in snapshot_counts else {}
     if observe is not None:
         observe(1, total, total)
 
     for source_number, source_path in enumerate(source_paths[1:], start=2):
-        header, columns, data = read_histogram(source_path)
-        if comparable_header(header) != comparable_header(first_header):
-            raise ValueError("Histogram headers differ: " + str(source_path))
-        if columns != first_columns or data.shape != total.shape:
-            raise ValueError("Histogram shape differs: " + str(source_path))
-        headers.append(header)
-        total += data
-        current_plane_sum = plane_sum(header)
-        if (total_plane_sum is None) != (current_plane_sum is None):
-            raise ValueError("Histogram headers differ: " + str(source_path))
-        if total_plane_sum is not None:
-            total_plane_sum += current_plane_sum
+        current = read_csv_histogram(source_path)
+        headers.append(current.annotations)
+        total.add(current, str(source_path))
         if source_number in snapshot_counts:
-            snapshots[source_number] = total.copy()
+            snapshots[source_number] = total.entries.copy()
         if observe is not None:
-            observe(source_number, data, total)
+            observe(source_number, current, total)
 
-    return merge_provenance(headers), first_columns, total, total_plane_sum, snapshots
+    total.annotations = tuple(merge_provenance(headers))
+    return total, snapshots
 
 
 def gather_histogram(source_paths, destination):
-    header, columns, total, total_plane_sum, _ = combine_histograms(source_paths)
-
-    write_histogram(destination, header, columns, total, total_plane_sum)
+    total, _ = combine_histograms(source_paths)
+    write_histogram(destination, total)
     return total
 
 
@@ -469,7 +416,7 @@ def ionization_convergence_observer(
             primary_chunk = primary_total - primary_snapshots[count - 1]
 
         chunk_counts, chunk_sum = ionization_components(
-            primary_chunk, ionization_chunk
+            primary_chunk, ionization_chunk.values
         )
         if weights is None:
             weights = np.zeros(chunk_counts.shape)
@@ -503,7 +450,7 @@ def ionization_convergence_observer(
 
         current = ionization_response(
             primary_total,
-            ionization_total,
+            ionization_total.values,
             geometry,
         )
         if count >= 2:
@@ -545,22 +492,13 @@ def combine_ionization_histograms(
     run_directory, source_paths, primary_snapshots
 ):
     """Combine ionization files and calculate convergence after every chunk."""
-    observe_values, rows = ionization_convergence_observer(
+    observe, rows = ionization_convergence_observer(
         run_directory, len(source_paths), primary_snapshots
     )
-    axes = csv_histogram_axes(source_paths[0])
-
-    def observe(count, current, total):
-        observe_values(
-            count,
-            table_histogram_values(current, axes),
-            table_histogram_values(total, axes),
-        )
-
-    header, columns, total, total_plane_sum, _ = combine_histograms(
+    total, _ = combine_histograms(
         source_paths, observe=observe
     )
-    return header, columns, total, total_plane_sum, rows
+    return total, rows
 
 
 def write_convergence(path, rows):
@@ -601,7 +539,7 @@ def gather_root_simulation(
 
     def observe(count, current, total):
         nonlocal convergence_observer, convergence
-        primary_snapshots[count] = total[PRIMARY_HISTOGRAM]["values"].copy()
+        primary_snapshots[count] = total[PRIMARY_HISTOGRAM].values.copy()
         if IONIZATION_HISTOGRAM not in total:
             return
         if convergence_observer is None:
@@ -612,16 +550,16 @@ def gather_root_simulation(
             )
         convergence_observer(
             count,
-            current[IONIZATION_HISTOGRAM]["values"],
-            total[IONIZATION_HISTOGRAM]["values"],
+            current[IONIZATION_HISTOGRAM],
+            total[IONIZATION_HISTOGRAM],
         )
 
     histograms, metadata = combine_root_histograms(
         source_paths, observe=observe
     )
     primary = histograms[PRIMARY_HISTOGRAM]
-    primary_events = primary["statistics"]["fEntries"]
-    if not np.isclose(primary["values"].sum(), primary_events):
+    primary_events = primary.statistics["fEntries"]
+    if not np.isclose(primary.values.sum(), primary_events):
         raise ValueError(
             "%s ROOT chunks contain weighted %s histograms; per-bin primary "
             "counts are unavailable" % (simulation, PRIMARY_HISTOGRAM)
@@ -721,7 +659,7 @@ def gather_simulation(run_directory, entries, simulation):
     if primary_suffix in paths_by_suffix:
         logger.debug("Combining %s primary histogram", simulation)
         primary_paths = paths_by_suffix.pop(primary_suffix)
-        header, columns, total, total_plane_sum, primary_snapshots = (
+        total, primary_snapshots = (
             combine_histograms(
                 primary_paths,
                 range(1, len(prefixes) + 1),
@@ -729,23 +667,15 @@ def gather_simulation(run_directory, entries, simulation):
         )
         write_histogram(
             run_directory / (simulation + primary_suffix),
-            header,
-            columns,
             total,
-            total_plane_sum,
         )
-        primary_events = int(total[:, 0].sum())
+        primary_events = int(total.entries.sum())
 
     convergence = []
     ionization_suffix = "_h2_h2.ion.csv"
     if ionization_suffix in paths_by_suffix and primary_snapshots is not None:
         logger.debug("Combining %s ionization histogram", simulation)
-        primary_axes = csv_histogram_axes(primary_paths[0])
-        primary_snapshots = {
-            count: table_histogram_values(snapshot, primary_axes, 0)
-            for count, snapshot in primary_snapshots.items()
-        }
-        header, columns, total, total_plane_sum, convergence = (
+        total, convergence = (
             combine_ionization_histograms(
                 run_directory,
                 paths_by_suffix.pop(ionization_suffix),
@@ -754,10 +684,7 @@ def gather_simulation(run_directory, entries, simulation):
         )
         write_histogram(
             run_directory / (simulation + ionization_suffix),
-            header,
-            columns,
             total,
-            total_plane_sum,
         )
 
     for suffix, source_paths in paths_by_suffix.items():

@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import random
 import stat
-import tempfile
 
 from .cli import (
     HelpFormatter,
@@ -15,6 +14,9 @@ from .cli import (
     add_version_argument,
     configure_logging,
 )
+
+
+from .gather import atomic_text_output, read_plan
 
 
 SPECIES = ("protons", "alphas")
@@ -89,13 +91,9 @@ def chunk_plan(chunks, rng, used_pairs=()):
 def existing_plan(plan_path):
     """Return validated plan entries, existing seed pairs, and original text."""
     original = plan_path.read_text()
-    entries = []
+    entries = read_plan(plan_path)
     used_pairs = set()
-    for line_number, line in enumerate(original.splitlines(), start=1):
-        fields = line.split()
-        if len(fields) != 3:
-            raise ValueError("Invalid chunks.txt line %i" % line_number)
-        species, seed1_text, seed2_text = fields
+    for line_number, (species, seed1_text, seed2_text) in enumerate(entries, start=1):
         if species not in SPECIES:
             raise ValueError(
                 "Invalid particle species on chunks.txt line %i" % line_number
@@ -115,7 +113,6 @@ def existing_plan(plan_path):
                 "Duplicate random seed pair on chunks.txt line %i" % line_number
             )
         used_pairs.add(seeds)
-        entries.append((species, seed1_text, seed2_text))
 
     if not entries:
         raise ValueError("Chunk plan is empty: " + str(plan_path))
@@ -128,25 +125,12 @@ def existing_plan(plan_path):
 
 def replace_plan(plan_path, original, new_lines):
     """Atomically replace a plan with its original text plus new lines."""
-    temporary_name = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            dir=plan_path.parent,
-            prefix=plan_path.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as output:
-            temporary_name = output.name
-            output.write(original)
-            if original and not original.endswith("\n"):
-                output.write("\n")
-            output.writelines(new_lines)
-        os.chmod(temporary_name, stat.S_IMODE(plan_path.stat().st_mode))
-        os.replace(temporary_name, plan_path)
-    finally:
-        if temporary_name is not None and os.path.exists(temporary_name):
-            os.unlink(temporary_name)
+    with atomic_text_output(plan_path) as output:
+        output.write(original)
+        if original and not original.endswith("\n"):
+            output.write("\n")
+        output.writelines(new_lines)
+        os.chmod(output.name, stat.S_IMODE(plan_path.stat().st_mode))
 
 
 def scatter(run_directory, chunks, random_seed=None):

@@ -287,15 +287,15 @@ def test_ordinary_prefix_runs_one_worker_and_writes_expected_histograms(
             assert annotations["atris.quantity"]
 
     with ResponseHistogramReader(tmp_path / "protons") as histograms:
-        total_deposition = histograms.values("h2.edep")
-        ionization = histograms.values("h2.ion")
+        total_deposition = histograms["h2.edep"].values
+        ionization = histograms["h2.ion"].values
         assert np.all(total_deposition + 1e-12 >= ionization)
         for name in ("h2.dir", "h2.pos"):
             np.testing.assert_allclose(
-                histograms.axes(name)[1][[0, -1]],
+                histograms[name].axes[1][[0, -1]],
                 [-1.0, 1.0],
             )
-            values = histograms.values(name)
+            values = histograms[name].values
             assert values.sum() == values[1:-1, 1:-1].sum() == 2
 
 
@@ -326,7 +326,7 @@ def test_spherical_source_populates_both_angular_hemispheres(
     assert result.returncode == 0, result.stdout + result.stderr
     with ResponseHistogramReader(tmp_path / "protons") as histograms:
         for name in ("h2.dir", "h2.pos"):
-            values = histograms.values(name)
+            values = histograms[name].values
             interior = values[1:-1, 1:-1]
             assert values.sum() == interior.sum() == 100
             assert interior[:, :30].sum() > 0
@@ -461,12 +461,12 @@ def test_seeded_mode_one_writes_root_file_inside_chunks(tmp_path, atris_command)
 
 
 @pytest.mark.regression
+@pytest.mark.parametrize("chunks", [1, 2])
 def test_csv_and_root_response_histograms_gather_equivalently(
-    tmp_path, atris_command
+    tmp_path, atris_command, chunks
 ):
     outputs = {}
-    entry = ("protons", "123456", "654321")
-    simulation = "chunks/protons_123456_654321"
+    entries = [("protons", "123456", "654321"), ("protons", "223456", "754321")][:chunks]
     for mode, directory_name in (("-1", "csv"), ("0", "root")):
         run_directory = tmp_path / directory_name
         run_directory.mkdir()
@@ -480,40 +480,42 @@ def test_csv_and_root_response_histograms_gather_equivalently(
             run_directory / "phantoms.txt",
         )
 
-        result = run_atris(
-            atris_command,
-            run_directory,
-            simulation + (".root" if mode == "0" else ""),
-            mode=mode,
-        )
-        assert result.returncode == 0, result.stdout + result.stderr
-        (run_directory / "chunks" / (simulation.split("/")[1] + ".COMPLETE")).touch()
-        gather_simulation(run_directory, [entry], "protons")
+        for entry in entries:
+            simulation = "chunks/" + "_".join(entry)
+            result = run_atris(
+                atris_command, run_directory,
+                simulation + (".root" if mode == "0" else ""), mode=mode,
+            )
+            assert result.returncode == 0, result.stdout + result.stderr
+            (run_directory / (simulation + ".COMPLETE")).touch()
+        gather_simulation(run_directory, entries, "protons")
 
         if mode == "0":
             with uproot.open(run_directory / "protons.root") as root_file:
                 metadata = root_file["metadata"]
-                assert metadata.num_entries == 1
+                assert metadata.num_entries == chunks
                 assert metadata["random_seed_1"].array(
                     library="np"
-                ).tolist() == [123456]
+                ).tolist() == [int(entry[1]) for entry in entries]
                 assert metadata["random_seed_2"].array(
                     library="np"
-                ).tolist() == [654321]
+                ).tolist() == [int(entry[2]) for entry in entries]
 
         with ResponseHistogramReader(run_directory / "protons") as histograms:
             outputs[mode] = {
-                name: (histograms.axes(name), histograms.values(name))
+                name: histograms[name]
                 for name in histograms.names()
             }
 
     assert outputs["-1"].keys() == outputs["0"].keys()
     for name in outputs["-1"]:
-        csv_axes, csv_data = outputs["-1"][name]
-        root_axes, root_data = outputs["0"][name]
-        for csv_axis, root_axis in zip(csv_axes, root_axes):
+        csv_histogram = outputs["-1"][name]
+        root_histogram = outputs["0"][name]
+        for csv_axis, root_axis in zip(csv_histogram.axes, root_histogram.axes):
             np.testing.assert_allclose(csv_axis, root_axis, rtol=1e-6)
-        np.testing.assert_allclose(csv_data, root_data)
+        np.testing.assert_allclose(csv_histogram.values, root_histogram.values)
+        if csv_histogram.variances is not None and root_histogram.variances is not None:
+            np.testing.assert_allclose(csv_histogram.variances, root_histogram.variances)
 
 
 @pytest.mark.regression
