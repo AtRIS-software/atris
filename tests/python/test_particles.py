@@ -4,7 +4,12 @@ import numpy as np
 import pytest
 
 from atris_tools.particles import (
-    GEANT4_PARTICLES, ion_numbers, ion_pdg, particle_name, particle_source, pdg_code,
+    GEANT4_PARTICLES,
+    ion_numbers,
+    ion_pdg,
+    particle_name,
+    particle_source,
+    pdg_code,
 )
 
 

@@ -1,38 +1,63 @@
 """Prepare, refine, and inspect a PSF-defined spherical phantom."""
 
-import argparse
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
+from io import StringIO
+from pathlib import Path
+import argparse
 import fcntl
 import hashlib
-from io import StringIO
 import json
 import logging
 import os
 import re
-from pathlib import Path
-import shutil
 import shlex
+import shutil
 import signal
 import subprocess
 import time
 
 import numpy as np
 
+from .chunks import chunk_name, read_chunk_plan
 from .cli import HelpFormatter, add_version_argument, configure_logging
-from .gather import atomic_text_output, chunk_name, read_chunk_plan
-from .particles import particle_source, particle_name, pdg_code
-from .phantom import (
-    Phantom, RESPONSE_ENERGY_EDGES_MEV,
-    prepare_phantom_batch, sphere_psf, read_phantom_statistics,
-    CM_PER_KM, PHOTON_PDG, DETECTOR_LAYER, DosePrecision, SamplingSettings,
+from .file_io import atomic_text_output
+from .gdml import psf_to_gdml
+from .particles import ion_pdg, particle_name, particle_source, pdg_code
+from .phantom import DosePrecision, PHOTON_PDG, Phantom
+from .phantom_geometry import (
+    CM_PER_KM,
+    DETECTOR_LAYER,
+    PHANTOM_DETECTOR_ID,
+    SOURCE_DISTANCE_RADII,
+    TERMINATION_DETECTOR_IDS,
+    TERMINATION_INNER_RADII,
+    TERMINATION_OUTER_RADII,
+    VACUUM_DENSITY_G_CM3,
+    WORLD_MARGIN_RADII,
+    sphere_psf,
 )
-from .psf import PSF, OUTER_RADIUS, DENSITY
+from .phantom_statistics import PhantomStatistics, read_phantom_statistics
+from .phantom_table import ENERGY_EDGES_MEV
+from .psf import (
+    DENSITY,
+    DETECTOR_ID,
+    FIRST_ELEMENT,
+    INNER_RADIUS,
+    OUTER_RADIUS,
+    PRESSURE,
+    PSF,
+    STATE,
+    write_psf,
+)
+from .root_records import read_ntuple
 
-# Whole decades are the adaptive scheduling units on the fixed response grid.
-ENERGY_DECADES = int(round(np.log10(RESPONSE_ENERGY_EDGES_MEV[-1] / RESPONSE_ENERGY_EDGES_MEV[0])))
-BINS_PER_DECADE = (len(RESPONSE_ENERGY_EDGES_MEV) - 1) // ENERGY_DECADES
+
+CHUNK_SEED_MIN = 31
+CHUNK_SEED_MAX_EXCLUSIVE = 1_000_000
+ENERGY_DECADES = int(round(np.log10(ENERGY_EDGES_MEV[-1] / ENERGY_EDGES_MEV[0])))
+BINS_PER_DECADE = (len(ENERGY_EDGES_MEV) - 1) // ENERGY_DECADES
 MAX_BATCH_EVENTS = 500_000_000
 MAX_BATCH_GROWTH = 8
 TARGET_BATCH_SECONDS = 600
@@ -51,6 +76,185 @@ BATCH_PURPOSES = {
     "batch count": "complete the requested batch count",
 }
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BuildSettings:
+    stem: str
+    pdg_codes: list[int]
+    pilot_events: int | dict[str, int]
+    production_cut_mm: float
+    seed: int
+    physics_list: str
+    psf_sha256: str
+    precision: DosePrecision
+    tracking_floor_eV: float | None = None
+
+    @classmethod
+    def from_dict(cls, data):
+        data = dict(data)
+        target_names = [item.name for item in fields(DosePrecision)] + ["relative_tolerance"]
+        precision = DosePrecision.from_dict({name: data.pop(name) for name in target_names if name in data})
+        return cls(**data, precision=precision)
+
+    def to_dict(self):
+        data = asdict(self)
+        data.update(data.pop("precision"))
+        return data
+
+
+def prepare_phantom_batch(
+    run_directory,
+    energy_edges_MeV,
+    *,
+    psf_path,
+    particle="proton",
+    events_per_chunk=4000,
+    chunks=3,
+    seed=314159,
+    production_cut_mm=0.1,
+    tracking_floor_eV=None,
+    ion=None,
+):
+    """Write GDML, a log-uniform source macro, and an atris-run chunk plan.
+
+    The directory must already exist. Repeating the same preparation is a
+    no-op. Increasing chunks appends new seeds without changing existing jobs;
+    changing the physical setup requires a directory without an existing plan.
+    This preparation does not load an existing response table.
+    Named particles include light nuclei (deuteron, triton, He3, alpha).
+    For other ground-state nuclei, use particle="ion" and a dictionary with
+    integer Z, A, and charge (in elementary-charge units).
+    """
+    directory = Path(run_directory)
+    physical = sphere_psf(psf_path)
+    radius_cm = float(physical.layers[-1, OUTER_RADIUS] * CM_PER_KM)
+    edges = np.asarray(energy_edges_MeV, dtype=float)
+    if (
+        edges.ndim != 1
+        or edges.size < 2
+        or not np.all(np.isfinite(edges))
+        or edges[0] <= 0
+        or np.any(np.diff(edges) <= 0)
+    ):
+        raise ValueError("Energy edges must be finite, positive, and increasing")
+    if not all(
+        np.isfinite(x) and x > 0 for x in (radius_cm, production_cut_mm)
+    ):
+        raise ValueError("Radius and production cut must be positive")
+    if chunks < 1 or events_per_chunk < 1:
+        raise ValueError("Chunks and events per chunk must be positive")
+    if tracking_floor_eV is not None and (
+        not np.isfinite(tracking_floor_eV) or tracking_floor_eV < 0
+    ):
+        raise ValueError("The tracking floor must be finite and nonnegative")
+    if not particle or any(character.isspace() for character in particle):
+        raise ValueError("Use one Geant4 particle name, such as proton or gamma")
+    source_commands = f"/gps/particle {particle}\n"
+    if particle == "ion":
+        if ion is None or set(ion) != {"Z", "A", "charge"}:
+            raise ValueError("For particle='ion', supply ion with Z, A, and charge")
+        if any(not isinstance(value, (int, np.integer)) for value in ion.values()):
+            raise ValueError("Ion Z, A, and charge must be integers")
+        ion = {key: int(value) for key, value in ion.items()}
+        ion_pdg(ion["Z"], ion["A"])
+        if not 0 <= ion["charge"] <= ion["Z"]:
+            raise ValueError("Use 0 <= charge <= Z")
+        source_commands += f"/gps/ion {ion['Z']} {ion['A']} {ion['charge']} 0\n"
+    elif ion is not None:
+        raise ValueError("Ion properties require particle='ion'")
+    if (directory / "phantoms.txt").exists():
+        raise ValueError("Use a phantom directory without phantoms.txt")
+    config = dict(
+        particle=particle,
+        events_per_chunk=events_per_chunk,
+        chunks=chunks,
+        seed=seed,
+        production_cut_mm=production_cut_mm,
+        energy_edges_MeV=edges.tolist(),
+    )
+    if ion is not None:
+        config["ion"] = ion
+    tracking_commands = ""
+    if tracking_floor_eV is not None:
+        config["tracking_floor_eV"] = tracking_floor_eV
+        tracking_commands = (
+            f"/process/em/lowestElectronEnergy {tracking_floor_eV:.17e} eV\n"
+            f"/process/em/lowestMuHadEnergy {tracking_floor_eV:.17e} eV\n"
+        )
+    config_path = directory / "phantom-run.json"
+    if (directory / "chunks.txt").exists():
+        if config_path.exists():
+            previous = json.loads(config_path.read_text())
+            requested = config.copy()
+            previous.pop("chunks")
+            requested.pop("chunks")
+            retained = sphere_psf(directory / "phantom.psf", transport=True)
+            expected = physical.layers.copy()
+            expected[:, DETECTOR_ID] = -1
+            expected[DETECTOR_LAYER, DETECTOR_ID] = PHANTOM_DETECTOR_ID
+            same_geometry = retained.materials == physical.materials and np.array_equal(retained.layers, expected)
+            if previous == requested and same_geometry:
+                entries = read_chunk_plan(directory)
+                if chunks > len(entries):
+                    _write_chunk_plan(directory, chunks, seed, entries)
+                    config_path.write_text(json.dumps(config, indent=2) + "\n")
+                return
+        raise FileExistsError(
+            "A different phantom already exists in this directory"
+        )
+
+    radius_km = radius_cm / CM_PER_KM
+    # Physical layers keep their materials; IDs 0/2 are vacuum stop shells.
+    layers = np.concatenate((physical.layers.copy(), np.repeat(physical.layers[-1:], 2, axis=0)))
+    layers[:-2, DETECTOR_ID] = -1
+    layers[DETECTOR_LAYER, DETECTOR_ID] = PHANTOM_DETECTOR_ID
+    layers[-2:, INNER_RADIUS] = np.array(TERMINATION_INNER_RADII) * radius_km
+    layers[-2:, OUTER_RADIUS] = np.array(TERMINATION_OUTER_RADII) * radius_km
+    layers[-2:, DETECTOR_ID] = TERMINATION_DETECTOR_IDS
+    layers[-2:, DENSITY] = VACUUM_DENSITY_G_CM3
+    layers[-2:, PRESSURE] = 0
+    layers[-2:, STATE] = 0
+    layers[-2:, FIRST_ELEMENT:] = 0
+    layers[-2:, FIRST_ELEMENT] = 1
+    geometry = PSF.from_layers(layers, physical.materials)
+    write_psf(directory / "phantom.psf", geometry)
+    psf_to_gdml(directory / "phantom.psf", directory / "phantom.gdml",
+             world_margin_km=WORLD_MARGIN_RADII * radius_km)
+    # The source range may cover only part of the shared response grid.
+    np.savetxt(directory / "phantom.bins", ENERGY_EDGES_MEV)
+    macro = f"""{tracking_commands}/run/setCut {production_cut_mm:.17e} mm
+/run/initialize
+{source_commands}/gps/pos/type Plane
+/gps/pos/shape Circle
+/gps/pos/centre 0 0 {-SOURCE_DISTANCE_RADII * radius_cm:.17e} cm
+/gps/pos/radius {radius_cm:.17e} cm
+/gps/direction 0 0 1
+/gps/ene/type Pow
+/gps/ene/alpha -1
+/gps/ene/min {edges[0]:.17e} MeV
+/gps/ene/max {edges[-1]:.17e} MeV
+/run/beamOn {events_per_chunk}
+"""
+    (directory / "phantom.chunk.mac").write_text(macro)
+    (directory / "chunks").mkdir(exist_ok=True)
+    _write_chunk_plan(directory, chunks, seed)
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+
+
+def _write_chunk_plan(directory, chunks, seed, entries=()):
+    rng = np.random.default_rng(seed)
+    previous = {(int(a), int(b)) for _, a, b in entries}
+    seeds = set(previous)
+    while len(seeds) < chunks:
+        seeds.add(tuple(rng.integers(CHUNK_SEED_MIN, CHUNK_SEED_MAX_EXCLUSIVE, size=2)))
+    plan = "".join(f"{name} {a} {b}\n" for name, a, b in entries)
+    plan += "".join(
+        f"phantom {a:06d} {b:06d}\n" for a, b in sorted(seeds - previous)
+    )
+    with atomic_text_output(directory / "chunks.txt") as output:
+        output.write(plan)
+
 
 def _save_json(path, value):
     with atomic_text_output(path) as output:
@@ -76,7 +280,7 @@ class Batch:
     @property
     def energy_range_MeV(self):
         start = BINS_PER_DECADE * self.first_decade
-        return RESPONSE_ENERGY_EDGES_MEV[[start, start + BINS_PER_DECADE * self.decades]]
+        return ENERGY_EDGES_MEV[[start, start + BINS_PER_DECADE * self.decades]]
 
     @classmethod
     def from_record(cls, record, *, status="planned"):
@@ -98,7 +302,7 @@ class PhantomBuilder:
     """
 
     directory: Path
-    settings: SamplingSettings
+    settings: BuildSettings
     geometry: PSF
 
     def __str__(self):
@@ -154,7 +358,7 @@ class PhantomBuilder:
             raise ValueError("Production cut must be finite and positive")
         if tracking_floor_eV is not None and (not np.isfinite(tracking_floor_eV) or tracking_floor_eV < 0):
             raise ValueError("tracking_floor_eV must be finite and nonnegative")
-        settings = SamplingSettings(stem=name, pdg_codes=codes,
+        settings = BuildSettings(stem=name, pdg_codes=codes,
                         pilot_events=pilot_events, production_cut_mm=production_cut_mm, seed=seed,
                         precision=DosePrecision(dose_rtol, dose_atol_Gy, confidence_factor),
                         physics_list=physics_list, psf_sha256=hashlib.sha256(psf_bytes).hexdigest(),
@@ -182,15 +386,49 @@ class PhantomBuilder:
 
     @classmethod
     def open(cls, directory):
+        """Open an existing build without preparing inputs or running transport."""
         directory = Path(directory).expanduser().resolve()
-        settings = SamplingSettings.from_dict(json.loads((directory / "phantom-build.json").read_text()))
+        settings = BuildSettings.from_dict(json.loads((directory / "phantom-build.json").read_text()))
         build = cls.__new__(cls)
         build.directory, build.settings = directory, settings
-        contents = (directory / "simulation.psf").read_bytes()
-        if hashlib.sha256(contents).hexdigest() != settings.psf_sha256:
-            raise ValueError("The PSF changed after preparation; use a new run directory")
-        build.geometry = sphere_psf(PSF.read(StringIO(contents.decode("utf-8"))))
+        build.geometry = build._read_geometry()
         return build
+
+    def _read_geometry(self):
+        contents = (self.directory / "simulation.psf").read_bytes()
+        if hashlib.sha256(contents).hexdigest() != self.settings.psf_sha256:
+            raise ValueError("The PSF changed after preparation; use a new run directory")
+        return sphere_psf(PSF.read(StringIO(contents.decode("utf-8"))))
+
+    def gather(self):
+        """Return a Phantom from completed batches, without running or saving.
+
+        Use this again after further sampling to refresh the result. The name,
+        geometry and precision targets come from this build's settings.
+        """
+        geometry = self._read_geometry()
+        settings = self.settings
+        statistics = {code: PhantomStatistics.empty() for code in settings.pdg_codes}
+        versions = set()
+        for batch in self._batches():
+            chunk = self._chunk(batch)
+            if chunk.with_suffix(".COMPLETE").is_file():
+                metadata = read_ntuple(chunk.with_suffix(".root"), "metadata",
+                                       ("atris_version", "physics_list"))
+                if set(metadata["physics_list"]) != {settings.physics_list}:
+                    raise ValueError("Completed chunk physics list differs from the prepared build")
+                versions.update(metadata["atris_version"])
+                statistics[batch["pdg"]] += read_phantom_statistics(chunk.with_suffix(".root"))
+        return Phantom.from_statistics(
+            statistics, geometry=geometry,
+            name=settings.stem,
+            precision_settings=settings.precision,
+            metadata=dict(physics_list=settings.physics_list,
+                          production_cut_mm=settings.production_cut_mm,
+                          atris_version=", ".join(sorted(versions)) or "not recorded",
+                          generator="atris_tools.phantom_builder", psf_sha256=settings.psf_sha256,
+                          sampling_settings=settings.to_dict()),
+        )
 
     @contextmanager
     def _lock(self):
@@ -221,7 +459,7 @@ class PhantomBuilder:
 
     def precision(self, response=None):
         """Energy-only precision; empirical zeros remain unresolved, not complete."""
-        response = Phantom.gather(directory=self.directory) if response is None else response
+        response = self.gather() if response is None else response
         return response.precision(**asdict(self.settings.precision))
 
     def show_schedule(self, *, batches=1, adaptive=False, threads=1, time_limit_s=None):
@@ -239,7 +477,7 @@ class PhantomBuilder:
         records = list(self._batches())
         pending = next((batch for batch in records
                         if not self._chunk(batch).with_suffix(".COMPLETE").exists()), None)
-        response = Phantom.gather(directory=self.directory)
+        response = self.gather()
         schedule = []
         rows = [("Batch", "Species", "K min (MeV)", "K max (MeV)", "Primaries", "Reason", "Status")]
         for _ in range(batches):
@@ -361,7 +599,7 @@ class PhantomBuilder:
                 records = self._batches()
                 pending = next((b for b in records if not self._chunk(b).with_suffix(".COMPLETE").exists()), None)
                 if pending is None:
-                    selection = self._select(records, Phantom.gather(directory=self.directory), threads, adaptive, time_limit_s)
+                    selection = self._select(records, self.gather(), threads, adaptive, time_limit_s)
                     if selection is None:
                         break
                     relative = f"batches/batch-{len(records):06d}"
@@ -379,7 +617,7 @@ class PhantomBuilder:
                 _save_json(self.directory / "batches.json", records)
                 self._execute(pending, threads)
                 _save_json(self.directory / "batches.json", records)
-            return Phantom.gather(directory=self.directory)
+            return self.gather()
 
     def _execute(self, batch, threads):
         if shutil.which("atris-run") is None or shutil.which("AtRIS") is None:
@@ -446,6 +684,7 @@ class PhantomBuilder:
         batch["fit_timing"] = (not interrupted_clock and batch["completed_events"] > 0
                                and np.isfinite(duration) and duration > 0)
 
+
 def main():
     parser = argparse.ArgumentParser(description="Run or inspect a prepared spherical phantom build.", formatter_class=HelpFormatter)
     add_version_argument(parser)
@@ -461,10 +700,10 @@ def main():
     if not args.postprocess_only:
         build.run(batches=args.batches, adaptive=args.adaptive, threads=args.threads, time_limit_s=args.time_limit)
     import matplotlib.pyplot as plt
-    from .phantom_diagnostics import plot_creation_diagnostics, plot_sampling_precision
+    from .phantom_plotting import plot_creation_diagnostics, plot_sampling_precision
 
     with build._lock():
-        phantom = Phantom.gather(directory=build.directory)
+        phantom = build.gather()
         output = build.directory
         phantom.save(output)
         name = build.settings.stem

@@ -60,4 +60,4 @@ destination files are not overwritten. An error in one row does not prevent othe
 from being staged.
 ```
 
-Implementation: `atris_tools/phantoms.py`.
+Implementation: `atris_tools/stage_phantoms.py`.

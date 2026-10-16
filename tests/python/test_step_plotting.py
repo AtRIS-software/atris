@@ -5,7 +5,7 @@ import pytest
 import uproot
 
 from atris_tools import plotting, step_plotting
-from atris_tools.step_output import STEP_FIELDS
+from atris_tools.root_records import STEP_FIELDS
 
 
 TRACE_ROWS = (

@@ -1,56 +1,30 @@
 """Create quick-look plots of the files supplied to AtRIS."""
 
-import re
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+import re
 
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
 from matplotlib.ticker import FixedLocator
+import matplotlib.pyplot as plt
 import numpy as np
 
-from .atrismacrogen import read_macro
-from .phantoms import read_phantoms
-from .psf import read_psf_layers
-from .phantom_tables import PhantomTable, ENERGY_EDGES_MEV, ENERGY_CENTRES_MEV
-from .particles import (
-    ION_PDG_BASE, ELEMENT_ATOMIC_NUMBERS, ELEMENT_SYMBOLS,
-    PARTICLE_NAMES, PARTICLE_SYMBOLS, particle_name, particle_symbol,
+from .gdml import LENGTH_TO_KM, read_gdml_layers
+from .macros import read_macro
+from .particles import ELEMENT_ATOMIC_NUMBERS, ION_PDG_BASE, particle_name, particle_symbol
+from .phantom_table import ENERGY_CENTRES_MEV, PhantomTable
+from .plotting_common import (
+    mark_model_regions,
+    model_shell_edges,
+    non_termination_layers,
+    particle_groups,
+    setup_shell_axis,
+    shell_coordinates,
+    surface_radius,
 )
+from .psf import read_psf_layers
+from .stage_phantoms import read_phantom_selection
 
 
-PHANTOM_ENERGY_EDGES_MEV = ENERGY_EDGES_MEV
-PHANTOM_ENERGIES_MEV = ENERGY_CENTRES_MEV
 MASS_FRACTION_PLOT_MINIMUM = 1.0e-12
-LENGTH_TO_KM = {
-    "mm": 1.0e-6,
-    "cm": 1.0e-5,
-    "m": 1.0e-3,
-    "km": 1.0,
-}
-
-
-def log_norm(data):
-    positive = data[np.isfinite(data) & (data > 0)]
-    if not positive.size:
-        return None
-    return LogNorm(vmin=np.min(positive), vmax=np.max(positive))
-
-
-def positive_log_edges(values, bins=80):
-    values = np.asarray(values)
-    positive = values[np.isfinite(values) & (values > 0)]
-    if not positive.size:
-        raise ValueError("No positive finite energy values are available")
-    lower = np.min(positive)
-    upper = np.max(positive)
-    if lower == upper:
-        factor = np.sqrt(10.0)
-        lower /= factor
-        upper *= factor
-    return np.geomspace(lower, upper, bins + 1)
-
-
 
 
 def element_label(reference):
@@ -62,151 +36,6 @@ def element_sort_key(reference):
     """Order recognized elements by atomic number, then custom references."""
     label = element_label(reference)
     return (ELEMENT_ATOMIC_NUMBERS.get(label, float("inf")), label)
-
-
-def _particle_groups(particle_codes):
-    groups = ([], [])
-    for index, code in enumerate(particle_codes):
-        group = 1 if abs(code) >= ION_PDG_BASE else 0
-        groups[group].append(index)
-    return groups
-
-
-def read_layers(filename):
-    """Read every sensitive spherical layer from a GDML geometry."""
-    root = ElementTree.parse(filename).getroot()
-
-    materials = {
-        material.get("name"): material
-        for material in root.findall("./materials/material")
-    }
-
-    solids = {}
-    for sphere in root.findall("./solids/sphere"):
-        unit = sphere.get("lunit", "mm")
-        if unit not in LENGTH_TO_KM:
-            raise ValueError("Unsupported GDML length unit: " + unit)
-        scale = LENGTH_TO_KM[unit]
-        solids[sphere.get("name")] = (
-            float(sphere.get("rmin")) * scale,
-            float(sphere.get("rmax")) * scale,
-        )
-
-    layers = []
-    for volume in root.findall("./structure/volume"):
-        material_reference = volume.find("materialref")
-        solid_reference = volume.find("solidref")
-        sensitive_detector = volume.find("auxiliary[@auxtype='SensDet']")
-        if (
-            material_reference is None
-            or solid_reference is None
-            or sensitive_detector is None
-        ):
-            continue
-        material = materials[material_reference.get("ref")]
-        radii = solids[solid_reference.get("ref")]
-        properties = {
-            "state": material.get("state"),
-            "fractions": {
-                fraction.get("ref"): float(fraction.get("n"))
-                for fraction in material.findall("fraction")
-            },
-            "density": float(material.find("D").get("value")),
-            "temperature": float(material.find("T").get("value")),
-            "pressure": float(material.find("P").get("value")),
-        }
-        layers.append(
-            {
-                "rmin": radii[0],
-                "rmax": radii[1],
-                "detector_id": int(sensitive_detector.get("auxvalue")),
-                **properties,
-            }
-        )
-
-    layers.sort(key=lambda layer: layer["rmin"])
-    if not layers:
-        raise ValueError("No sensitive spherical layers found in " + str(filename))
-    return layers
-
-
-def surface_radius(layers):
-    """Return the outer radius of the contiguous solid planetary body."""
-    all_layers = sorted(layers, key=lambda layer: layer["rmin"])
-    radius = all_layers[0]["rmax"]
-    for layer in all_layers[1:]:
-        if layer["state"] != "solid" or not np.isclose(
-            layer["rmin"], radius, rtol=0.0, atol=1.0e-9
-        ):
-            break
-        radius = layer["rmax"]
-    return radius
-
-
-def non_termination_layers(layers):
-    """Return every modeled shell between AtRIS's two termination volumes."""
-    outer_termination_id = max(layer["detector_id"] for layer in layers)
-    return [
-        layer
-        for layer in layers
-        if layer["detector_id"] not in (0, outer_termination_id)
-    ]
-
-
-def shell_coordinates(
-    layers, detector_ids=None, location="center", reference_radius=None
-):
-    """Calculate signed physical coordinates for detector shells."""
-    radius = (
-        surface_radius(layers)
-        if reference_radius is None
-        else reference_radius
-    )
-
-    if detector_ids is not None:
-        by_id = {layer["detector_id"]: layer for layer in layers}
-        layers = [by_id[int(detector_id)] for detector_id in detector_ids]
-
-    detector_ids = np.array([layer["detector_id"] for layer in layers])
-    distance_min = np.array([layer["rmin"] - radius for layer in layers])
-    distance_max = np.array([layer["rmax"] - radius for layer in layers])
-    if location == "center":
-        positions = (distance_min + distance_max) / 2.0
-        edges = np.array([distance_min[0]] + list(distance_max))
-    elif location == "outer":
-        positions = distance_max
-        if positions.size == 1:
-            width = max(abs(positions[0]) * 0.05, 1.0)
-            edges = np.array([positions[0] - width, positions[0] + width])
-        else:
-            midpoints = (positions[:-1] + positions[1:]) / 2.0
-            edges = np.concatenate(
-                (
-                    [positions[0] - (midpoints[0] - positions[0])],
-                    midpoints,
-                    [positions[-1] + (positions[-1] - midpoints[-1])],
-                )
-            )
-    else:
-        raise ValueError("Unknown shell location: " + location)
-    return detector_ids, positions, edges
-
-
-def model_shell_edges(layers):
-    """Return the distance bounds of the model between termination shells."""
-    radius = surface_radius(layers)
-    _, _, edges = shell_coordinates(
-        non_termination_layers(layers),
-        reference_radius=radius,
-    )
-    return edges
-
-
-def setup_shell_axis(axis):
-    """Format a vertical distance-from-surface axis."""
-    axis.set_ylabel("Distance from surface [km]")
-    axis.set_yscale("linear")
-    axis.minorticks_on()
 
 
 def _source_summary(settings, layers, energy_count):
@@ -272,27 +101,6 @@ def _source_summary(settings, layers, energy_count):
         )
     )
     return "\n".join(lines)
-
-
-def mark_model_regions(axis, edges):
-    """Draw model boundaries and lock the distance axis before plotting data."""
-    for edge in (edges[0], edges[-1]):
-        axis.axhline(edge, color="black", zorder=10)
-    lower_limit, upper_limit = axis.get_ylim()
-    axis.set_ylim((lower_limit, upper_limit))
-    for y, label in (
-        ((lower_limit + edges[0]) / 2.0, "Ground"),
-        ((edges[-1] + upper_limit) / 2.0, "Space"),
-    ):
-        axis.text(
-            0.5,
-            y,
-            label,
-            transform=axis.get_yaxis_transform(),
-            ha="center",
-            va="center",
-            zorder=10,
-        )
 
 
 def _plot_shell_profiles(
@@ -417,7 +225,7 @@ def plot_psf_inputs(filename="simulation.psf"):
 def plot_species_inputs(simname):
     settings, energy_points = read_macro(simname + ".mac")
     energy_bins = np.atleast_1d(np.loadtxt(simname + ".bins"))
-    geometry_layers = read_layers(simname + ".gdml")
+    geometry_layers = read_gdml_layers(simname + ".gdml")
 
     figure, (settings_axis, energy_axis) = plt.subplots(
         ncols=2,
@@ -473,7 +281,7 @@ def plot_phantom_inputs(phantom_id, phantom_name, *, tables=None):
     if not rows:
         raise ValueError("No phantom response tables available")
     codes = np.array(list(dict.fromkeys(int(code) for _, table in rows for code in table.pdg_codes)))
-    groups = _particle_groups(codes)
+    groups = particle_groups(codes)
     group_titles = ("Particles", "Nuclei")
     figure, axes = plt.subplots(
         ncols=2,
@@ -500,7 +308,7 @@ def plot_phantom_inputs(phantom_id, phantom_name, *, tables=None):
                     continue
                 values = table.coefficients[matches[0]]
                 axes[row, column].plot(
-                    PHANTOM_ENERGIES_MEV,
+                    ENERGY_CENTRES_MEV,
                     values if prefix == "counting" else np.where(values > 0, values, np.nan),
                     color=color, linewidth=1.0, label=label,
                 )
@@ -618,7 +426,7 @@ def plot_inputs():
     try:
         metadata = {
             phantom["id"]: phantom["stem"]
-            for phantom in read_phantoms(Path.cwd())
+            for phantom in read_phantom_selection(Path.cwd())
         }
     except Exception as error:
         metadata = {}

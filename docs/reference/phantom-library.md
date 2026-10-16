@@ -118,7 +118,7 @@ identifying the installation:
 ```python
 import os
 from pathlib import Path
-from atris_tools.phantom_tables import PhantomTable, ENERGY_CENTRES_MEV
+from atris_tools.phantom_table import PhantomTable, ENERGY_CENTRES_MEV
 
 source = Path(os.environ["ATRIS_ROOT"]) / "phantoms" / "MeV-valued" / "icru_zero_0.000MeV_detAB_response.txt"
 table = PhantomTable.read(source)  # Coefficients retain the stored values.
@@ -197,7 +197,7 @@ sources are outside this helper's scope.
 
 `prepare_phantom_batch` writes geometry and chunk inputs from the supplied PSF;
 `gather_phantom_events` reads completed chunks into NumPy arrays;
-`Phantom.gather(name)` combines completed builder batches into fixed-grid responses
+`PhantomBuilder.gather()` combines its completed batches into fixed-grid responses
 and sampling errors. Its `Phantom.save` method writes the response and counting
 tables and sampling ROOT arrays with metadata, returning a tuple of the paths
 written: response table, counting table, sampling ROOT, then precision-state JSON
@@ -245,7 +245,7 @@ in that file. `gather_phantom_events` reads either representation.
 The `shower` output mode retains individual events for exploring counting
 thresholds. The builder uses `phantom` output mode, which stores per-bin
 statistics with a zero counting threshold; read those with
-`read_phantom_statistics`; `Phantom.gather(name)` combines completed builder batches.
+`read_phantom_statistics`; `PhantomBuilder.gather()` combines completed builder batches.
 
 ## Historical update: autumn 2021
 

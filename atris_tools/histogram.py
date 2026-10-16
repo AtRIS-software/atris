@@ -1,9 +1,12 @@
-"""Read AtRIS response histograms from Geant4 CSV or ROOT output."""
+"""Histogram arrays and their ROOT/CSV representations, including recorded moments."""
 
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
+import os
+import re
+import tempfile
 
+from uproot.writing.identify import to_TAxis, to_TH1x, to_TH2x
 import numpy as np
 import uproot
 
@@ -25,13 +28,14 @@ ROOT_STATISTICS = (
 class Histogram:
     """Bin values, edges and available squared-weight sums, including flow bins.
 
-    ROOT statistics and CSV annotations retain format-specific information;
+    ``sumw2`` contains raw squared-weight sums, not a sample variance or a
+    standard error. ROOT statistics and CSV annotations retain format-specific information;
     missing uncertainty information is represented by None, not inferred.
     """
 
     values: np.ndarray
     axes: list[np.ndarray]
-    variances: np.ndarray | None = None
+    sumw2: np.ndarray | None = None
     title: str = ""
     axis_titles: tuple[str, ...] = ()
     statistics: dict[str, float] = field(default_factory=dict)
@@ -55,7 +59,7 @@ class Histogram:
             lines.append("Values include underflow and overflow bins")
         else:
             lines.append("Bin edges unavailable")
-        lines.append("Squared-weight sums: " + ("available" if self.variances is not None else "unavailable"))
+        lines.append("Squared-weight sums: " + ("available" if self.sumw2 is not None else "unavailable"))
         return "\n".join(lines)
 
     def __post_init__(self):
@@ -63,11 +67,11 @@ class Histogram:
             if self.bin_statistics.shape[-1] != len(self.columns):
                 raise ValueError("Histogram bin statistics do not match its columns")
             self.values = self.bin_statistics[..., self.value_column]
-            self.variances = (self.bin_statistics[..., self.columns.index("Sw2")]
+            self.sumw2 = (self.bin_statistics[..., self.columns.index("Sw2")]
                               if self.value_column == BIN_SUM_WEIGHTS and "Sw2" in self.columns else None)
         if self.axes and self.values.shape != tuple(len(axis) + 1 for axis in self.axes):
             raise ValueError("Histogram values do not match its axes and flow bins")
-        if self.variances is not None and self.variances.shape != self.values.shape:
+        if self.sumw2 is not None and self.sumw2.shape != self.values.shape:
             raise ValueError("Histogram squared-weight sums do not match its values")
 
     @property
@@ -85,7 +89,7 @@ class Histogram:
                 or (self.bin_statistics is None) != (other.bin_statistics is None)
                 or (self.plane_sum is None) != (other.plane_sum is None)
                 or comparable_header(self.annotations) != comparable_header(other.annotations)
-                or (self.variances is None) != (other.variances is None)):
+                or (self.sumw2 is None) != (other.sumw2 is None)):
             raise ValueError("Histogram differs: " + description)
         if self.axis_titles != other.axis_titles or any(
                 not np.array_equal(first, second) for first, second in zip(self.axes, other.axes)):
@@ -94,8 +98,8 @@ class Histogram:
             self.bin_statistics += other.bin_statistics
         else:
             self.values += other.values
-            if self.variances is not None:
-                self.variances += other.variances
+            if self.sumw2 is not None:
+                self.sumw2 += other.sumw2
         for name, value in other.statistics.items():
             self.statistics[name] += value
         if self.plane_sum is not None:
@@ -122,11 +126,11 @@ def comparable_header(header):
 
 def read_root_histogram(source):
     """Keep ROOT bin data, axis labels and accumulated statistics together."""
-    variances = source.variances(flow=True) if len(source.member("fSumw2")) else None
+    sumw2 = source.variances(flow=True) if len(source.member("fSumw2")) else None
     return Histogram(
         values=np.asarray(source.values(flow=True), dtype=float),
         axes=[np.asarray(axis.edges(), dtype=float) for axis in source.axes],
-        variances=None if variances is None else np.asarray(variances, dtype=float),
+        sumw2=None if sumw2 is None else np.asarray(sumw2, dtype=float),
         title=source.title,
         axis_titles=tuple(source.member(name).member("fTitle")
                           for name in ("fXaxis", "fYaxis")[:len(source.axes)]),
@@ -297,3 +301,84 @@ class ResponseHistogramReader:
         if indexes and indexes != set(range(max(indexes) + 1)):
             raise ValueError("Phantom response histogram indexes are not contiguous")
         return len(indexes)
+
+
+def _read_metadata(root_file):
+    if "metadata" not in root_file:
+        return None
+    tree = root_file["metadata"]
+    arrays = tree.arrays(library="np")
+    metadata = {}
+    for name in tree.keys():
+        values = np.asarray(arrays[name])
+        if values.dtype.kind == "O":
+            values = np.asarray(values.tolist(), dtype=str)
+        metadata[name] = values
+    return metadata
+
+
+def read_root_histograms(path):
+    """Read response histograms and optional metadata from one ROOT file."""
+    histograms = {}
+    with uproot.open(path) as root_file:
+        for name, class_name in root_file.classnames(cycle=False).items():
+            if not class_name.startswith(("TH1", "TH2")):
+                continue
+            histograms[name] = read_root_histogram(root_file[name])
+        metadata = _read_metadata(root_file)
+    if PRIMARY_HISTOGRAM not in histograms:
+        raise ValueError(
+            "%s does not contain %s" % (Path(path).name, PRIMARY_HISTOGRAM)
+        )
+    return histograms, metadata
+
+
+def _root_axis(edges, title, name):
+    return to_TAxis(
+        name,
+        title,
+        len(edges) - 1,
+        edges[0],
+        edges[-1],
+        edges,
+    )
+
+
+def _writable_histogram(histogram):
+    sumw2 = histogram.sumw2
+    common = {
+        "fName": None,
+        "fTitle": histogram.title,
+        "data": histogram.values.ravel(order="F"),
+        "fSumw2": None if sumw2 is None else sumw2.ravel(order="F"),
+        "fXaxis": _root_axis(histogram.axes[0], histogram.axis_titles[0], "xaxis"),
+        **histogram.statistics,
+    }
+    if len(histogram.axes) == 1:
+        return to_TH1x(**common)
+    return to_TH2x(
+        **common,
+        fYaxis=_root_axis(histogram.axes[1], histogram.axis_titles[1], "yaxis"),
+    )
+
+
+def write_root_histograms(path, histograms, metadata=None):
+    """Write response histograms to one ROOT file atomically."""
+    path = Path(path)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=path.name + ".",
+        suffix=".tmp",
+    )
+    os.close(descriptor)
+    try:
+        with uproot.recreate(temporary_name) as root_file:
+            for name, histogram in histograms.items():
+                root_file[name] = _writable_histogram(histogram)
+            if metadata:
+                root_file["metadata"] = metadata
+        os.replace(temporary_name, path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+    return path

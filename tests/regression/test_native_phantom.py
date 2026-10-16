@@ -6,15 +6,15 @@ import json
 import numpy as np
 import pytest
 
-from atris_tools.phantom import (
-    RESPONSE_ENERGY_EDGES_MEV,
+from atris_tools.phantom_table import ENERGY_EDGES_MEV
+from atris_tools.phantom_statistics import (
     PhantomStatistics,
-    Phantom,
     compact_phantom_chunk,
-    prepare_phantom_batch,
     read_phantom_statistics,
 )
-from atris_tools.gather import chunk_name, read_chunk_plan
+from atris_tools.phantom import Phantom
+from atris_tools.phantom_builder import prepare_phantom_batch
+from atris_tools.chunks import chunk_name, read_chunk_plan
 from atris_tools.run_chunks import run_chunks
 from atris_tools.phantom_builder import PhantomBuilder
 from atris_tools.psf import PSF
@@ -30,7 +30,7 @@ def test_native_chunks_feed_phantom_and_resume(
     monkeypatch.setenv("G4FORCENUMBEROFTHREADS", "2")
     prepare_phantom_batch(
         tmp_path,
-        RESPONSE_ENERGY_EDGES_MEV[150:351],
+        ENERGY_EDGES_MEV[150:351],
         psf_path=water_psf(4e-4),
         production_cut_mm=1e-5,
         tracking_floor_eV=1,
@@ -57,12 +57,12 @@ def test_native_chunks_feed_phantom_and_resume(
         (directory / "chunks").symlink_to(tmp_path / "chunks", target_is_directory=True)
         records.append(dict(pdg=2212, directory=str(directory.relative_to(builder.directory))))
     (builder.directory / "batches.json").write_text(json.dumps(records))
-    partial = Phantom.gather("native-test", directory=builder.directory)
+    partial = builder.gather()
     assert partial.sample_counts.sum() == 256
     assert run_chunks(tmp_path, mode="phantom") == 1
     assert run_chunks(tmp_path, mode="phantom") == 0
     assert hashlib.sha256(first.read_bytes()).digest() == checksum
-    response = Phantom.gather("native-test", directory=builder.directory)
+    response = builder.gather()
     statistics = PhantomStatistics.empty()
     for entry in read_chunk_plan(tmp_path):
         statistics += read_phantom_statistics(

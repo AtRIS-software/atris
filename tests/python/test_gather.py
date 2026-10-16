@@ -6,22 +6,26 @@ import numpy as np
 import pytest
 import uproot
 
-from atris_tools.gather import (
+from atris_tools.convergence import (
     change_reference_count,
-    chunk_progress,
-    combine_ionization_histograms,
     fractional_change,
+    ionization_response,
+    log_ionization_change,
+    write_convergence,
+)
+from atris_tools.chunks import (
+    chunk_progress,
     format_duration,
+    log_chunk_progress,
+    read_chunk_plan,
+)
+from atris_tools.gather import (
+    combine_ionization_histograms,
     gather_histogram,
     gather_incremental_histogram,
     gather_simulation,
-    ionization_response,
-    log_ionization_change,
-    log_chunk_progress,
-    read_chunk_plan,
-    write_convergence,
 )
-from atris_tools.response_histograms import read_csv_histogram
+from atris_tools.histogram import read_csv_histogram
 
 
 COLUMNS = "entries,Sw,Sw2,Sxw0,Sx2w0"
@@ -114,7 +118,7 @@ def test_chunk_progress_filters_species_and_logs_estimate(tmp_path, caplog):
         marker.touch()
         os.utime(marker, (100 + index * 65, 100 + index * 65))
 
-    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+    with caplog.at_level(logging.INFO, logger="atris_tools"):
         log_chunk_progress(tmp_path, entries, ("protons",))
 
     assert caplog.messages == [
@@ -131,7 +135,7 @@ def test_chunk_progress_reports_complete_and_formats_long_durations(
     entries = [("alphas", "111111", "222222")]
     (chunks / "alphas_111111_222222.COMPLETE").touch()
 
-    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+    with caplog.at_level(logging.INFO, logger="atris_tools"):
         log_chunk_progress(tmp_path, entries, ("alphas",))
 
     assert caplog.messages == ["Chunk progress: 1/1 complete."]
@@ -153,7 +157,7 @@ def test_chunk_progress_does_not_treat_zero_second_estimate_as_complete(
         marker.touch()
         os.utime(marker, (100, 100))
 
-    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+    with caplog.at_level(logging.INFO, logger="atris_tools"):
         log_chunk_progress(tmp_path, entries, ("protons",))
 
     assert caplog.messages == [
@@ -193,7 +197,7 @@ def test_convergence_has_one_row_per_chunk_from_two_onward(
 ):
     geometry = {"volume/cm3": np.ones(3)}
     monkeypatch.setattr(
-        "atris_tools.gather.process_psf", lambda path: (geometry, 3)
+        "atris_tools.convergence.detector_geometry", lambda path: (geometry, 3)
     )
     primary = np.array([0.0, 1.0, 1.0, 0.0])
     primary_snapshots = {count: count * primary for count in (1, 2, 3)}
@@ -238,7 +242,7 @@ def test_convergence_has_one_row_per_chunk_from_two_onward(
 def test_ionization_change_reports_actual_comparison_fraction(caplog):
     row = (21, 6300, 3, 100.0 * 3 / 21, 1.802)
 
-    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+    with caplog.at_level(logging.INFO, logger="atris_tools"):
         log_ionization_change("alphas", row)
 
     assert caplog.messages == [
@@ -303,7 +307,7 @@ def test_gather_rectangular_histogram_keeps_every_moment_and_bin_order(tmp_path)
     np.testing.assert_array_equal(written.bin_statistics, expected)
     np.testing.assert_array_equal(total.entries, expected[..., 0])
     np.testing.assert_array_equal(total.values, expected[..., 1])
-    np.testing.assert_array_equal(total.variances, expected[..., 2])
+    np.testing.assert_array_equal(total.sumw2, expected[..., 2])
     assert written.columns == tuple(columns.split(","))
     assert first.read_bytes() == original
 
@@ -445,7 +449,7 @@ def test_gather_simulation_uses_only_completed_chunks(tmp_path, caplog):
         [[99, 99, 99, 99, 99]],
     )
 
-    with caplog.at_level(logging.INFO, logger="atris_tools.gather"):
+    with caplog.at_level(logging.INFO, logger="atris_tools"):
         assert gather_simulation(tmp_path, entries, "protons") == 1
     assert "Gathering protons from 1 completed chunk..." in caplog.messages
 
@@ -534,7 +538,7 @@ def test_gather_root_histograms_writes_convergence(tmp_path, monkeypatch):
     ]
     geometry = {"volume/cm3": np.ones(3)}
     monkeypatch.setattr(
-        "atris_tools.gather.process_psf", lambda path: (geometry, 3)
+        "atris_tools.convergence.detector_geometry", lambda path: (geometry, 3)
     )
     for entry, value in zip(entries, (1.0, 3.0)):
         prefix = chunks / ("%s_%s_%s" % entry)

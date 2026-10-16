@@ -43,4 +43,4 @@ output defaults to the same basename with a .psf suffix. Multiple input tables r
 --output. An existing output file is replaced.
 ```
 
-Implementation: `atris_tools/nrlmsis2psf.py`.
+Implementation: `atris_tools/nrlmsis.py`.

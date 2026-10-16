@@ -230,8 +230,10 @@ report coverage and progress toward the chosen precision target.
 The procedure for using completed tables is
 [phantom selection and staging](prepare-simulation.md#optionally-select-phantoms).
 
-`Phantom.gather("water-sphere")` combines completed chunks and their sampling settings in the current folder
-into a `Phantom`. Saving its sampling ROOT file preserves these settings,
+`builder.gather()` combines that build's completed chunks into a `Phantom`,
+using its saved name, geometry and sampling settings. It runs no transport.
+After restarting Python, reopen the run with `PhantomBuilder.open(".")`.
+Saving the phantom's sampling ROOT file preserves these settings,
 geometry, arrays and uncertainties. Reading that file restores the same data model:
 
 ```python
@@ -255,9 +257,11 @@ axes and return them, so figure layout, styling and saving remain familiar:
 
 ```python
 import matplotlib.pyplot as plt
-from atris_tools.phantom_diagnostics import plot_creation_diagnostics
+from atris_tools.phantom_builder import PhantomBuilder
+from atris_tools.phantom_plotting import plot_creation_diagnostics
 
-phantom = Phantom.gather("water-sphere")
+builder = PhantomBuilder.open(".")
+phantom = builder.gather()
 paths = phantom.save()
 figure, axes = plt.subplots(2, 2, figsize=(16, 12), sharex=True, sharey="row")
 plot_creation_diagnostics(phantom, axes=axes)

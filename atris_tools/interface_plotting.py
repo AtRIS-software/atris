@@ -6,17 +6,17 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .input_plotting import (
+from .plotting_common import (
     log_norm,
     mark_model_regions,
     model_shell_edges,
-    particle_symbol,
     positive_log_edges,
-    read_layers,
     setup_shell_axis,
     shell_coordinates,
 )
-from .interface_output import read_interface_output
+from .input_plotting import particle_symbol
+from .gdml import read_gdml_layers
+from .root_records import read_interface_output
 
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ def plot_interface_output(simname):
 
     interfaces = records["interface"]
     geometry_path = Path(simname + ".gdml")
-    layers = read_layers(geometry_path)
+    layers = read_gdml_layers(geometry_path)
     model_edges = model_shell_edges(layers)
     interface_ids, _, plot_edges = shell_coordinates(
         layers,

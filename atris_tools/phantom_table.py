@@ -2,29 +2,26 @@
 
 Coefficients are read unchanged. The C++ scorer interprets radiation values
 as energy fractions and counting values as efficiencies; comments do not
-change that interpretation.
-"""
+change that interpretation."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
-from .phantoms import (
-    RESPONSE_ENERGY_BINS,
-    RESPONSE_ENERGY_MIN_MEV,
-    RESPONSE_ENERGY_MAX_MEV,
-)
 
+ROOT_ENERGY_GRID_RTOL = 1e-12
+ENERGY_FRACTION = "energy_fraction"
+COUNTING_EFFICIENCY = "counting_efficiency"
+RESPONSE_ENERGY_BINS = 650
+RESPONSE_ENERGY_MIN_MEV = 1e-6
+RESPONSE_ENERGY_MAX_MEV = 1e7
 ENERGY_EDGES_MEV = np.geomspace(
     RESPONSE_ENERGY_MIN_MEV,
     RESPONSE_ENERGY_MAX_MEV,
     RESPONSE_ENERGY_BINS + 1,
 )
-# Arithmetic bin centres match the archived phantom analysis.
 ENERGY_CENTRES_MEV = (ENERGY_EDGES_MEV[:-1] + ENERGY_EDGES_MEV[1:]) / 2
-ENERGY_FRACTION = "energy_fraction"
-COUNTING_EFFICIENCY = "counting_efficiency"
 
 
 @dataclass

@@ -1,58 +1,27 @@
-#!/usr/bin/env python3
 """Convert raw AtRIS histograms into scaled numerical response files."""
 
+from pathlib import Path
 import argparse
 import logging
 import os
-from pathlib import Path
 
 import numpy as np
 
-from .atrismacrogen import read_macro
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
-from .phantoms import read_phantoms
-from .psf import (
-    INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END, DETECTOR_ID,
-    load_psf,
-)
-from .response_histograms import (
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
+from .histogram import (
     IONIZATION_HISTOGRAM,
     PRIMARY_HISTOGRAM,
-    TOTAL_DEPOSITION_HISTOGRAM,
     ResponseHistogramReader,
+    TOTAL_DEPOSITION_HISTOGRAM,
     csv_histogram_path,
     response_output_format,
 )
+from .macros import read_macro
+from .psf import detector_geometry, load_psf
+from .stage_phantoms import read_phantom_selection
 
 
 logger = logging.getLogger(__name__)
-
-
-def process_psf(filename="simulation.psf"):
-    data = load_psf(filename)
-    rmin = data[:, INNER_RADIUS] * 100000.0
-    rmax = data[:, OUTER_RADIUS] * 100000.0
-    delta_phi = data[:, PHI_END] - data[:, PHI_START]
-    theta_factor = np.cos(data[:, THETA_START]) - np.cos(data[:, THETA_END])
-    inner_surface = delta_phi * rmin**2 * theta_factor
-    outer_surface = delta_phi * rmax**2 * theta_factor
-    volume = delta_phi * theta_factor * (rmax**3 - rmin**3) / 3.0
-
-    core = inner_surface == 0
-    inner_surface[core] = outer_surface[core]
-
-    order = np.argsort(inner_surface, kind="stable")
-    geometry = {
-        "sdid": data[:, DETECTOR_ID].astype(int)[order],
-        "volume/cm3": volume[order],
-        "inn_surface/cm2": inner_surface[order],
-    }
-    return geometry, data.shape[0]
 
 
 def _input_output_warnings(simname, histograms):
@@ -140,7 +109,7 @@ def _input_output_warnings(simname, histograms):
 
     phantom_path = Path("phantoms.txt")
     if phantom_path.is_file():
-        configured_phantoms = len(read_phantoms(Path.cwd()))
+        configured_phantoms = len(read_phantom_selection(Path.cwd()))
         output_phantoms = histograms.phantom_count()
         if output_phantoms != configured_phantoms:
             warnings.append(
@@ -168,7 +137,7 @@ def warn_if_inputs_do_not_match_output(simname):
 def process_phantoms(nrphantoms):
     if nrphantoms == 0:
         return np.empty((0, 2))
-    phantoms = read_phantoms(Path.cwd())
+    phantoms = read_phantom_selection(Path.cwd())
     if len(phantoms) < nrphantoms:
         raise ValueError(
             "AtRIS produced output for more phantoms than phantoms.txt defines"
@@ -253,7 +222,7 @@ def process_run(simname):
     with ResponseHistogramReader(simname) as histograms:
         for warning in _input_output_warnings(simname, histograms):
             logger.warning("%s", warning)
-        geometry, _ = process_psf()
+        geometry, _ = detector_geometry()
         phantom_count = histograms.phantom_count()
         energy_edges = histograms[PRIMARY_HISTOGRAM].axes[0]
         phantom_data = process_phantoms(phantom_count)

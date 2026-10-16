@@ -4,8 +4,8 @@ import sys
 import numpy as np
 import pytest
 
-from atris_tools import nrlmsis2psf
-from atris_tools.psf2gdml import psf2gdml
+from atris_tools import nrlmsis
+from atris_tools.gdml import psf_to_gdml
 
 
 NRLMSIS_20_FIELDS = (
@@ -65,7 +65,7 @@ def test_reads_all_ccmc_nrlmsis_formats_by_header(tmp_path, extra_field):
     table = tmp_path / "nrlmsis.txt"
     write_table(table, [nrlmsis_row(0, fields=fields)], fields)
 
-    _, atmosphere, malformed = nrlmsis2psf._read_table(table)
+    _, atmosphere, malformed = nrlmsis._read_table(table)
 
     assert not malformed
     np.testing.assert_allclose(
@@ -85,8 +85,8 @@ def test_convert_merges_files_and_replaces_suspicious_duplicate(
     write_table(second, [nrlmsis_row(2), nrlmsis_row(3)])
     output_path = tmp_path / "simulation.psf"
 
-    with caplog.at_level(logging.WARNING, logger="atris_tools.nrlmsis2psf"):
-        output = nrlmsis2psf.convert_nrlmsis(
+    with caplog.at_level(logging.WARNING, logger="atris_tools.nrlmsis"):
+        output = nrlmsis.convert_nrlmsis(
             [second, first], output_path
         )
 
@@ -104,10 +104,10 @@ def test_convert_merges_files_and_replaces_suspicious_duplicate(
     material_index = header.index(material_line)
     assert all(line.startswith("#") for line in header[:material_index])
     assert not header[material_index + 1].startswith("#")
-    psf = nrlmsis2psf.load_psf(output)
+    psf = nrlmsis.load_psf(output)
     assert psf.shape == (7, 16)
     np.testing.assert_allclose(psf[2:-1, 0], [6371, 6372, 6373, 6374])
-    psf2gdml(output)
+    psf_to_gdml(output)
     assert (tmp_path / "simulation.gdml").is_file()
     assert "Discarding suspicious NRLMSIS row at 2.000 km" in caplog.text
 
@@ -119,7 +119,7 @@ def test_merge_rejects_suspicious_row_without_valid_replacement(tmp_path):
     write_table(table, [nrlmsis_row(0), nrlmsis_row(1), bad_boundary])
 
     with pytest.raises(ValueError, match="2.000 km have no valid replacement"):
-        nrlmsis2psf.merge_nrlmsis([table])
+        nrlmsis.merge_nrlmsis([table])
 
 
 def test_merge_replaces_malformed_boundary_row(tmp_path, caplog):
@@ -133,8 +133,8 @@ def test_merge_replaces_malformed_boundary_row(tmp_path, caplog):
         table.write(" ".join(fields) + "\n")
     write_table(second, [nrlmsis_row(2), nrlmsis_row(3)])
 
-    with caplog.at_level(logging.WARNING, logger="atris_tools.nrlmsis2psf"):
-        merged = nrlmsis2psf.merge_nrlmsis([first, second])
+    with caplog.at_level(logging.WARNING, logger="atris_tools.nrlmsis"):
+        merged = nrlmsis.merge_nrlmsis([first, second])
 
     np.testing.assert_allclose(merged[:, 5], [0, 1, 2, 3])
     assert "Discarding malformed NRLMSIS row at 2.000 km" in caplog.text
@@ -147,7 +147,7 @@ def test_merge_rejects_missing_altitude_level(tmp_path):
     write_table(second, [nrlmsis_row(3), nrlmsis_row(4)])
 
     with pytest.raises(ValueError, match="complete, uniformly spaced grid"):
-        nrlmsis2psf.merge_nrlmsis([first, second])
+        nrlmsis.merge_nrlmsis([first, second])
 
 
 def test_merge_rejects_conflicting_valid_duplicate(tmp_path):
@@ -160,7 +160,7 @@ def test_merge_rejects_conflicting_valid_duplicate(tmp_path):
     write_table(second, [conflicting, nrlmsis_row(2)])
 
     with pytest.raises(ValueError, match="Conflicting valid NRLMSIS rows"):
-        nrlmsis2psf.merge_nrlmsis([first, second])
+        nrlmsis.merge_nrlmsis([first, second])
 
 
 def test_merge_rejects_mismatched_request_parameters(tmp_path):
@@ -173,7 +173,7 @@ def test_merge_rejects_mismatched_request_parameters(tmp_path):
     )
 
     with pytest.raises(ValueError, match="common date, time, latitude"):
-        nrlmsis2psf.merge_nrlmsis([first, second])
+        nrlmsis.merge_nrlmsis([first, second])
 
 
 def test_main_accepts_multiple_input_files(monkeypatch, tmp_path):
@@ -185,7 +185,7 @@ def test_main_accepts_multiple_input_files(monkeypatch, tmp_path):
         received["inputs"] = input_paths
         received["output"] = output_path
 
-    monkeypatch.setattr(nrlmsis2psf, "convert_nrlmsis", record_call)
+    monkeypatch.setattr(nrlmsis, "convert_nrlmsis", record_call)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -197,7 +197,7 @@ def test_main_accepts_multiple_input_files(monkeypatch, tmp_path):
         ],
     )
 
-    nrlmsis2psf.main()
+    nrlmsis.main()
 
     assert received == {"inputs": inputs, "output": output}
 
@@ -210,10 +210,10 @@ def test_main_derives_output_from_one_input(monkeypatch, tmp_path):
         received["inputs"] = input_paths
         received["output"] = output_path
 
-    monkeypatch.setattr(nrlmsis2psf, "convert_nrlmsis", record_call)
+    monkeypatch.setattr(nrlmsis, "convert_nrlmsis", record_call)
     monkeypatch.setattr(sys, "argv", ["nrlmsis2psf", str(input_path)])
 
-    nrlmsis2psf.main()
+    nrlmsis.main()
 
     assert received == {
         "inputs": [input_path],
@@ -229,6 +229,6 @@ def test_main_requires_output_for_multiple_inputs(monkeypatch, tmp_path):
     )
 
     with pytest.raises(SystemExit) as exit_info:
-        nrlmsis2psf.main()
+        nrlmsis.main()
 
     assert exit_info.value.code == 2

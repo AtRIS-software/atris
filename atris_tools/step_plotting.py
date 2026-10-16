@@ -1,102 +1,30 @@
 """Plot transport-step traces written by AtRIS output mode 1."""
 
-import random
-from collections import Counter, defaultdict
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import LogNorm
 from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
 import numpy as np
 
-from .input_plotting import (
+from .gdml import read_gdml_layers
+from .input_plotting import particle_symbol
+from .plotting_common import (
     mark_model_regions,
     model_shell_edges,
-    particle_symbol,
     positive_log_edges,
-    read_layers,
     setup_shell_axis,
     shell_coordinates,
     surface_radius,
 )
-from .step_output import iterate_step_records, process_name
+from .root_records import iterate_step_records, process_name, read_step_trace
 
 
-ENERGY_SAMPLE_LIMIT = 100_000
 BAR_LIMIT = 12
 SHOWER_SPECIES_LIMIT = 6
 INTERACTION_ALTITUDE_MARGIN = 0.05
 MINIMUM_ALTITUDE_MARGIN_KM = 1.0
-
-
-def read_step_trace(filename, sample_limit=ENERGY_SAMPLE_LIMIT):
-    """Stream a mode-1 trace into aggregate counts and a bounded sample."""
-    path = Path(filename)
-    random_generator = random.Random(0)
-    particle_counts = Counter()
-    process_counts = Counter()
-    event_counts = Counter()
-    detector_counts = Counter()
-    detector_deposit = defaultdict(float)
-    energy_sample = []
-    positive_energy_rows = 0
-    row_count = 0
-    first_event = None
-    last_event = None
-
-    for records in iterate_step_records(path):
-        for row in records:
-            event_id = int(row["event_id"])
-            pdg = int(row["pdg"])
-            detector_id = int(row["detector_id"])
-            kinetic_energy = float(row["post_kinetic_energy_MeV"])
-            energy_deposit = float(row["energy_deposit_MeV"])
-            if not np.isfinite(kinetic_energy) or not np.isfinite(energy_deposit):
-                raise ValueError(
-                    "%s has non-finite numeric data in record %i"
-                    % (path.name, row_count)
-                )
-
-            row_count += 1
-            first_event = (
-                event_id if first_event is None else min(first_event, event_id)
-            )
-            last_event = (
-                event_id if last_event is None else max(last_event, event_id)
-            )
-            event_counts[event_id] += 1
-            particle_counts[pdg] += 1
-            process_counts[process_name(row["step_process"]) or "unknown"] += 1
-            detector_counts[detector_id] += 1
-            detector_deposit[detector_id] += energy_deposit
-
-            if kinetic_energy <= 0 or sample_limit <= 0:
-                continue
-            positive_energy_rows += 1
-            sample_row = (detector_id, kinetic_energy)
-            if len(energy_sample) < sample_limit:
-                energy_sample.append(sample_row)
-                continue
-            replacement = random_generator.randrange(positive_energy_rows)
-            if replacement < sample_limit:
-                energy_sample[replacement] = sample_row
-
-    if not row_count:
-        raise ValueError(path.name + " contains no step records")
-    return {
-        "path": path,
-        "row_count": row_count,
-        "first_event": first_event,
-        "last_event": last_event,
-        "event_counts": event_counts,
-        "particle_counts": particle_counts,
-        "process_counts": process_counts,
-        "detector_counts": detector_counts,
-        "detector_deposit": detector_deposit,
-        "energy_sample": energy_sample,
-        "positive_energy_rows": positive_energy_rows,
-    }
 
 
 def _plot_counts(axis, counts, title, xlabel, labels):
@@ -118,7 +46,7 @@ def plot_step_trace(simname, summary):
     """Create a bounded-memory overview of an AtRIS mode-1 step trace."""
     detector_ids = sorted(summary["detector_counts"])
     geometry_path = Path(simname + ".gdml")
-    layers = read_layers(geometry_path)
+    layers = read_gdml_layers(geometry_path)
     model_edges = model_shell_edges(layers)
 
     figure, axes = plt.subplots(
@@ -308,7 +236,7 @@ def plot_shower(simname, summary):
         track_count,
     ) = _read_event_steps(trace_path, event_id)
     local_segments = _local_shower_coordinates(segments)
-    layers = read_layers(simname + ".gdml")
+    layers = read_gdml_layers(simname + ".gdml")
     radius = surface_radius(layers)
     local_segments[:, :, 2] = np.linalg.norm(segments, axis=2) - radius
 

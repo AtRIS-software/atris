@@ -8,12 +8,7 @@ import shutil
 
 import numpy as np
 
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
 from .psf import OUTER_RADIUS, load_psf
 
 
@@ -59,64 +54,56 @@ def refuse_existing_inputs(output_dir):
         )
 
 
-def genMacro(nr1,nr2,N,name,part,fact,thebins,radius,output_dir="./atris/simulation"):
-    lines =  ""
-    lines += "/run/initialize\n"
-    lines += "/run/verbose 2\n"
-    lines += part
-    lines += "/gps/ene/type User\n"
-    lines += "/gps/hist/type energy\n"
-    bins   = thebins*fact
-    np.savetxt(os.path.join(output_dir, name + '.bins'), bins)
-    lines += "/gps/hist/point %.17e %.17e\n"%(bins[0],0.0)
-    for thebin in bins[1:]:
-        lines += "/gps/hist/point %.17e %.17e\n"%(thebin,1.0)
-    lines += "/gps/pos/type Surface\n"
-    lines += "/gps/pos/shape Sphere\n"
-    lines += "/gps/pos/centre 0 0 0 m\n"
-    lines += "/gps/pos/radius %.17e km\n"%radius
-    lines += "/gps/ang/type cos\n"
-    lines += "/gps/ang/mintheta 0 deg\n"
-    lines += "/gps/ang/maxtheta 90 deg\n"
-    lines += "/gps/number 1\n"
-    lines += "/run/setCut 100. m\n"           #CONFIGURE
-    lines += "/run/particle/dumpCutValues\n"
-    lines += "/random/setSeeds %i %i\n"%(nr1,nr2)
-    lines += "/run/beamOn %i\n"%N
-    return lines
-
-
-def macroSetup(prefix,part,fact,partspb,output_dir="./atris/simulation",base_bins=None,rng=None):
-    if base_bins is None:
-        base_bins = 10**np.linspace(0,6,121)
-    if rng is None:
-        rng = random
-    radius  = load_psf(os.path.join(output_dir, 'simulation.psf'))[-2, OUTER_RADIUS] + 0.001 # we add 1 meter to the radius to aviod overlap.
-    bins    = base_bins
-    N       = bins.shape[0]*partspb # At 20 bins per decade, 2500 particles per bin is good. Even better would be 5k or 10k.
-    # We are taking two random seeds. Control this for the ability to reproduce.
-    seed1     = rng.randint(31,999999)
-    seed2     = rng.randint(31,999999)
-    #name      = str(seed1)+prefix
-    name      = prefix
-    shutil.copy2(os.path.join(output_dir, 'simulation.gdml'), os.path.join(output_dir, name + '.gdml'))
-    lines = genMacro(seed1,seed2,N,name,part,fact,bins,radius,output_dir)
-    filehandle = open(os.path.join(output_dir, name + '.mac'), 'w')
-    filehandle.writelines(lines)
-    filehandle.close()
-    
-
-def macroGenManager(partspb=DEFAULT_PARTICLES_PER_BIN,alphafactor=DEFAULT_ALPHA_FACTOR,output_dir="./atris/simulation",random_seed=None,energy_min_power=0.0,energy_max_power=6.0,energy_points=121):
+def generate_macros(
+    particles_per_bin=DEFAULT_PARTICLES_PER_BIN,
+    alpha_factor=DEFAULT_ALPHA_FACTOR,
+    run_directory=".",
+    random_seed=None,
+    energy_min_power=0.0,
+    energy_max_power=6.0,
+    energy_points=121,
+):
+    """Write proton/alpha source inputs and return the paths actually written."""
     if energy_points < 2:
         raise ValueError("energy_points must be at least 2")
-    output_dir = os.path.abspath(output_dir)
-    if not os.path.isdir(output_dir):
-        raise FileNotFoundError("Run directory does not exist: " + output_dir)
-    refuse_existing_inputs(output_dir)
+    directory = Path(run_directory).resolve()
+    if not directory.is_dir():
+        raise FileNotFoundError("Run directory does not exist: " + str(directory))
+    refuse_existing_inputs(directory)
     rng = random.Random(random_seed) if random_seed is not None else random
-    base_bins = 10**np.linspace(energy_min_power,energy_max_power,energy_points)
-    macroSetup('protons',"/gps/particle proton\n",1,partspb,output_dir,base_bins,rng)
-    macroSetup('alphas',"/gps/particle alpha\n",4,int(partspb*alphafactor),output_dir,base_bins,rng)
+    base_bins = 10**np.linspace(energy_min_power, energy_max_power, energy_points)
+    # Start one metre outside the last physical shell, inside the stop volume.
+    radius_km = load_psf(directory / "simulation.psf")[-2, OUTER_RADIUS] + 0.001
+    for stem, particle, energy_factor, per_bin in (
+        ("protons", "proton", 1, particles_per_bin),
+        ("alphas", "alpha", 4, int(particles_per_bin * alpha_factor)),
+    ):
+        bins = base_bins * energy_factor
+        seed1, seed2 = rng.randint(31, 999999), rng.randint(31, 999999)
+        points = f"/gps/hist/point {bins[0]:.17e} {0.0:.17e}\n"
+        points += "".join(f"/gps/hist/point {energy:.17e} {1.0:.17e}\n" for energy in bins[1:])
+        macro = f"""/run/initialize
+/run/verbose 2
+/gps/particle {particle}
+/gps/ene/type User
+/gps/hist/type energy
+{points}/gps/pos/type Surface
+/gps/pos/shape Sphere
+/gps/pos/centre 0 0 0 m
+/gps/pos/radius {radius_km:.17e} km
+/gps/ang/type cos
+/gps/ang/mintheta 0 deg
+/gps/ang/maxtheta 90 deg
+/gps/number 1
+/run/setCut 100. m
+/run/particle/dumpCutValues
+/random/setSeeds {seed1} {seed2}
+/run/beamOn {int(len(bins) * per_bin)}
+"""
+        shutil.copy2(directory / "simulation.gdml", directory / f"{stem}.gdml")
+        np.savetxt(directory / f"{stem}.bins", bins)
+        (directory / f"{stem}.mac").write_text(macro)
+    return tuple(directory / name for name in GENERATED_INPUTS)
 
 
 def main():
@@ -208,7 +195,7 @@ def main():
         args.energy_points,
         args.alpha_factor,
     )
-    macroGenManager(
+    generate_macros(
         args.particles_per_bin,
         args.alpha_factor,
         args.run_directory,

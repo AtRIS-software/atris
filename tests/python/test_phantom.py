@@ -2,24 +2,25 @@
 
 import json
 from dataclasses import asdict, replace
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import numpy as np
 import pytest
 import uproot
 
-from atris_tools.phantom import (
+from atris_tools.phantom_statistics import (
     PhantomEvents,
-    Phantom,
     PhantomStatistics,
-    RESPONSE_ENERGY_EDGES_MEV,
     compact_phantom_chunk,
-    prepare_phantom_batch,
     read_phantom_statistics,
     gather_phantom_events,
 )
-from atris_tools.phantoms import read_phantoms, stage_phantoms
-from atris_tools.phantom_tables import PhantomTable
+from atris_tools.phantom import Phantom
+from atris_tools.phantom_table import ENERGY_EDGES_MEV
+from atris_tools.phantom_builder import prepare_phantom_batch
+from atris_tools.stage_phantoms import read_phantom_selection, stage_phantoms
+from atris_tools.phantom_table import PhantomTable
 from atris_tools.psf import PSF
 
 
@@ -66,7 +67,7 @@ def test_geometry_keeps_source_and_water_inside_termination_shells(tmp_path):
     assert len(gdml.findall(".//auxiliary")) == 3
     assert len((tmp_path / "chunks.txt").read_text().splitlines()) == 2
     np.testing.assert_array_equal(
-        np.loadtxt(tmp_path / "phantom.bins"), RESPONSE_ENERGY_EDGES_MEV
+        np.loadtxt(tmp_path / "phantom.bins"), ENERGY_EDGES_MEV
     )
 
 
@@ -85,9 +86,7 @@ def test_repreparing_same_setup_preserves_results_but_changed_setup_is_rejected(
 
 
 def test_prepare_uses_psf_material_settings_without_json_geometry(tmp_path):
-    from atris_tools.psf import (
-        DETECTOR_ID, TEMPERATURE, PSF, load_psf, write_psf,
-    )
+    from atris_tools.psf import DETECTOR_ID, TEMPERATURE, PSF, load_psf, write_psf
     sphere = PSF(inner_radius_km=[0], outer_radius_km=[4e-9],
         temperature_k=301, density_g_cm3=.99, pressure_pa=90000,
         mass_fractions={"O": 15.9994 / 18.01528, "H": 2 * 1.00794 / 18.01528},
@@ -244,9 +243,9 @@ def test_invalid_ion_setup_is_rejected_before_writing(tmp_path, particle, ion):
 
 @pytest.fixture
 def phantom(tmp_path, monkeypatch):
-    import atris_tools.phantom as module
+    import atris_tools.phantom_builder as module
 
-    centres = np.sqrt(RESPONSE_ENERGY_EDGES_MEV[:-1] * RESPONSE_ENERGY_EDGES_MEV[1:])
+    centres = np.sqrt(ENERGY_EDGES_MEV[:-1] * ENERGY_EDGES_MEV[1:])
     # Two events per bin. One leaves no energy; the other leaves all of it.
     incident = np.repeat(centres, 2)
     deposited = incident * np.tile([0.0, 1.0], len(centres))
@@ -280,7 +279,7 @@ def phantom(tmp_path, monkeypatch):
         (directory / "chunks" / f"phantom_{111111 + index}_{222222 + index}.COMPLETE").touch()
         records.append(dict(pdg=code, directory=str(directory.relative_to(tmp_path))))
     (tmp_path / "batches.json").write_text(json.dumps(records))
-    return Phantom.gather("water-sphere", directory=builder.directory)
+    return builder.gather()
 
 
 def test_export_preserves_zero_events_statistics_units_and_explicit_selection(
@@ -329,7 +328,7 @@ def test_export_preserves_zero_events_statistics_units_and_explicit_selection(
     assert not (tmp_path / "phantoms.txt").exists()
     (tmp_path / "phantoms.txt").write_text(
         f"0 water-sphere {phantom.mass_g:.17e} {phantom.area_cm2:.17e}\n")
-    metadata = read_phantoms(tmp_path)[0]
+    metadata = read_phantom_selection(tmp_path)[0]
     assert metadata["area"] == pytest.approx(2 * np.pi * 15**2)
     assert metadata["mass"] == pytest.approx(4 / 3 * np.pi * 15**3 * 0.997)
     stage_phantoms(tmp_path)
@@ -472,13 +471,19 @@ def test_root_rejects_mass_inconsistent_with_geometry(phantom, tmp_path):
 
 
 def test_notebook_gather_print_save_interface(phantom, tmp_path, monkeypatch, capsys):
+    from atris_tools.phantom_builder import PhantomBuilder
+
     monkeypatch.chdir(tmp_path)
-    name = "water-sphere"
-    phantom = Phantom.gather(name)
-    print(phantom)
-    phantom.save()
-    assert capsys.readouterr().out.startswith(name + ": radius ")
-    assert Phantom.read_root(tmp_path / f"{name}_sampling.root").name == name
+    notebook = json.loads((Path(__file__).parents[2] /
+                           "docs/tutorials/water-phantom.ipynb").read_text())
+    source = next("".join(cell["source"]) for cell in notebook["cells"]
+                  if cell["cell_type"] == "code" and
+                  "phantom = builder.gather()" in "".join(cell["source"]))
+    namespace = {"builder": PhantomBuilder.open(tmp_path)}
+    exec(compile(source, "water-phantom.ipynb", "exec"), namespace)
+    assert capsys.readouterr().out.startswith(phantom.name + ": radius ")
+    assert all(path.is_file() for path in namespace["paths"])
+    assert Phantom.read_root(tmp_path / f"{phantom.name}_sampling.root").name == phantom.name
 
 
 def test_sampling_root_reads_previous_tolerance_spelling(phantom, tmp_path):
@@ -535,7 +540,7 @@ def test_one_sample_has_no_estimated_variance(phantom):
 
 
 def test_incremental_statistics_match_all_events_including_zero_deposits():
-    centres = np.sqrt(RESPONSE_ENERGY_EDGES_MEV[:-1] * RESPONSE_ENERGY_EDGES_MEV[1:])
+    centres = np.sqrt(ENERGY_EDGES_MEV[:-1] * ENERGY_EDGES_MEV[1:])
     incident = np.repeat(centres, 4)
     deposited = incident * np.tile([0.0, 0.25, 0.5, 1.0], len(centres))
     events = PhantomEvents(incident, deposited, deposited)

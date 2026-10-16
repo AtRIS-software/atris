@@ -12,11 +12,11 @@ from atris_tools.cli import add_logging_arguments, configure_logging
 
 
 MODERN_COMMAND_MODULES = (
-    "atrismacrogen",
+    "macros",
     "clone_run",
     "gather",
-    "nrlmsis2psf",
-    "phantoms",
+    "nrlmsis",
+    "stage_phantoms",
     "plotting",
     "postprocess",
     "run_chunks",

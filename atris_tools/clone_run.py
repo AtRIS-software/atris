@@ -6,12 +6,7 @@ import os
 import shutil
 from pathlib import Path
 
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
 
 
 INPUT_NAMES = (

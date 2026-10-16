@@ -3,8 +3,15 @@ import pytest
 import xml.etree.ElementTree as ET
 
 from atris_tools.psf import (
-    DETECTOR_ID, STATE, FIRST_ELEMENT, GEOMETRY_COLUMNS,
-    PSF, load_psf, read_psf_header, read_psf_layers, write_psf,
+    DETECTOR_ID,
+    STATE,
+    FIRST_ELEMENT,
+    GEOMETRY_COLUMNS,
+    PSF,
+    load_psf,
+    read_psf_header,
+    read_psf_layers,
+    write_psf,
 )
 
 
@@ -15,8 +22,9 @@ def test_write_psf_appends_missing_suffix(tmp_path, filename, as_string):
                     temperature_k=293, density_g_cm3=1, pressure_pa=101325,
                     mass_fractions={"H": 1})
     path = tmp_path / filename
-    write_psf(str(path) if as_string else path, psf)
+    written = write_psf(str(path) if as_string else path, psf)
     expected = path if filename.endswith(".psf") else tmp_path / (filename + ".psf")
+    assert written == expected
     np.testing.assert_allclose(load_psf(expected), psf.layers)
     assert not (tmp_path / (filename + ".psf.psf")).exists()
 
@@ -30,12 +38,12 @@ def test_psf_print_and_save(tmp_path):
     assert "liquid" in summary
     assert "1.000000e-04" in summary
     assert "H=1.000000e+00" in summary
-    psf.save(tmp_path / "sphere")
+    assert psf.save(tmp_path / "sphere") == tmp_path / "sphere.psf"
     np.testing.assert_allclose(load_psf(tmp_path / "sphere.psf"), psf.layers)
 
 
 def test_gdml_preserves_micrometre_spheres_and_world(tmp_path):
-    from atris_tools.psf2gdml import line_processor, gdml_compile
+    from atris_tools.gdml import _psf_sections, _write_gdml
     radius = 4e-9  # 4 micrometres, in PSF kilometres.
     psf = PSF(inner_radius_km=[0], outer_radius_km=[radius],
                     temperature_k=293, density_g_cm3=1, pressure_pa=101325,
@@ -43,8 +51,8 @@ def test_gdml_preserves_micrometre_spheres_and_world(tmp_path):
     path = tmp_path / "sphere.psf"
     write_psf(path, psf)
     output = tmp_path / "sphere.gdml"
-    materials, geometry, structure, _ = line_processor(path)
-    gdml_compile(materials, 2 * radius, geometry, structure, output)
+    materials, geometry, structure, _ = _psf_sections(path)
+    _write_gdml(materials, 2 * radius, geometry, structure, output)
     gdml = ET.parse(output)
     sphere = gdml.find("./solids/sphere")
     world = gdml.find("./solids/box")
@@ -251,7 +259,7 @@ def test_reads_legacy_commented_material_definition(tmp_path):
 
 
 def test_reads_psf_rows_as_material_layers(tmp_path):
-    from atris_tools.psf2gdml import line_processor
+    from atris_tools.gdml import _psf_sections
 
     path = tmp_path / "simulation.psf"
     path.write_text(
@@ -264,7 +272,7 @@ def test_reads_psf_rows_as_material_layers(tmp_path):
 
     assert [layer["state"] for layer in layers] == ["solid", "liquid"]
     assert layers[0]["fractions"] == {"O": 0.75, "Si": 0.25}
-    materials, _, _, _ = line_processor(path)
+    materials, _, _, _ = _psf_sections(path)
     fractions = {item.get("ref").removeprefix("G4_"): float(item.get("n"))
                  for item in ET.fromstring(materials[0]).findall("fraction")}
     assert fractions == layers[0]["fractions"]

@@ -4,11 +4,7 @@ import shutil
 import numpy as np
 import pytest
 
-from atris_tools.phantom_tables import (
-    PhantomTable,
-    ENERGY_CENTRES_MEV,
-    COUNTING_EFFICIENCY,
-)
+from atris_tools.phantom_table import COUNTING_EFFICIENCY, ENERGY_CENTRES_MEV, PhantomTable
 
 ARCHIVE = Path(__file__).parents[2] / "phantoms"
 

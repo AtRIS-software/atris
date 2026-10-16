@@ -1,24 +1,20 @@
+""""""
+
+from io import StringIO
+from pathlib import Path
 import argparse
 import logging
 import os
 import shutil
-from io import StringIO
-from pathlib import Path
 
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
+from .phantom_table import RESPONSE_ENERGY_BINS
+
 
 logger = logging.getLogger(__name__)
-RESPONSE_ENERGY_BINS = 650
-RESPONSE_ENERGY_MIN_MEV = 1e-6
-RESPONSE_ENERGY_MAX_MEV = 1e7
 
 
-def read_phantoms(run_directory):
+def read_phantom_selection(run_directory):
     metadata_path = Path(run_directory) / "phantoms.txt"
     if not metadata_path.exists():
         return []
@@ -83,7 +79,7 @@ def _remove_staged_links(run_directory, phantom_id):
 
 
 def _dummy_counting_contents(response_file):
-    from .phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+    from .phantom_table import PhantomTable, COUNTING_EFFICIENCY
 
     with response_file.open() as stream:
         header = next(
@@ -241,7 +237,7 @@ def stage_phantoms(
     if archive is not None:
         archive = Path(archive).resolve()
 
-    phantoms = read_phantoms(run_directory)
+    phantoms = read_phantom_selection(run_directory)
     selected_ids = {phantom["id"] for phantom in phantoms}
     for prefix in ("radiation_phantom", "counting_phantom"):
         for path in run_directory.glob(prefix + "*.txt"):

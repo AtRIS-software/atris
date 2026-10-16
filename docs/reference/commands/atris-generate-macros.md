@@ -69,4 +69,4 @@ the alpha count uses ALPHA_FACTOR per energy point. Alpha energies are four
 times the corresponding proton grid values.
 ```
 
-Implementation: `atris_tools/atrismacrogen.py`.
+Implementation: `atris_tools/macros.py`.

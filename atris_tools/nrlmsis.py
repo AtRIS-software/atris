@@ -8,15 +8,19 @@ from pathlib import Path
 
 import numpy as np
 
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
 from .psf import (
-    INNER_RADIUS, OUTER_RADIUS, PHI_END, THETA_END, DETECTOR_ID,
-    TEMPERATURE, DENSITY, PRESSURE, STATE, FIRST_ELEMENT, load_psf,
+    INNER_RADIUS,
+    OUTER_RADIUS,
+    PHI_END,
+    THETA_END,
+    DETECTOR_ID,
+    TEMPERATURE,
+    DENSITY,
+    PRESSURE,
+    STATE,
+    FIRST_ELEMENT,
+    load_psf,
 )
 
 

@@ -4,7 +4,7 @@ import numpy as np
 import uproot
 
 from atris_tools import plotting
-from atris_tools.interface_output import INTERFACE_DTYPE
+from atris_tools.root_records import INTERFACE_DTYPE
 
 
 def test_plot_interface_output_reads_root_and_ignores_invalid_energy(

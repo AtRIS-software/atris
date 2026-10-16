@@ -1,15 +1,14 @@
 """Read and write AtRIS Planet Specification Format files."""
 
-from pathlib import Path
 from contextlib import nullcontext
-from os import PathLike
 from dataclasses import dataclass
+from os import PathLike
+from pathlib import Path
 import re
 
 import numpy as np
 
 
-# Fixed, zero-based columns in the PSF file format.
 INNER_RADIUS = 0
 OUTER_RADIUS = 1
 PHI_START = 2
@@ -23,10 +22,32 @@ PRESSURE = 9
 STATE = 10
 FIRST_ELEMENT = 11
 COMPACT_COMPOSITION_PARTS = 1000
-
 GEOMETRY_COLUMNS = (
     INNER_RADIUS, OUTER_RADIUS, PHI_START, PHI_END, THETA_START, THETA_END,
 )
+
+
+def detector_geometry(filename="simulation.psf"):
+    """Return detector IDs, volumes (cm3), areas (cm2), and the layer count."""
+    data = load_psf(filename)
+    rmin = data[:, INNER_RADIUS] * 100000.0
+    rmax = data[:, OUTER_RADIUS] * 100000.0
+    delta_phi = data[:, PHI_END] - data[:, PHI_START]
+    theta_factor = np.cos(data[:, THETA_START]) - np.cos(data[:, THETA_END])
+    inner_surface = delta_phi * rmin**2 * theta_factor
+    outer_surface = delta_phi * rmax**2 * theta_factor
+    volume = delta_phi * theta_factor * (rmax**3 - rmin**3) / 3.0
+
+    core = inner_surface == 0
+    inner_surface[core] = outer_surface[core]
+
+    order = np.argsort(inner_surface, kind="stable")
+    geometry = {
+        "sdid": data[:, DETECTOR_ID].astype(int)[order],
+        "volume/cm3": volume[order],
+        "inn_surface/cm2": inner_surface[order],
+    }
+    return geometry, data.shape[0]
 
 
 @dataclass(init=False)
@@ -182,8 +203,8 @@ class PSF:
         return "\n".join(lines)
 
     def save(self, path, **kwargs):
-        """Save the layer table and materials to a destination."""
-        write_psf(path, self, **kwargs)
+        """Save layers and materials; return the written path or supplied stream."""
+        return write_psf(path, self, **kwargs)
 
     def formats(self, value_format):
         """Return NumPy formats preserving geometry and integer columns."""
@@ -232,6 +253,7 @@ def write_psf(path, layers, *, materials=None, **kwargs):
         if path.suffix != ".psf":
             path = path.with_name(path.name + ".psf")
     np.savetxt(path, data, header=header, comments="", encoding="utf-8", **kwargs)
+    return path
 
 
 def _locate_table(path):

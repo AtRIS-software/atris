@@ -101,6 +101,6 @@ specify the conventions.
 
 ## Implementation
 
-`atris_tools/psf2gdml.py` constructs the geometry,
+`atris_tools/gdml.py` constructs the geometry,
 `src/SensitiveDetector.cc` handles the terminating detector IDs, and
 `atris_tools/postprocess.py` supplies the volume and altitude conventions.

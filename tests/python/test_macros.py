@@ -6,10 +6,10 @@ from xml.etree import ElementTree
 import numpy as np
 import pytest
 
-import atris_tools.psf2gdml as psf2gdml_module
-import atris_tools.atrismacrogen as macrogen_module
-from atris_tools.atrismacrogen import macroGenManager, read_macro
-from atris_tools.psf2gdml import psf2gdml
+import atris_tools.gdml as gdml_module
+import atris_tools.macros as macros_module
+from atris_tools.macros import generate_macros, read_macro
+from atris_tools.gdml import psf_to_gdml
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "minimal"
@@ -35,10 +35,12 @@ def prepare_run(path):
 def test_macro_defaults_generate_expected_sampling(tmp_path, monkeypatch, interface):
     prepare_run(tmp_path)
     if interface == "python":
-        macroGenManager(output_dir=tmp_path)
+        written = generate_macros(run_directory=tmp_path)
+        assert set(written) == {tmp_path / name for name in macros_module.GENERATED_INPUTS}
+        assert all(path.is_file() for path in written)
     else:
         monkeypatch.setattr("sys.argv", ["atris-generate-macros", str(tmp_path)])
-        macrogen_module.main()
+        macros_module.main()
 
     proton_bins = np.loadtxt(tmp_path / "protons.bins")
     np.testing.assert_allclose(proton_bins, np.logspace(0, 6, 121))
@@ -61,15 +63,15 @@ def test_macro_generation_is_reproducible_and_preserves_requested_counts(tmp_pat
     prepare_run(second)
 
     arguments = dict(
-        partspb=2,
-        alphafactor=0.5,
+        particles_per_bin=2,
+        alpha_factor=0.5,
         random_seed=20260827,
         energy_min_power=0,
         energy_max_power=2,
         energy_points=3,
     )
-    macroGenManager(output_dir=first, **arguments)
-    macroGenManager(output_dir=second, **arguments)
+    generate_macros(run_directory=first, **arguments)
+    generate_macros(run_directory=second, **arguments)
 
     for species in ("protons", "alphas"):
         assert (first / f"{species}.mac").read_bytes() == (
@@ -98,7 +100,7 @@ def test_macro_generation_is_reproducible_and_preserves_requested_counts(tmp_pat
 
 def test_macro_generation_rejects_too_short_energy_grid(tmp_path):
     with pytest.raises(ValueError, match="at least 2"):
-        macroGenManager(1, output_dir=tmp_path, energy_points=1)
+        generate_macros(1, run_directory=tmp_path, energy_points=1)
 
 
 def test_macro_generation_refuses_existing_inputs_before_writing(tmp_path):
@@ -107,7 +109,7 @@ def test_macro_generation_refuses_existing_inputs_before_writing(tmp_path):
     existing.write_text("keep me\n")
 
     with pytest.raises(FileExistsError, match="protons.mac"):
-        macroGenManager(2, output_dir=tmp_path, energy_points=3)
+        generate_macros(2, run_directory=tmp_path, energy_points=3)
 
     assert existing.read_text() == "keep me\n"
     assert not (tmp_path / "protons.bins").exists()
@@ -120,7 +122,7 @@ def test_macro_generation_refuses_existing_inputs_before_writing(tmp_path):
 def test_psf_conversion_preserves_reviewed_layer_geometry(tmp_path, monkeypatch):
     shutil.copyfile(FIXTURE / "simulation.psf", tmp_path / "simulation.psf")
 
-    psf2gdml(tmp_path / "simulation.psf")
+    psf_to_gdml(tmp_path / "simulation.psf")
 
     generated = ElementTree.parse(tmp_path / "simulation.gdml").getroot()
     reviewed = ElementTree.parse(FIXTURE / "simulation.gdml").getroot()
@@ -166,7 +168,7 @@ def test_psf_conversion_uses_explicit_composition_for_every_state(
         f"{state_code} {fractions[0]} {fractions[1]}\n"
     )
 
-    output = psf2gdml(psf)
+    output = psf_to_gdml(psf)
 
     root = ElementTree.parse(output).getroot()
     material = root.find("./materials/material[@name='material0']")
@@ -184,7 +186,7 @@ def test_psf_conversion_accepts_named_input(tmp_path, monkeypatch):
         "sys.argv", ["atris-psf-to-gdml", str(input_path)]
     )
 
-    psf2gdml_module.main()
+    gdml_module.main()
 
     assert (tmp_path / "mercury.gdml").is_file()
 
@@ -203,6 +205,6 @@ def test_psf_conversion_accepts_output_path(tmp_path, monkeypatch):
         ],
     )
 
-    psf2gdml_module.main()
+    gdml_module.main()
 
     assert output_path.is_file()

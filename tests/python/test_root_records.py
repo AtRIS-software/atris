@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 import uproot
 
-from atris_tools.interface_output import (
+from atris_tools.root_records import (
     INTERFACE_DTYPE,
     read_interface_output,
-    read_root,
+    read_interface_records,
 )
 
 
@@ -46,7 +46,7 @@ def test_read_root_returns_interface_records(tmp_path):
     root_path = tmp_path / "protons.root"
     write_root(root_path)
 
-    np.testing.assert_array_equal(read_root(root_path), SAMPLE_RECORDS)
+    np.testing.assert_array_equal(read_interface_records(root_path), SAMPLE_RECORDS)
 
 
 def test_read_interface_output_uses_simulation_prefix(tmp_path):
@@ -69,7 +69,7 @@ def test_read_root_requires_interface_ntuple(tmp_path):
         root_file.mktree("steps", {"event_id": "int32"})
 
     with pytest.raises(ValueError, match="does not contain the interfaces ntuple"):
-        read_root(path)
+        read_interface_records(path)
 
 
 def test_read_root_requires_all_interface_columns(tmp_path):
@@ -78,4 +78,4 @@ def test_read_root_requires_all_interface_columns(tmp_path):
         root_file.mktree("interfaces", {"pdg": "int32"})
 
     with pytest.raises(ValueError, match="interfaces ntuple is missing columns"):
-        read_root(path)
+        read_interface_records(path)

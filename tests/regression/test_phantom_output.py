@@ -5,12 +5,12 @@ import pytest
 import uproot
 
 from test_atris_command import atris_command, invoke_atris
-from atris_tools.phantom import (
+from atris_tools.phantom_statistics import (
     PhantomEvents,
     PhantomStatistics,
-    prepare_phantom_batch,
     read_phantom_statistics,
 )
+from atris_tools.phantom_builder import prepare_phantom_batch
 
 from phantom_fixture import water_psf
 from atris_tools.psf import PSF

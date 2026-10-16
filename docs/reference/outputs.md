@@ -47,7 +47,7 @@ ROOT's squared sums are not themselves sample variances. Raw-moment subtraction
 has floating-point cancellation when the variance is very small.
 
 `read_phantom_statistics` in `atris_tools.phantom` reads these
-statistics and also accepts older event-record chunks. `Phantom.gather(name)`
+statistics and also accepts older event-record chunks. `PhantomBuilder.gather()`
 combines completed builder batches; `phantom.save()` writes the tables and sampling uncertainties.
 New phantom-mode files contain histograms and run metadata, not per-primary,
 interface-crossing, or transport-step records. The grid fixes their array sizes,
@@ -418,5 +418,4 @@ missing moments or converting between the two formats.
 
 Implementation: `src/PrimaryGeneratorAction.cc`, `src/HistoManager.cc`,
 `src/SensitiveDetector.cc`, `include/NtupleSchema.hh`, and
-`atris_tools/postprocess.py`, `response_histograms.py`, `root_output.py`,
-`interface_output.py`, `step_output.py`, and `plotting.py`.
+`atris_tools/postprocess.py`, `histogram.py`, `root_records.py`, and `plotting.py`.

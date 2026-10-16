@@ -12,32 +12,23 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import numpy as np
 
-from .atrismacrogen import read_macro
-from .gather import read_chunk_plan
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
-from .input_plotting import (
+from .macros import read_macro
+from .chunks import read_chunk_plan
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
+from .plotting_common import (
     log_norm,
     mark_model_regions,
     model_shell_edges,
-    plot_inputs,
-    read_layers,
     setup_shell_axis,
     shell_coordinates,
 )
+from .input_plotting import plot_inputs
+from .gdml import read_gdml_layers
 from .interface_plotting import plot_interface_output
-from .phantoms import read_phantoms
+from .stage_phantoms import read_phantom_selection
 from .postprocess import warn_if_inputs_do_not_match_output
-from .response_histograms import (
-    PRIMARY_HISTOGRAM,
-    ResponseHistogramReader,
-    response_output_format,
-)
-from .root_output import has_ntuple
+from .histogram import PRIMARY_HISTOGRAM, ResponseHistogramReader, response_output_format
+from .root_records import has_ntuple
 from .step_plotting import plot_mode_one_output
 
 
@@ -553,7 +544,7 @@ def plot_run(simname):
             errors.append("%s energy input: %s" % (simname, error))
 
     geometry_path = Path(simname + ".gdml")
-    layers = read_layers(geometry_path)
+    layers = read_gdml_layers(geometry_path)
 
     if Path(simname + ".ioni").is_file():
         try:
@@ -584,7 +575,7 @@ def plot_run(simname):
     try:
         phantom_names = {
             phantom["id"]: phantom["stem"]
-            for phantom in read_phantoms(Path.cwd())
+            for phantom in read_phantom_selection(Path.cwd())
         }
     except Exception as error:
         phantom_names = {}

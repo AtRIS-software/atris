@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from atris_tools.phantoms import stage_phantoms
+from atris_tools.stage_phantoms import stage_phantoms
 
 
 def make_archive(tmp_path):
@@ -295,7 +295,7 @@ def test_stage_phantoms_can_create_dummy_counting_response(tmp_path, caplog):
 
 
 def test_dummy_counting_accepts_response_comment_headers(tmp_path):
-    from atris_tools.phantom_tables import PhantomTable
+    from atris_tools.phantom_table import PhantomTable
 
     archive = make_archive(tmp_path)
     (archive / "first_response.txt").write_text(

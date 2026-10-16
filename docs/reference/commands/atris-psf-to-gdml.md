@@ -46,4 +46,4 @@ output file is replaced. This command does not download or generate an
 atmosphere and does not run AtRIS.
 ```
 
-Implementation: `atris_tools/psf2gdml.py`.
+Implementation: `atris_tools/gdml.py`.

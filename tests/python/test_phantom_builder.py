@@ -2,14 +2,36 @@ import json
 import signal
 import subprocess
 from dataclasses import fields
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from atris_tools.phantom_builder import Batch, PhantomBuilder
-from atris_tools.phantom import Phantom, PhantomStatistics
+from atris_tools.phantom import Phantom
+from atris_tools.phantom_statistics import PhantomStatistics
 from atris_tools.psf import PSF, write_psf
+
+
+def test_notebook_preparation_and_preview_use_the_public_api(tmp_path, monkeypatch, capsys):
+    notebook = json.loads((Path(__file__).parents[2] /
+                           "docs/tutorials/water-phantom.ipynb").read_text())
+    monkeypatch.chdir(tmp_path)
+    namespace = {}
+    # Exercise the actual tutorial cells through the preview, without transport.
+    for cell in notebook["cells"]:
+        if cell["cell_type"] != "code":
+            continue
+        source = "".join(cell["source"])
+        if "builder.run(" in source:
+            break
+        exec(compile(source, "water-phantom.ipynb", "exec"), namespace)
+        saved = "".join("".join(output.get("text", [])) for output in cell["outputs"])
+        assert capsys.readouterr().out == saved
+    assert namespace["builder"].settings.pdg_codes == [22, 2212, 1000260560, 1000280580]
+    assert len(namespace["schedule"]) == 4
+    assert not (tmp_path / "batches").exists()
 
 
 def water_psf(path, radius_cm=15):
@@ -33,7 +55,7 @@ def test_species_specific_pilots_round_trip(tmp_path):
     builder = PhantomBuilder(psf, ["photon", "proton"], directory=tmp_path / "run",
                              pilot_events={"photon": 500000, "proton": 100000})
     reopened = PhantomBuilder.open(builder.directory)
-    response = Phantom.gather(directory=builder.directory)
+    response = builder.gather()
     first = reopened._select([], response, 3, True)
     second = reopened._select([{"pdg": 22}], response, 3, True)
     assert first.events == 500000
@@ -57,11 +79,11 @@ def test_prepare_defaults_to_current_folder(tmp_path, monkeypatch):
     assert builder.settings.stem == "example"
     assert not (tmp_path / "example.psf").exists()
     assert (tmp_path / "simulation.psf").exists()
-    assert Phantom.gather().metadata == Phantom.gather(directory=tmp_path).metadata
-    assert Phantom.gather("example").metadata == Phantom.gather(directory=tmp_path).metadata
-    assert Phantom.gather("example", directory=tmp_path).metadata == Phantom.gather().metadata
-    with pytest.raises(ValueError, match="contains phantom 'example', not 'other'"):
-        Phantom.gather("other")
+    gathered = builder.gather()
+    reopened = PhantomBuilder.open(".").gather()
+    assert gathered.name == reopened.name == "example"
+    assert gathered.metadata == reopened.metadata
+    np.testing.assert_array_equal(gathered.sample_counts, reopened.sample_counts)
 
 
 def test_show_schedule_after_preparation_is_read_only(build, capsys):
@@ -202,7 +224,7 @@ def test_gather_reads_geometry_once(build, monkeypatch):
         calls.append(path)
         return read(cls, path)
     monkeypatch.setattr(PSF, "read", classmethod(counted_read))
-    response = Phantom.gather(directory=build.directory)
+    response = build.gather()
     assert response.radius_cm == pytest.approx(.0004)
     assert len(calls) == 1
 
@@ -223,7 +245,7 @@ def test_name_controls_saved_filenames(tmp_path):
     water_psf(path)
     builder = PhantomBuilder(path, ["photon"], directory=tmp_path / "run", name="example")
     assert "Phantom sampling: example" in str(builder)
-    phantom = Phantom.gather(directory=builder.directory)
+    phantom = builder.gather()
     assert str(phantom).startswith("example: radius ")
     phantom.save(tmp_path / "export", allow_partial=True)
     assert str(Phantom.read_root(tmp_path / "export/example_sampling.root")).startswith("example: radius ")
@@ -241,7 +263,7 @@ def test_relative_dose_tolerance_reads_existing_run_without_rewriting(build):
     reopened = PhantomBuilder.open(build.directory)
     assert reopened.settings.precision.relative_dose_tolerance == .05
     assert not hasattr(reopened.settings, "relative_tolerance")
-    phantom = Phantom.gather(directory=build.directory)
+    phantom = build.gather()
     assert phantom.precision_settings.relative_dose_tolerance == .05
     assert path.read_bytes() == original
 
@@ -251,7 +273,7 @@ def test_relative_dose_tolerance_parameter(tmp_path):
     water_psf(path)
     builder = PhantomBuilder(path, ["photon"], directory=tmp_path / "run",
                                      dose_rtol=.02, dose_atol_Gy=2e-12)
-    phantom = Phantom.gather(directory=builder.directory)
+    phantom = builder.gather()
     assert phantom.precision_settings.relative_dose_tolerance == .02
     assert phantom.precision_settings.absolute_dose_tolerance_Gy == 2e-12
     assert "Relative dose tolerance: 2.0%" in str(builder)
@@ -263,14 +285,14 @@ def test_rejects_changed_geometry_and_preserves_nonwater_material(tmp_path, buil
     with pytest.raises(ValueError, match="PSF changed"):
         PhantomBuilder.open(build.directory)
     with pytest.raises(ValueError, match="PSF changed"):
-        Phantom.gather(directory=build.directory)
+        build.gather()
     path = tmp_path / "solid.psf"
     psf = PSF(inner_radius_km=[0], outer_radius_km=[1e-5], temperature_k=293,
                     density_g_cm3=2.7, pressure_pa=0, mass_fractions={"Al": 1},
                     solid_composition="Al1000", state="solid")
     write_psf(path, psf)
     aluminium = PhantomBuilder(path, [22], directory=tmp_path / "aluminium", name="aluminium")
-    phantom = Phantom.gather("aluminium", directory=aluminium.directory)
+    phantom = aluminium.gather()
     assert phantom.density_g_cm3 == 2.7
     np.testing.assert_array_equal(phantom.geometry.layers, psf.layers)
     phantom.save(aluminium.directory)
@@ -281,13 +303,13 @@ def test_rejects_changed_geometry_and_preserves_nonwater_material(tmp_path, buil
 
 
 def test_layered_psf_preserves_shielding_and_uses_sensor_mass(tmp_path):
-    from atris_tools.phantom import prepare_phantom_batch
+    from atris_tools.phantom_builder import prepare_phantom_batch
     from atris_tools.psf import DETECTOR_ID, load_psf
     psf = PSF(inner_radius_km=[0, 1e-5], outer_radius_km=[1e-5, 2e-5],
               temperature_k=[290, 310], density_g_cm3=[2.7, 1.8], pressure_pa=0,
               mass_fractions={"Al": [1, 0], "C": [0, 1]}, state="solid")
     builder = PhantomBuilder(psf, [22], directory=tmp_path / "layered", name="layered")
-    phantom = Phantom.gather("layered", directory=builder.directory)
+    phantom = builder.gather()
     assert phantom.radius_cm == pytest.approx(1)
     assert phantom.source_radius_cm == pytest.approx(2)
     assert phantom.mass_g == pytest.approx(4 * np.pi / 3 * 2.7)
@@ -313,7 +335,7 @@ def test_layered_psf_preserves_shielding_and_uses_sensor_mass(tmp_path):
 
 
 def test_missing_and_zero_response_are_unresolved(build):
-    response = Phantom.gather(directory=build.directory)
+    response = build.gather()
     assert np.isnan(response.energy_fraction).all()
     assert not build.precision(response)["resolved"].any()
     response.sample_counts[:] = 100
@@ -329,7 +351,7 @@ def test_readable_build_and_response_summaries(build):
     assert "Species: photon, proton" in str(build)
     assert "Primaries per pilot: photon 1.300e+03, proton 1.300e+03" in str(build)
     assert "Relative dose tolerance: 5.0%" in str(build)
-    response = Phantom.gather(directory=build.directory)
+    response = build.gather()
     assert "Primaries retained: 0" in str(response)
     assert "Sampled bins: 0/1,300" in str(response)
     assert "Passing energy bins: 0" in str(response)
@@ -340,8 +362,8 @@ def test_readable_build_and_response_summaries(build):
 @pytest.mark.parametrize("time_limit", [None, 2.5])
 def test_timing_fit_uses_actual_completed_counts(build, monkeypatch, completed, time_limit):
     monkeypatch.setenv("ATRIS_TIME_LIMIT", "999")
-    response = Phantom.gather(directory=build.directory)
-    monkeypatch.setattr(Phantom, "gather", lambda **kwargs: response)
+    response = build.gather()
+    monkeypatch.setattr(build, "gather", lambda: response)
     monkeypatch.setattr("atris_tools.phantom_builder.shutil.which", lambda name: name)
     monkeypatch.setattr("atris_tools.phantom_builder.read_phantom_statistics", lambda path:
                         SimpleNamespace(sample_counts=np.array([completed])))
@@ -442,8 +464,8 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
 
     stats = PhantomStatistics(np.full(650, 2), np.full(650, .5), np.full(650, .1), np.ones(650, dtype=int))
     monkeypatch.setattr(PhantomBuilder, "_execute", complete)
-    monkeypatch.setattr("atris_tools.phantom.read_phantom_statistics", lambda path: stats)
-    monkeypatch.setattr("atris_tools.phantom.read_ntuple", lambda *args: {
+    monkeypatch.setattr("atris_tools.phantom_builder.read_phantom_statistics", lambda path: stats)
+    monkeypatch.setattr("atris_tools.phantom_builder.read_ntuple", lambda *args: {
         "physics_list": ["FTFP_BERT_HP"], "atris_version": ["test-version"]})
     build.run(batches=2)
     assert f"Running phantom sampling in folder {build.directory}" in caplog.text
@@ -451,9 +473,9 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
     assert f"atris-build-phantom {build.directory} --batches 2 --threads 1" in caplog.text
     before = build._batches()
     assert [b["pdg"] for b in before] == [22, 2212]
-    assert Phantom.gather(directory=build.directory).sample_counts.sum() == 2600
-    assert Phantom.gather(directory=build.directory).metadata["atris_version"] == "test-version"
-    phantom = Phantom.gather(directory=build.directory)
+    assert build.gather().sample_counts.sum() == 2600
+    assert build.gather().metadata["atris_version"] == "test-version"
+    phantom = build.gather()
     phantom.save(build.directory / "export", allow_partial=True)
     restored = Phantom.read_root(
         build.directory / f"export/{build.settings.stem}_sampling.root"
@@ -495,10 +517,10 @@ def test_batches_are_bounded_completed_inputs_preserved_and_pending_resumed(buil
     assert "Schedule preview: 4 batches" in preview
     build.run(batches=1, adaptive=True)
     assert len(build._batches()) == 3
-    monkeypatch.setattr("atris_tools.phantom.read_ntuple", lambda *args: {
+    monkeypatch.setattr("atris_tools.phantom_builder.read_ntuple", lambda *args: {
         "physics_list": ["QGSP_BERT"], "atris_version": ["test-version"]})
     with pytest.raises(ValueError, match="physics list differs"):
-        Phantom.gather(directory=build.directory)
+        build.gather()
 
 
 def test_lock_prevents_duplicate_builder_and_releases(build):
@@ -511,7 +533,7 @@ def test_lock_prevents_duplicate_builder_and_releases(build):
 
 
 def test_gather_and_save_have_no_extra_output_side_effects(build, monkeypatch):
-    response = Phantom.gather(directory=build.directory)
+    response = build.gather()
     assert not (build.directory / "export").exists()
     monkeypatch.chdir(build.directory)
     response.save()

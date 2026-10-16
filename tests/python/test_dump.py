@@ -5,8 +5,8 @@ import pytest
 import uproot
 
 from atris_tools.dump import dump_ntuple
-from atris_tools.interface_output import ROOT_FIELDS
-from atris_tools.step_output import STEP_FIELDS
+from atris_tools.root_records import INTERFACE_FIELDS
+from atris_tools.root_records import STEP_FIELDS
 
 
 def write_ntuple(path, name, fields, row):
@@ -28,7 +28,7 @@ def test_dumps_interface_ntuple_as_csv(tmp_path):
     write_ntuple(
         path,
         "interfaces",
-        ROOT_FIELDS,
+        INTERFACE_FIELDS,
         (2212, 2, 90, 10.0, 100.0),
     )
     output = StringIO()
@@ -36,7 +36,7 @@ def test_dumps_interface_ntuple_as_csv(tmp_path):
     dump_ntuple(path, "interfaces", output)
 
     assert output.getvalue().splitlines() == [
-        ",".join(ROOT_FIELDS),
+        ",".join(INTERFACE_FIELDS),
         "2212,2,90,10.0,100.0",
     ]
 

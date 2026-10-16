@@ -7,7 +7,7 @@ Counting tables and other companion files also remain in the parent folder.
 The AtRIS energy fraction is obtained column by column using the arithmetic
 incident-energy bin centres in MeV:
 `fraction = deposited_energy_MeV / ENERGY_CENTRES_MEV`.
-`ENERGY_CENTRES_MEV` is defined in `atris_tools.phantom_tables`. Both numerator
+`ENERGY_CENTRES_MEV` is defined in `atris_tools.phantom_table`. Both numerator
 and denominator are in MeV, and the conversion factor varies with energy.
 Counting efficiencies are already dimensionless. Converted responses are
 separate files alongside the archived originals. Historical geometry and

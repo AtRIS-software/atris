@@ -104,14 +104,14 @@ must be supplied explicitly; it does not add layers or calculate an atmosphere.
 
 The returned `PSF` holds the numeric array in `.layers` and its ordered material
 definition in `.materials`. The element mapping determines both column and
-header order. Save it with `write_psf(path, psf)`.
+header order. Save it with `psf.save(path)`.
 
 For an existing NumPy table, the lower-level interface remains
 `write_psf(path, layers, materials="O533Si467 N")`. It checks the table shape,
 finite values, integer IDs, and material states. Both forms replace an existing
 file and expect the parent directory to exist. Additional keyword arguments
 are forwarded to `numpy.savetxt`; omitting `fmt` uses NumPy's own formatting.
-Use `write_psf(path, psf, fmt=psf.formats("%.3e"))` for three decimal places in
+Use `psf.save(path, fmt=psf.formats("%.3e"))` for three decimal places in
 scientific notation for temperature, density, pressure, and mass fractions.
 The format list preserves radii and angles and writes IDs and states as integers.
 
@@ -302,5 +302,5 @@ counting coefficients are accumulated directly. See the
 table created with `--accept-missing-counting` contains ones and represents
 unit counting response, not a measured efficiency.
 
-Implementation: `atris_tools/psf.py`, `nrlmsis2psf.py`, `psf2gdml.py`,
-`atrismacrogen.py`, `phantoms.py`, and `src/main.cc`.
+Implementation: `atris_tools/psf.py`, `nrlmsis.py`, `gdml.py`,
+`macros.py`, `stage_phantoms.py`, and `src/main.cc`.

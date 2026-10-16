@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import numpy as np
 
-from atris_tools import input_plotting
+from atris_tools import input_plotting, particles, plotting_common, gdml, macros
 
 
 MACRO = """\
@@ -51,16 +51,16 @@ def test_read_macro_and_atmosphere(tmp_path, gdml_text):
     (tmp_path / "protons.mac").write_text(MACRO)
     (tmp_path / "protons.gdml").write_text(gdml_text)
 
-    settings, energy_points = input_plotting.read_macro(tmp_path / "protons.mac")
-    all_layers = input_plotting.read_layers(tmp_path / "protons.gdml")
+    settings, energy_points = macros.read_macro(tmp_path / "protons.mac")
+    all_layers = gdml.read_gdml_layers(tmp_path / "protons.gdml")
 
     assert settings["/gps/particle"] == "proton"
     np.testing.assert_allclose(energy_points, [[1, 0], [10, 1], [100, 1]])
     assert all_layers[1]["fractions"] == {"G4_N": 0.75, "G4_O": 0.25}
     assert [layer["detector_id"] for layer in all_layers] == [1, 2, 3]
     assert [layer["state"] for layer in all_layers] == ["solid", "gas", "gas"]
-    assert input_plotting.surface_radius(all_layers) == 6371.0
-    detector_ids, positions, edges = input_plotting.shell_coordinates(
+    assert plotting_common.surface_radius(all_layers) == 6371.0
+    detector_ids, positions, edges = plotting_common.shell_coordinates(
         all_layers, [2, 3]
     )
     np.testing.assert_array_equal(detector_ids, [2, 3])
@@ -77,23 +77,23 @@ def test_non_termination_layers_accept_every_intermediate_material_type():
         {"detector_id": 4, "state": "solid"},
     ]
 
-    selected = input_plotting.non_termination_layers(layers)
+    selected = plotting_common.non_termination_layers(layers)
 
     assert [layer["detector_id"] for layer in selected] == [1, 2, 3]
 
 
 def test_particle_name_translates_standard_particles_and_nuclei():
-    assert input_plotting.particle_name(22) == "photon"
-    assert input_plotting.particle_name(-11) == "positron"
-    assert input_plotting.particle_name(1000020040) == "He-4"
-    assert input_plotting.particle_name(1000260560) == "Fe-56"
+    assert particles.particle_name(22) == "photon"
+    assert particles.particle_name(-11) == "positron"
+    assert particles.particle_name(1000020040) == "He-4"
+    assert particles.particle_name(1000260560) == "Fe-56"
 
 
 def test_particle_symbol_uses_compact_pdg_notation():
-    assert input_plotting.particle_symbol(22) == r"$\gamma$"
-    assert input_plotting.particle_symbol(12) == r"$\nu_e$"
-    assert input_plotting.particle_symbol(-11) == r"$e^{+}$"
-    assert input_plotting.particle_symbol(1000020040) == r"$^{4}\mathrm{He}$"
+    assert particles.particle_symbol(22) == r"$\gamma$"
+    assert particles.particle_symbol(12) == r"$\nu_e$"
+    assert particles.particle_symbol(-11) == r"$e^{+}$"
+    assert particles.particle_symbol(1000020040) == r"$^{4}\mathrm{He}$"
 
 
 def test_elements_are_labelled_and_sorted_by_atomic_number():
@@ -224,7 +224,7 @@ def test_particle_groups_include_every_particle_once():
         [22, 2212, 2112, -2112, 11, -11, 1000010020, 1000030070]
     )
 
-    groups = input_plotting._particle_groups(particle_codes)
+    groups = plotting_common.particle_groups(particle_codes)
 
     assert groups == ([0, 1, 2, 3, 4, 5], [6, 7])
 
@@ -336,7 +336,7 @@ def test_bad_radiation_does_not_hide_counting(tmp_path, monkeypatch, gdml_text):
 
 def test_counting_plot_preserves_zero_and_unit_efficiencies(tmp_path, monkeypatch):
     from matplotlib.figure import Figure
-    from atris_tools.phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+    from atris_tools.phantom_table import PhantomTable, COUNTING_EFFICIENCY
 
     monkeypatch.chdir(tmp_path)
     values = np.zeros((2, 650))
@@ -354,7 +354,7 @@ def test_counting_plot_preserves_zero_and_unit_efficiencies(tmp_path, monkeypatc
         np.testing.assert_array_equal(axis.lines[0].get_ydata(), values[index])
         assert axis.get_autoscalex_on()
         assert axis.get_autoscaley_on()
-        expected = input_plotting.particle_symbol([22, 1000060120][index])
+        expected = particles.particle_symbol([22, 1000060120][index])
         if index == 0:
             expected += " photon"
         assert axis.get_legend_handles_labels()[1] == [expected]
@@ -363,7 +363,7 @@ def test_counting_plot_preserves_zero_and_unit_efficiencies(tmp_path, monkeypatc
 
 def test_counting_linear_preserves_probabilities_and_taller_layout(tmp_path, monkeypatch):
     from matplotlib.figure import Figure
-    from atris_tools.phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+    from atris_tools.phantom_table import PhantomTable, COUNTING_EFFICIENCY
 
     monkeypatch.chdir(tmp_path)
     values = np.linspace(0, 1, 650)[None, :]
@@ -381,7 +381,7 @@ def test_counting_linear_preserves_probabilities_and_taller_layout(tmp_path, mon
 
 def test_particle_legend_keeps_charge_only_in_symbol(tmp_path, monkeypatch):
     from matplotlib.figure import Figure
-    from atris_tools.phantom_tables import PhantomTable, COUNTING_EFFICIENCY
+    from atris_tools.phantom_table import PhantomTable, COUNTING_EFFICIENCY
 
     monkeypatch.chdir(tmp_path)
     codes = np.array([13, -13, 211, -211, 111, 321, -321])
@@ -399,14 +399,14 @@ def test_particle_legend_keeps_charge_only_in_symbol(tmp_path, monkeypatch):
     assert legend.get_bbox_to_anchor().width == 0
     assert legend.get_window_extent().width < figures[0].axes[0].get_window_extent().width
     assert labels == [
-        input_plotting.particle_symbol(code) + " " + name
+        particles.particle_symbol(code) + " " + name
         for code, name in zip(codes, ["muon", "muon", "pion", "pion", "pion", "kaon", "kaon"])
     ]
 
 
 def test_response_shared_limits_include_nuclei_before_guides(tmp_path, monkeypatch):
     from matplotlib.figure import Figure
-    from atris_tools.phantom_tables import PhantomTable, ENERGY_FRACTION
+    from atris_tools.phantom_table import PhantomTable, ENERGY_FRACTION
 
     monkeypatch.chdir(tmp_path)
     values = np.vstack([np.full(650, .1), np.full(650, 20.)])

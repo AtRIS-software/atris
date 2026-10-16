@@ -6,14 +6,9 @@ from pathlib import Path
 import subprocess
 import time
 
-from .cli import (
-    HelpFormatter,
-    add_logging_arguments,
-    add_version_argument,
-    configure_logging,
-)
-from .gather import chunk_name, read_chunk_plan
-from .phantoms import read_phantoms
+from .cli import HelpFormatter, add_logging_arguments, add_version_argument, configure_logging
+from .chunks import chunk_name, read_chunk_plan
+from .stage_phantoms import read_phantom_selection
 
 
 logger = logging.getLogger(__name__)
@@ -121,7 +116,7 @@ def run_chunks(
     if stop_before_end and deadline is None:
         raise ValueError("Stop-before-end interval requires a job deadline")
 
-    phantoms = read_phantoms(run_directory)
+    phantoms = read_phantom_selection(run_directory)
     phantom_count = len(phantoms)
     logger.info("%sStarting AtRIS chunked run", prefix)
     logger.info("%sRun directory: %s", prefix, run_directory)

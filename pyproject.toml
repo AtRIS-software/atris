@@ -27,10 +27,10 @@ docs = [
 ]
 
 [project.scripts]
-atris-nrlmsis-to-psf = "atris_tools.nrlmsis2psf:main"
-atris-psf-to-gdml = "atris_tools.psf2gdml:main"
-atris-generate-macros = "atris_tools.atrismacrogen:main"
-atris-stage-phantoms = "atris_tools.phantoms:main"
+atris-nrlmsis-to-psf = "atris_tools.nrlmsis:main"
+atris-psf-to-gdml = "atris_tools.gdml:main"
+atris-generate-macros = "atris_tools.macros:main"
+atris-stage-phantoms = "atris_tools.stage_phantoms:main"
 atris-clone = "atris_tools.clone_run:main"
 atris-scatter = "atris_tools.scatter:main"
 atris-run = "atris_tools.run_chunks:main"
@@ -41,9 +41,9 @@ atris-plot = "atris_tools.plotting:main"
 atris-dump = "atris_tools.dump:main"
 
 # Legacy command names.
-nrlmsis2psf = "atris_tools.nrlmsis2psf:main"
-psf2gdml = "atris_tools.psf2gdml:main"
-atrismacrogen = "atris_tools.atrismacrogen:main"
+nrlmsis2psf = "atris_tools.nrlmsis:main"
+psf2gdml = "atris_tools.gdml:main"
+atrismacrogen = "atris_tools.macros:main"
 postprocess = "atris_tools.postprocess:main"
 
 [tool.setuptools]

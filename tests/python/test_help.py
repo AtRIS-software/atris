@@ -5,69 +5,21 @@ import pytest
 
 
 ENTRY_POINT_HELP = (
-    (
-        "atris-nrlmsis-to-psf",
-        "nrlmsis2psf",
-        ("does not download atmosphere data", "multiple input tables require --output"),
-    ),
-    (
-        "atris-psf-to-gdml",
-        "psf2gdml",
-        ("output defaults to the input basename", "does not run atris"),
-    ),
-    (
-        "atris-generate-macros",
-        "atrismacrogen",
-        ("does not run atris", "refuses to overwrite"),
-    ),
-    (
-        "atris-stage-phantoms",
-        "phantoms",
-        ("does not create radiation-response tables", "dummy table"),
-    ),
-    (
-        "atris-clone",
-        "clone_run",
-        ("simulation results", "does not run or scatter"),
-    ),
-    (
-        "atris-scatter",
-        "scatter",
-        ("does not repartition existing work", "does not run or gather"),
-    ),
-    (
-        "atris-run",
-        "run_chunks",
-        ("do not launch workers", "never interrupts a running chunk"),
-    ),
-    (
-        "atris-gather",
-        "gather",
-        ("partial files", "does not run missing chunks"),
-    ),
-    (
-        "atris-postprocess",
-        "postprocess",
-        ("replacing existing processed files", "does not gather chunk histograms"),
-    ),
-    (
-        "atris-plot",
-        "plotting",
-        ("missing product groups are skipped", "does not run atris"),
-    ),
-    (
-        "atris-dump",
-        "dump",
-        ("standard output", "not modified"),
-    ),
-    (
-        "nrlmsis2psf",
-        "nrlmsis2psf",
-        ("does not download atmosphere data",),
-    ),
-    ("psf2gdml", "psf2gdml", ("output defaults to the input basename",)),
-    ("atrismacrogen", "atrismacrogen", ("refuses to overwrite",)),
-    ("postprocess", "postprocess", ("does not gather chunk histograms",)),
+    ('atris-nrlmsis-to-psf', 'nrlmsis', ('does not download atmosphere data', 'multiple input tables require --output')),
+    ('atris-psf-to-gdml', 'gdml', ('output defaults to the input basename', 'does not run atris')),
+    ('atris-generate-macros', 'macros', ('does not run atris', 'refuses to overwrite')),
+    ('atris-stage-phantoms', 'stage_phantoms', ('does not create radiation-response tables', 'dummy table')),
+    ('atris-clone', 'clone_run', ('simulation results', 'does not run or scatter')),
+    ('atris-scatter', 'scatter', ('does not repartition existing work', 'does not run or gather')),
+    ('atris-run', 'run_chunks', ('do not launch workers', 'never interrupts a running chunk')),
+    ('atris-gather', 'gather', ('partial files', 'does not run missing chunks')),
+    ('atris-postprocess', 'postprocess', ('replacing existing processed files', 'does not gather chunk histograms')),
+    ('atris-plot', 'plotting', ('missing product groups are skipped', 'does not run atris')),
+    ('atris-dump', 'dump', ('standard output', 'not modified')),
+    ('nrlmsis2psf', 'nrlmsis', ('does not download atmosphere data',)),
+    ('psf2gdml', 'gdml', ('output defaults to the input basename',)),
+    ('atrismacrogen', 'macros', ('refuses to overwrite',)),
+    ('postprocess', 'postprocess', ('does not gather chunk histograms',)),
 )
 
 MODERN_ENTRY_POINTS = tuple(

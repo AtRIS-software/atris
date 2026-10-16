@@ -14,11 +14,11 @@ import numpy as np
 import pytest
 import uproot
 
-from atris_tools.interface_output import read_root
+from atris_tools.root_records import read_interface_records
 from atris_tools.gather import gather_simulation
-from atris_tools.response_histograms import ResponseHistogramReader
-from atris_tools.root_output import has_ntuple, read_ntuple
-from atris_tools.step_output import STEP_FIELDS, process_name
+from atris_tools.histogram import ResponseHistogramReader
+from atris_tools.root_records import has_ntuple, read_ntuple
+from atris_tools.root_records import STEP_FIELDS, process_name
 
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -359,7 +359,7 @@ def test_mode_zero_writes_merged_root_interface_ntuple(tmp_path, atris_command):
     assert result.returncode == 0, result.stdout + result.stderr
     root_path = tmp_path / "protons.root"
     assert root_path.is_file()
-    assert len(read_root(root_path)) == 2
+    assert len(read_interface_records(root_path)) == 2
     assert has_ntuple(root_path, "interfaces")
     assert not has_ntuple(root_path, "steps")
     assert not list(tmp_path.glob("protons_t*.root"))
@@ -407,8 +407,8 @@ def test_mode_one_contains_mode_zero_interface_records(tmp_path, atris_command):
     assert zero_result.returncode == 0, zero_result.stdout + zero_result.stderr
     assert one_result.returncode == 0, one_result.stdout + one_result.stderr
     np.testing.assert_array_equal(
-        read_root(mode_zero / "protons.root"),
-        read_root(mode_one / "protons.root"),
+        read_interface_records(mode_zero / "protons.root"),
+        read_interface_records(mode_one / "protons.root"),
     )
 
 
@@ -514,8 +514,8 @@ def test_csv_and_root_response_histograms_gather_equivalently(
         for csv_axis, root_axis in zip(csv_histogram.axes, root_histogram.axes):
             np.testing.assert_allclose(csv_axis, root_axis, rtol=1e-6)
         np.testing.assert_allclose(csv_histogram.values, root_histogram.values)
-        if csv_histogram.variances is not None and root_histogram.variances is not None:
-            np.testing.assert_allclose(csv_histogram.variances, root_histogram.variances)
+        if csv_histogram.sumw2 is not None and root_histogram.sumw2 is not None:
+            np.testing.assert_allclose(csv_histogram.sumw2, root_histogram.sumw2)
 
 
 @pytest.mark.regression

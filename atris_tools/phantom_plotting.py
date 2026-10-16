@@ -4,13 +4,14 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap, LogNorm
 import numpy as np
 
-from .input_plotting import _particle_groups
+from .plotting_common import particle_groups
 from .particles import ION_PDG_BASE, particle_name, particle_symbol
-from .phantom import RESPONSE_ENERGY_EDGES_MEV, JOULES_PER_MEV, KG_PER_GRAM
+from .phantom_table import ENERGY_EDGES_MEV
+from .phantom import JOULES_PER_MEV, KG_PER_GRAM
 
 
 def _sampling_values(response):
-    edges = RESPONSE_ENERGY_EDGES_MEV
+    edges = ENERGY_EDGES_MEV
     centres = (edges[:-1] + edges[1:]) / 2
     fraction = response.energy_fraction
     error = response.fraction_standard_error
@@ -47,7 +48,7 @@ def plot_creation_diagnostics(phantom, axes=None):
     values. Saving and displaying the figure are handled by the caller.
     """
     centres, fraction, relative, _, _, labels = _sampling_values(phantom)
-    groups = _particle_groups(phantom.pdg_codes)
+    groups = particle_groups(phantom.pdg_codes)
     figure, axes, created = _plot_axes(axes, (2, 2), figsize=(16, 12),
                                      sharex=True, sharey="row")
     for column, indices in enumerate(groups):
@@ -135,7 +136,7 @@ def plot_sampling_precision(phantom, axes=None, *, relative_target=.01):
     if not np.isfinite(relative_target) or relative_target <= 0:
         raise ValueError("relative_target must be finite and positive")
     _, _, relative, dose_error, valid, labels = _sampling_values(phantom)
-    edges = RESPONSE_ENERGY_EDGES_MEV
+    edges = ENERGY_EDGES_MEV
     if axes is None:
         figure, axes = plt.subplots(2, 2, figsize=(15, max(9, len(labels) * .5)), sharey=True)
         created = True
