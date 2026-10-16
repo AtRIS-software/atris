@@ -1,28 +1,36 @@
 cff-version: 1.2.0
-message: "If you use AtRIS, please cite the paper below."
-title: "AtRIS"
+message: >-
+  If you use AtRIS, please cite this software release
+  and the original AtRIS paper listed under references.
+title: "AtRIS: Atmospheric Radiation Interaction Simulator"
 type: software
 authors:
+  - family-names: "Evensberget"
+    given-names: "Dag"
+    orcid: "https://orcid.org/0000-0001-7810-8028"
   - family-names: "Banjac"
     given-names: "Saša"
     orcid: "https://orcid.org/0000-0003-0724-9063"
-repository-code: "https://github.com/svaberg/atris"
+  - family-names: "Herbst"
+    given-names: "Konstantin"
+    orcid: "https://orcid.org/0000-0001-5622-4829"
+repository-code: "https://github.com/AtRIS-software/atris"
 license: "GPL-2.0-or-later"
-preferred-citation:
-  type: article
-  authors:
-    - family-names: "Banjac"
-      given-names: "Saša"
-      orcid: "https://orcid.org/0000-0003-0724-9063"
-    - family-names: "Herbst"
-      given-names: "Konstantin"
-      orcid: "https://orcid.org/0000-0001-5622-4829"
-    - family-names: "Heber"
-      given-names: "Bernd"
-      orcid: "https://orcid.org/0000-0003-0960-5658"
-  title: "The Atmospheric Radiation Interaction Simulator (AtRIS): Description and Validation"
-  journal: "Journal of Geophysical Research: Space Physics"
-  year: 2019
-  volume: 124
-  issue: 1
-  doi: "10.1029/2018JA026042"
+references:
+  - type: article
+    authors:
+      - family-names: "Banjac"
+        given-names: "Saša"
+        orcid: "https://orcid.org/0000-0003-0724-9063"
+      - family-names: "Herbst"
+        given-names: "Konstantin"
+        orcid: "https://orcid.org/0000-0001-5622-4829"
+      - family-names: "Heber"
+        given-names: "Bernd"
+        orcid: "https://orcid.org/0000-0003-0960-5658"
+    title: "The Atmospheric Radiation Interaction Simulator (AtRIS): Description and Validation"
+    journal: "Journal of Geophysical Research: Space Physics"
+    year: 2019
+    volume: 124
+    issue: 1
+    doi: "10.1029/2018JA026042"
