@@ -56,23 +56,3 @@ set_property(TARGET AtRIS PROPERTY CXX_EXTENSIONS OFF)
 target_compile_options(AtRIS PRIVATE
   $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall;-Wextra;-Wpedantic>
 )
-
-#----------------------------------------------------------------------------
-# For internal Geant4 use - but has no effect if you build this
-# example standalone
-#
-#add_custom_target(G4ET DEPENDS G4ET)
-
-#----------------------------------------------------------------------------
-# Install the executable to 'bin' directory under CMAKE_INSTALL_PREFIX
-#
-#install(TARGETS G4ET DESTINATION bin)
-
-#configure_file(files/example.gdml ./ COPYONLY)
-#configure_file(files/example.bins ./ COPYONLY)
-#configure_file(files/example.py ./ COPYONLY)
-#configure_file(files/example.mac ./ COPYONLY)
-#configure_file(phantoms/icru_response.txt ./ COPYONLY)
-#configure_file(phantoms/icru_counting.txt ./ COPYONLY)
-#configure_file(phantoms/ramona_fifteen_0.060MeV_detA_response.txt ./ COPYONLY)
-#configure_file(phantoms/ramona_fifteen_0.060MeV_detA_counting.txt ./ COPYONLY)
