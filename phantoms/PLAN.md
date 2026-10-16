@@ -26,12 +26,6 @@ Use distinct names for the tissue-equivalent and water spheres. Do not retain
 energy deposition in simple volumes, not anatomical organisms or biological
 damage mechanisms.
 
-Keep unshielded **RAMONA detector A** as a secondary regeneration target and a
-useful nonspherical validation case: silicon, radius 14.85 mm, thickness 315 μm.
-The initial cosine-incidence proton tests agree with its supplied response
-within 2.3%. The complete instrument, shielding, other species, and historical
-variants have not been reconstructed.
-
 The geometry sources are [Banjac et al. (2019)](https://doi.org/10.1029/2019JA026622),
 [Herbst et al. (2020), section 4.3](https://doi.org/10.1051/0004-6361/201936968),
 and the [historical library notes](../docs/reference/phantom-library.md#extended-phantoms-historical-notes).
@@ -126,9 +120,8 @@ grid with sufficient statistics. Missing results must not become measured zeros.
 ## Retire the remaining library
 
 After validated replacements exist, make the regenerated core set the supported
-library. Remove historical `_old`/unsuffixed duplicates, unexplained RAMONA
-variants (`flatramona`, `randramona`, `realramona`), and unmaintained shielding
-series from the active selection. Regenerate a shielded variant only when there
+library. Remove historical `_old`/unsuffixed duplicates and unmaintained
+shielding series from the active selection. Regenerate a shielded variant only when there
 is a concrete use and a defined geometry; it need not remain a default offering.
 
 Preserve the original files byte-for-byte in a clearly separate legacy archive,

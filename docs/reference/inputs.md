@@ -232,8 +232,8 @@ spectrum into the results. Such files may be retained as run inputs by
 
 ```text
 # ID  stem                              mass_g      area_cm2
-0     ramona_zero_0.060MeV_detA_old       0.5082      6.928
-1     icru_zero_0.000MeV_detAB_old        14094.7550  1413.72
+0     cell_zero_0.000MeV                 5.220280e-7  1.570796e-4
+1     icru_zero_0.000MeV_detAB_old        14094.7550   1413.72
 ```
 
 IDs must be unique and contiguous from zero; rows are sorted by ID. Mass is

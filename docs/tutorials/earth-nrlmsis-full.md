@@ -55,15 +55,15 @@ The example's atmosphere, plotted from `simulation.psf`. The steps follow the
 ## Prepare the phantom inputs
 
 Phantom tables let us estimate dose and detector counts from particles crossing
-each atmospheric layer. This example uses the original RAMONA silicon detector
-A and ICRU water-sphere tables, both without added shielding.
+each atmospheric layer. This example uses the cell and ICRU water-sphere
+phantoms, both without added shielding.
 Skip this step if you only need energy deposition in the atmosphere.
 
 Copy the selection file and prepare its tables:
 
 ```bash
 cp "$ATRIS_ROOT/examples/earth-nrlmsis-full/phantoms.txt" .
-atris-stage-phantoms . --copy
+atris-stage-phantoms . --copy --accept-missing-counting
 ```
 
 | Reads | Creates |
@@ -74,14 +74,18 @@ atris-stage-phantoms . --copy
 tables to the numbered inputs read by AtRIS:
 
 ```text
-radiation_phantom0.txt -> ramona_zero_0.060MeV_detA_old_response.txt
-counting_phantom0.txt  -> ramona_zero_0.060MeV_detA_old_counting.txt
+radiation_phantom0.txt -> cell_zero_0.000MeV_response.txt
+counting_phantom0.txt  -> cell_zero_0.000MeV_dummy_counting.txt
 radiation_phantom1.txt -> icru_zero_0.000MeV_detAB_old_response.txt
 counting_phantom1.txt  -> icru_zero_0.000MeV_detAB_old_counting.txt
 ```
 
-The responses use the supplied `_old` energy-fraction tables. The corresponding
-`_old_counting.txt` names are aliases of the original `_counting.txt` files,
+The cell has an energy-response table but no counting-efficiency table.
+`--accept-missing-counting` supplies an all-ones placeholder for its counting
+input; use its dose results, not its counting rate as a detector prediction.
+
+The ICRU response uses the supplied `_old` energy-fraction table. The corresponding
+`_old_counting.txt` name is an alias of the original `_counting.txt` file,
 containing the supplied counting efficiencies. The [phantom reference](../reference/phantom-library.md#existing-earth-example)
 gives the geometry and file pairing.
 

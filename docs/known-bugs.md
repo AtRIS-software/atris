@@ -7,7 +7,7 @@ and corrections that affect existing simulation results.
 
 The supplied radiation tables show evidence of two quantities. Older
 `*_old_response.txt` files and the biological (`bact`, `cell`, `sbug`) tables
-store dimensionless energy fractions. Later ICRU and RAMONA tables store
+store dimensionless energy fractions. Later ICRU tables store
 deposited energy in MeV. The
 [phantom library reference](reference/phantom-library.md#moved-deposited-energy-tables)
 describes these tables and their conversion to energy fractions.
@@ -40,9 +40,7 @@ recovered, so the cause remains unresolved.
 
 The old unshielded ICRU response is also zero below roughly 60 keV for
 protons, electrons, and alpha particles despite its `0.000MeV` filename.
-Several old RAMONA tables labelled `0.000MeV` and `0.060MeV` contain identical
-values. The threshold labels therefore do not consistently describe the old
-response tables.
+The filename threshold therefore does not describe this old response table.
 
 ## Possible radiation-weighting bug
 

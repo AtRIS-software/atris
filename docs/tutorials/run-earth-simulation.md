@@ -144,13 +144,16 @@ when the selection was staged during preparation:
 
 ```text
 protons.inputs.png                       # source and atmosphere inputs
-phantom.ramona_zero_0.060MeV_detA_old.inputs.png
+phantom.cell_zero_0.000MeV.inputs.png
+phantom.icru_zero_0.000MeV_detAB_old.inputs.png
 protons.png                              # source diagnostics and ionization
-protons.ramona_zero_0.060MeV_detA_old.png   # phantom 0 responses
+protons.cell_zero_0.000MeV.png             # phantom 0 responses
 protons.icru_zero_0.000MeV_detAB_old.png    # phantom 1 responses
 ```
 
-There are corresponding alpha plots. The numerical results remain in the
+There are corresponding alpha plots. The cell counting panel uses the
+all-ones placeholder described in [phantom preparation](earth-nrlmsis-full.md#prepare-the-phantom-inputs);
+it is not a calculated counting efficiency. The numerical results remain in the
 response tables and raw histograms. `atris-plot` reads these files to draw the
 figures; it can also plot prepared inputs before any chunks run.
 

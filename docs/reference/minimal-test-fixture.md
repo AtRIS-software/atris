@@ -8,7 +8,7 @@ sensitive-detector identifiers `0` and `1`, inside a vacuum world. The macros
 launch one or two 10 MeV protons from the centre, and the two energy-bin edges
 bracket that source energy.
 
-Regression tests copy the repository's reviewed RAMONA response and counting
+Regression tests copy the repository's ICRU response and counting
 tables from `phantoms` into a temporary run directory under the numbered
 filenames expected by AtRIS. They are not duplicated in the fixture directory because the C++
 application requires the full 650-bin response tables even though detector

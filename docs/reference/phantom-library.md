@@ -1,6 +1,7 @@
 # Phantom library
 
-The `phantoms/` directory contains precomputed response and counting tables.
+The `phantoms/` directory contains ICRU water-sphere and biological response
+tables, with counting tables for the ICRU sphere.
 Its top-level radiation-response files store energy fractions, compatible with
 the C++ reader and scorer. Deposited-energy response files are in
 `phantoms/MeV-valued/`; counting tables remain at the top level.
@@ -65,17 +66,15 @@ unrecovered. Reconstruction candidates are listed separately from recorded prope
 | Family | Recorded geometry/material | Mass (g) | AtRIS area (cm²) | Response values in `phantoms/` |
 | --- | --- | --- | --- | --- |
 | `icru_*_old_response.txt` | 15 cm radius water sphere, according to the historical notes | 1.4094755e4 | 1.41372e3 | Energy fraction; no energy scaling |
-| `ramona_*_old_response.txt` | Silicon detector A; radius 14.85 mm, thickness 0.315 mm | 5.082e-1 | 6.928 | Energy fraction; no energy scaling |
 | `bact_zero_0.000MeV_response.txt` | Original specification unrecovered; 4 µm water sphere is a reconstruction candidate | Unknown | Unknown | Energy fraction; no energy scaling |
 | `cell_zero_0.000MeV_response.txt` | 50 µm water-sphere reconstruction recipe; full historical settings unrecovered | Unknown | Unknown | Energy fraction; no energy scaling |
 | `sbug_zero_0.000MeV_response.txt` | Original specification unrecovered; 1 mm water sphere is a reconstruction candidate | Unknown | Unknown | Energy fraction; no energy scaling |
-| `flatramona_*`, `randramona_*`, `realramona_*` legacy responses | Variant geometries and source settings unrecovered | Unknown | Unknown | `_old_response.txt` files are energy fractions; no energy scaling |
 
-The listed RAMONA and ICRU masses and areas are the historical scoring-volume
-values used by the Earth example, not the mass or area of added aluminium
-shielding. Original production cuts and sampling uncertainties are not established
-by these dimensions. `zero`, `five`, `ten`, `fifteen`, `twenty`, and `twentyfive`
-denote nominal aluminium shielding thicknesses of 0, 5, 10, 15, 20, and 25 mm.
+The listed ICRU mass and area describe the historical scoring volume used by
+the Earth example, excluding added aluminium shielding. Original production
+cuts and sampling uncertainties are not established by these dimensions.
+`zero`, `five`, `ten`, `fifteen`, and `twenty` denote nominal aluminium shielding
+thicknesses of 0, 5, 10, 15, and 20 mm.
 Availability depends on the family; filename threshold labels are not reliable
 descriptions of all legacy energy responses. See
 [known discrepancies](../known-bugs.md#differences-between-old-and-new-phantom-tables).
@@ -89,10 +88,6 @@ fractions. Their companion counting and variance files remain in `phantoms/`.
 | Moved family | Response files | Nominal shielding (mm Al) | Filename thresholds (MeV) | Required response scaling |
 | --- | --- | --- | --- | --- |
 | `icru_*_response.txt` | 5 | 0, 5, 10, 15, 20 | 0.000 | Divide each column by its $K$ in MeV |
-| `ramona_*_response.txt` | 10 | 0, 5, 10, 15, 20 | 0.000, 0.060 | Divide each column by its $K$ in MeV |
-| `flatramona_*_response.txt` | 5 | 0, 5, 10, 15, 20 | 0.060 | Divide each column by its $K$ in MeV |
-| `randramona_*_response.txt` | 12 | 0, 5, 10, 15, 20, 25 | 0.000, 0.060 | Divide each column by its $K$ in MeV |
-| `realramona_*_response.txt` | 5 | 0, 5, 10, 15, 20 | 0.060 | Divide each column by its $K$ in MeV |
 
 For stored deposited energy $W$ and energy-bin centre $K$, the converted
 coefficient is
@@ -138,32 +133,35 @@ load the stored coefficients; the example performs the conversion explicitly.
 
 ## Existing Earth example
 
-The Earth example uses the original, unshielded RAMONA and ICRU tables:
+The Earth example uses the cell and ICRU water-sphere phantoms:
 
 | ID | Phantom | Energy-fraction response | Counting efficiency |
 | --- | --- | --- | --- |
-| 0 | RAMONA/DOSTEL silicon detector A | `ramona_zero_0.060MeV_detA_old_response.txt` | `ramona_zero_0.060MeV_detA_counting.txt` |
+| 0 | Cell | `cell_zero_0.000MeV_response.txt` | No supplied table; staging creates a placeholder |
 | 1 | ICRU water sphere | `icru_zero_0.000MeV_detAB_old_response.txt` | `icru_zero_0.000MeV_detAB_counting.txt` |
 
-RAMONA has radius 14.85 mm, thickness 0.315 mm, mass 0.5082 g, and area
-6.928 cm²; its counting threshold is 0.060 MeV. The water sphere has radius
+For the cell, the example uses the 50 µm water-sphere reconstruction recipe
+with density 0.997 g/cm³: mass 5.220280e-7 g and effective area 1.570796e-4 cm².
+These are the example's normalization values; the original table's full
+generation settings remain unrecovered. The ICRU water sphere has radius
 15 cm, mass 14094.7550 g, and effective area 1413.72 cm².
 
-The `_old_counting.txt` filenames are symbolic links to the supplied counting
-files, allowing staging with the `_old` stems. The numerical tables are
-unchanged. The ICRU response and threshold differences remain documented in the
+The cell has no supplied counting table. Staging with `--accept-missing-counting`
+creates an all-ones placeholder so AtRIS can load it. Its dose responses use
+the supplied energy-fraction table; its counting output is not a calculated
+detection efficiency.
+
+The `_old_counting.txt` filename is a symbolic link to the supplied counting
+file, allowing staging with the `_old` stem. The numerical table is unchanged. The ICRU response and threshold differences remain documented in the
 [known phantom-table discrepancies](../known-bugs.md#differences-between-old-and-new-phantom-tables).
 
-The historical ICRU and RAMONA families also have response/counting pairs with the shielding labels
+The ICRU family also has response/counting pairs with the shielding labels
 `five`, `ten`, `fifteen`, and `twenty` for 5, 10, 15, and 20 mm of aluminium.
-RAMONA pairs are supplied for both `0.000MeV` and `0.060MeV` thresholds;
-the ICRU pairs use `0.000MeV`. Other variants and historical files are also
-present in the archive. Establish their geometry and normalization before
-substituting them for the documented examples.
+These pairs use the `0.000MeV` filename threshold.
 
 To use these tables, follow [phantom selection and staging](../running-atris/prepare-simulation.md#optionally-select-phantoms).
 The [Earth preparation tutorial](../tutorials/earth-nrlmsis-full.md#prepare-the-phantom-inputs)
-shows the two-phantom example. See the [selection-file format](inputs.md#phantom-selection)
+shows how to prepare this two-phantom example. See the [selection-file format](inputs.md#phantom-selection)
 and [response-matrix format](inputs.md#phantom-response-matrices) for the data definitions.
 
 ## Python tools
@@ -249,35 +247,14 @@ statistics with a zero counting threshold; read those with
 
 ## Historical update: autumn 2021
 
-The following notes by Saša Banjac document the library's development. Claims
-about branches, removals, and planned tables describe that period. For current
-file requirements and staging, use the references above.
-
-* AtRIS now also simulates count rates using an advanced counting efficiency response matrix
-   - The new phantom generation routines create this matrix
-   - A separate branch of AtRIS has been created for the binary output required for the phantoms
-   - Previous phantoms are removed. From now on, only ICRU sphere and a ramona phantom is available
-   - 5 versions of the RAMONA DOSTEL phantom are created with various shielding thicknesses:
-     0 mm Aluminium, 5 mm, 10 mm, 15 mm, 20 mm.
-   - For the ICRU sphere, a similar set of shielded phantoms is being created.
-   - Counting response matrices have the same phantom name, but the suffix "_counting" is expected
-   - If a counting response matrix is not available, use ideal_counting_response.txt from the files directory
-   - We now use only extended phantoms that consider also GCR nuclei
+Saša Banjac's library notes describe the addition of counting-efficiency tables
+and responses for fully ionized nuclei from lithium to nickel, using the most
+abundant isotope of each element. They also describe aluminium-shielded versions
+of the ICRU-labelled sphere.
 
 ### Extended phantoms (historical notes)
-These phantoms include response to GCR fully ionized nuclei from Z=3 to Z=28 (most abundant isotope).
-For water, I've used .997 g per ccm as desnity, while for TEM it is 1.00 g per ccm
 
- * icru_b phantom is a r=15cm sphere of water
-   -                shape: solid sphere
-   -          composition: h2o
-   -               radius: 15 cm
-   -                 mass: 14094.7550 g
-   -                 area: 1413.72 cm2
- * ramona phantom is a phantom corresponds to the RAMONA/DOSTEL detector A with aluminum shielding in front
-   -                shape: disc
-   -          composition: Si
-   -               radius: 14.85 mm
-   -            thickness: 0.315 mm
-   -                 mass: 0.5082 g
-   -                 area: 6.928 cm2
+The notes specify the ICRU-labelled phantom as a solid water sphere with radius
+15 cm and density 0.997 g/cm³. Its listed mass is 14094.7550 g and its listed
+area is 1413.72 cm². They distinguish water from tissue-equivalent material,
+for which they give a density of 1.00 g/cm³.
